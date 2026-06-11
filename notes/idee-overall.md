@@ -1,5 +1,11 @@
+Ok defapt, cauta pe github sau pe alte code forgeuri sau ceva sa vezi daca a mai facut deja cineva cheastia asta, sau macar super blank slate de poti tu sa-ti punctele de unde sa asculti, ce sa trimiti and whatever.
+
+Daca nu:
+
 O scriem in golang.
-Campanie o sa fie de fiecare data cate 2 saptamani de luni până vineri, în intervalul orar 07:00-20:00, deci 13 ore pe zi, trebuie sa ruleze programul, cate 130 de ore pe timpul cerlor 2 saptmanai. In fiecare zi o sa fie 6 oportunitati, deci daca au trecut 6, trebuie sa te cam opresti si sa te trezesti pe data aviatoare
+Campanie o sa fie de fiecare data cate 2 saptamani de luni până vineri, în intervalul orar 07:00-20:00, deci 13 ore pe zi, trebuie sa ruleze programul, cate 130 de ore pe timpul cerlor 2 saptmanai. In fiecare zi o sa fie 6 oportunitati, deci daca au trecut 6, trebuie sa te cam opresti si sa te trezesti pe data aviatoare.
+4 sesiune deci 520 de ore de rulare overall (cu gapuri, nu constanta, but still). Trebuie sa te gandesti la asta.
+Plus alte cateva ore de mine cum il testez.
 
 ```regulament
 5.1.1 În cele patru perioade de desfășurare a concursului „PRO FM și Karpaten Turism te trimit la
@@ -51,3 +57,9 @@ Bazat pe ce date live avem sa le putem folosi robust (fara web-scrapere) care ne
 Sunt o mie de variante in care putem merge, but what pins it all down, e: care e cel mai simplu ieftin rapid si effective mode in care putem, nu doar sa auzim piesa cand vine, dar SI sintagme specifice INAINTE sa vina sa stim sa ne "pregatim" mai bine sistemul ca URMEAZA AIA MARE. Acum depinzand ce fel de date live avem, e foarte posibil nici macar sa nu avem ce "pregati" si sa ruleze totul la fel, but you get what im saying?
 
 Also trebuie stiuta politica lor cu false alarms, i dont wanna get disqualified.
+
+HAHHAH <http://edge126.rdsnet.ro:84/profm/profm.mp3>
+
+Prima data facem totul local, cu teste si simulation environment de cum ar fi CHIAR FIX in production rulat.
+
+Si dupa ce rezolvam totul tot, deabea dupa ne gandim sa il punem pe vreun cloud
