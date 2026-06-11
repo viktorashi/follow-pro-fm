@@ -43,3 +43,11 @@ Daca incepe sa se auda intro-ul prezentatoului, incepi sa pui in overdrive super
 
 Pune toata chesita asta intr-un plan de research una dupa alta: dela: la ce date livestream avem la dispozitie?
 Pana la regulamentul aferent INANTE SA ASCRIEM O SINGURA LINIE DE COD.
+
+OOh sau poate e ceva metadata de ce piesa e live suuuper buna si nu-ti trebuie niciun shzam asa ar fi perfect. Trbuie testat ce latecy chiar are. Pentru ca aparent s-a facut deaj
+
+Bazat pe ce date live avem sa le putem folosi robust (fara web-scrapere) care ne pot da block, de acolo stim de unde plecam.
+
+Sunt o mie de variante in care putem merge, but what pins it all down, e: care e cel mai simplu ieftin rapid si effective mode in care putem, nu doar sa auzim piesa cand vine, dar SI sintagme specifice INAINTE sa vina sa stim sa ne "pregatim" mai bine sistemul ca URMEAZA AIA MARE. Acum depinzand ce fel de date live avem, e foarte posibil nici macar sa nu avem ce "pregati" si sa ruleze totul la fel, but you get what im saying?
+
+Also trebuie stiuta politica lor cu false alarms, i dont wanna get disqualified.
