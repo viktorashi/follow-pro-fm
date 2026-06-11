@@ -31,12 +31,15 @@ daca nu e problema cu asta tho, putem sa facem un, doar ca sa fim on the safe si
 
 if presenter.made_announcement || playing_song.artist.id in tracking_artists_ids
 
-dam track la taote melodiile artistilor, nu doar la anumite. Singurul avantaj pe care o sa-l aiba alea mai populare o sa fie pt ca o sa avem deja audio pre-recorded pentru ele (daca chiar e nevoie sa-l ai in fundal, again)
-
 Noi facem un mesaj audio gata de trimis de dinainte, care se trimite automat daca se afla asta.
 
 Doar ca vine si problema: trebuie researchuit daca se stie ca in mesajul vocal audio respectiv trebuie sa se auda pe fundal piesa respectivca, ca sa se stie ca tu chiar o ascultai?
 
+dam track la taote melodiile artistilor, nu doar la anumite. Singurul avantaj pe care o sa-l aiba alea mai populare o sa fie pt ca o sa avem deja audio pre-recorded pentru ele (daca chiar e nevoie sa-l ai in fundal, again)
+
 Caz in care trebuie folosit un SDK pentru editare audio automata. Noi avem deja audiouri pre-recorded in care se aud in fundal cele mai populare piese care pot aparea acolo in companie, dar daca piesa care chiar se aude nu se afla printre alea pre-recorded ale noastre, trebuie downloadata si editat automat alt clip (blanc, in care doar ne zicem numele si de unde suntem, dar fara poza in fundal) cu noi astfel incat sa se auda, dupa editarea automata cu ceva sound editing SDK in go (daca are, daca nu, schimbam libaju, dar sa fie unu robust si type-safe, NU PYTHON) sa se auda in surdina. Dar trebuie researchuit
 
 Daca incepe sa se auda intro-ul prezentatoului, incepi sa pui in overdrive super mare (daca exista setari de efficience vs performance pentru el) "shazamu" sau ACRcloudu ce o fi, ca sa poti sa vezi EXACT ce piesa urmeaza,sa trimiti inscrierea. Ca si cum il "activezi" mai tare
+
+Pune toata chesita asta intr-un plan de research una dupa alta: dela: la ce date livestream avem la dispozitie?
+Pana la regulamentul aferent INANTE SA ASCRIEM O SINGURA LINIE DE COD.
