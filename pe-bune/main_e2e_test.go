@@ -14,7 +14,7 @@ import (
 func TestPoller_E2E(t *testing.T) {
 	// 1. Initialize real WhatsApp client (will prompt for QR if not paired)
 	t.Log("Initializing real WhatsApp client...")
-	client, err := initWhatsApp()
+	client, err := initWhatsApp("tests/e2e.sqlite")
 	if err != nil {
 		t.Fatalf("Failed to initialize WhatsApp: %v", err)
 	}

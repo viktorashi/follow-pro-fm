@@ -160,7 +160,7 @@ func main() {
 
 	// Initialize WhatsApp client
 	fmt.Println("Initializing WhatsApp client...")
-	wappClient, err := initWhatsApp()
+	wappClient, err := initWhatsApp("wapp.sqlite")
 	if err != nil {
 		log.Fatalf("Failed to initialize WhatsApp: %v", err)
 	}
@@ -248,10 +248,10 @@ func init() {
 }
 
 // initWhatsApp initializes the WhatsApp client and handles connection/pairing
-func initWhatsApp() (*whatsmeow.Client, error) {
+func initWhatsApp(dbPath string) (*whatsmeow.Client, error) {
 	dbLog := waLog.Stdout("Database", "WARN", true)
 	// Open connection to sqlite database using pure Go driver
-	container, err := sqlstore.New(context.Background(), "sqlite", "file:wapp.sqlite?_foreign_keys=on", dbLog)
+	container, err := sqlstore.New(context.Background(), "sqlite", "file:"+dbPath+"?_foreign_keys=on", dbLog)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
