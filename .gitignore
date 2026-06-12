@@ -1,3 +1,5 @@
 jadx_out
 apktool_out
 *.apk
+*.DS_Store
+*.swp
