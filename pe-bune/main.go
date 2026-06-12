@@ -21,10 +21,15 @@ type EPGData struct {
 	} `json:"data"`
 }
 
-func getNowPlaying() (string, error) {
+type SongInfo struct {
+	Artist string
+	Title  string
+}
+
+func getNowPlaying() (SongInfo, error) {
 	req, err := http.NewRequest("GET", apiUrl, nil)
 	if err != nil {
-		return "", err
+		return SongInfo{}, err
 	}
 
 	// Be a good citizen with the user agent
@@ -33,22 +38,22 @@ func getNowPlaying() (string, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return SongInfo{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return SongInfo{}, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return SongInfo{}, err
 	}
 
 	var data EPGData
 	if err := json.Unmarshal(body, &data); err != nil {
-		return "", err
+		return SongInfo{}, err
 	}
 
 	artist := data.Data.Epg.Title
@@ -77,21 +82,21 @@ func getNowPlaying() (string, error) {
 		}
 	}
 
-	return fmt.Sprintf("%s - %s", artist, song), nil
+	return SongInfo{Artist: artist, Title: song}, nil
 }
 
 func main() {
 	fmt.Println("Fetching Now Playing from Pro FM...")
 	fmt.Println(strings.Repeat("-", 40))
 
-	var currentSong string
+	var currentSong SongInfo
 
 	for {
 		song, err := getNowPlaying()
 		if err != nil {
 			log.Printf("Error fetching data: %v\n", err)
 		} else if song != currentSong {
-			fmt.Printf("[%s] %s\n", time.Now().Format("15:04:05"), song)
+			fmt.Printf("[%s] %s - %s\n", time.Now().Format("15:04:05"), song.Artist, song.Title)
 			currentSong = song
 		}
 
