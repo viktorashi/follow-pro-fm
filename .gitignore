@@ -3,3 +3,6 @@ apktool_out
 *.apk
 *.DS_Store
 *.swp
+*.sqlite
+*.db
+pro-fm-poller
