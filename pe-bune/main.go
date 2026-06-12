@@ -26,6 +26,53 @@ type SongInfo struct {
 	Title  string
 }
 
+// Campaign represents a multi-week date period where a specific artist is targeted
+type Campaign struct {
+	StartDate string // Format: "2006-01-02"
+	EndDate   string // Format: "2006-01-02"
+	Artist    string
+}
+
+// IsActive checks if the current time falls within the campaign date period
+// and satisfies the global daily rules: Mon-Fri, 07:00-20:00.
+func (c Campaign) IsActive(now time.Time) bool {
+	// Global Rule 1: Monday to Friday only
+	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
+		return false
+	}
+
+	// Global Rule 2: Between 07:00 and 20:00 (up to 19:59:59)
+	if now.Hour() < 7 || now.Hour() >= 20 {
+		return false
+	}
+
+	layout := "2006-01-02"
+	start, err1 := time.ParseInLocation(layout, c.StartDate, now.Location())
+	end, err2 := time.ParseInLocation(layout, c.EndDate, now.Location())
+
+	if err1 != nil || err2 != nil {
+		return false
+	}
+
+	// End date includes the entire day
+	end = end.Add(24*time.Hour - time.Second)
+
+	return now.After(start) && now.Before(end)
+}
+
+// Define the campaigns as requested (2-week periods)
+var activeCampaigns = []Campaign{
+	{StartDate: "2026-05-25", EndDate: "2026-06-05", Artist: "Bruno Mars"},
+	{StartDate: "2026-06-15", EndDate: "2026-06-26", Artist: "BTS"},
+	{StartDate: "2026-07-20", EndDate: "2026-07-31", Artist: "Ariana"},
+	{StartDate: "2026-08-10", EndDate: "2026-08-21", Artist: "The Weeknd"},
+}
+
+var (
+	matchesToday int
+	lastMatchDay int
+)
+
 func getNowPlaying() (SongInfo, error) {
 	req, err := http.NewRequest("GET", apiUrl, nil)
 	if err != nil {
@@ -91,15 +138,54 @@ func main() {
 
 	var currentSong SongInfo
 
+	// Use a cron-like Ticker instead of an infinite sleep loop
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	// Trigger immediately on start
+	checkSong(&currentSong)
+
+	// Cron-like polling
 	for {
-		song, err := getNowPlaying()
-		if err != nil {
-			log.Printf("Error fetching data: %v\n", err)
-		} else if song != currentSong {
-			fmt.Printf("[%s] %s - %s\n", time.Now().Format("15:04:05"), song.Artist, song.Title)
-			currentSong = song
+		<-ticker.C
+		checkSong(&currentSong)
+	}
+}
+
+func checkSong(currentSong *SongInfo) {
+	now := time.Now()
+
+	// Reset daily matches counter on a new day
+	if now.YearDay() != lastMatchDay {
+		matchesToday = 0
+		lastMatchDay = now.YearDay()
+	}
+
+	song, err := getNowPlaying()
+	if err != nil {
+		log.Printf("Error fetching data: %v\n", err)
+		return
+	}
+
+	if song != *currentSong {
+		fmt.Printf("[%s] %s - %s\n", now.Format("15:04:05"), song.Artist, song.Title)
+
+		// Only check campaigns if we haven't hit the daily limit of 6
+		if matchesToday < 6 {
+			for _, campaign := range activeCampaigns {
+				if campaign.IsActive(now) {
+					if strings.Contains(strings.ToLower(song.Artist), strings.ToLower(campaign.Artist)) {
+						matchesToday++
+						fmt.Printf("   🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/6 for today)\n", song.Artist, matchesToday)
+						// TODO: Trigger actual submission (WhatsApp/Voice note) here
+					}
+				}
+			}
+		} else {
+			// Optional: Print a debug message once that the daily quota is reached
+			// fmt.Println("   [INFO] Daily limit of 6 matches reached. Ignoring further campaign matches for today.")
 		}
 
-		time.Sleep(10 * time.Second)
+		*currentSong = song
 	}
 }
