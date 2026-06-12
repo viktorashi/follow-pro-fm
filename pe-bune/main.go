@@ -266,7 +266,18 @@ func initWhatsApp() (*whatsmeow.Client, error) {
 				fmt.Println("\n👉 Please scan the QR code below using your WhatsApp Business/personal app (Settings -> Linked Devices -> Link a Device):")
 				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
 			} else {
-				fmt.Println("Login event:", evt.Event)
+				// Clear the QR code from the screen for other events
+				fmt.Print("\033[H\033[2J")
+				switch evt.Event {
+				case "success":
+					fmt.Println("✅ Successfully paired!")
+				case "timeout":
+					fmt.Println("⏳ QR code scan timed out. Please run the program again.")
+				case "error":
+					fmt.Printf("❌ Pairing error: %v\n", evt.Error)
+				default:
+					fmt.Printf("ℹ️ Login event: %s\n", evt.Event)
+				}
 			}
 		}
 
