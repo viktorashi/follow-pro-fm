@@ -28,8 +28,8 @@ type SongInfo struct {
 
 // Campaign represents a multi-week date period where a specific artist is targeted
 type Campaign struct {
-	StartDate string // Format: "2006-01-02"
-	EndDate   string // Format: "2006-01-02"
+	StartDate string // Format: "02-01-2006"
+	EndDate   string // Format: "02-01-2006"
 	Artist    string
 }
 
@@ -46,7 +46,7 @@ func (c Campaign) IsActive(now time.Time) bool {
 		return false
 	}
 
-	layout := "2006-01-02"
+	layout := "02-01-2006"
 	start, err1 := time.ParseInLocation(layout, c.StartDate, now.Location())
 	end, err2 := time.ParseInLocation(layout, c.EndDate, now.Location())
 
@@ -62,10 +62,10 @@ func (c Campaign) IsActive(now time.Time) bool {
 
 // Define the campaigns as requested (2-week periods)
 var activeCampaigns = []Campaign{
-	{StartDate: "2026-05-25", EndDate: "2026-06-05", Artist: "Bruno Mars"},
-	{StartDate: "2026-06-15", EndDate: "2026-06-26", Artist: "BTS"},
-	{StartDate: "2026-07-20", EndDate: "2026-07-31", Artist: "Ariana"},
-	{StartDate: "2026-08-10", EndDate: "2026-08-21", Artist: "The Weeknd"},
+	{StartDate: "25-05-2026", EndDate: "05-06-2026", Artist: "Bruno Mars"},
+	{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
+	{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana"},
+	{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd"},
 }
 
 var (
