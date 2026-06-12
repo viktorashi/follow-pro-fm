@@ -3,3 +3,6 @@ build:
 
 run: build
     ./pro-fm-poller
+
+lint:
+    ./scripts/golangci-lint-shim.sh run
