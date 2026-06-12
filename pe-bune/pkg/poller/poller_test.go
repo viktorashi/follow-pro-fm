@@ -83,7 +83,7 @@ func TestPoller_getNowPlaying(t *testing.T) {
 		{
 			name: "Valid Response",
 			handler: func(w http.ResponseWriter, r *http.Request) {
-				w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"BTS","playerExtendedSongSubtitle":"Dynamite"}}}`))
+				_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"BTS","playerExtendedSongSubtitle":"Dynamite"}}}`))
 			},
 			wantArtist: "BTS",
 			wantTitle:  "Dynamite",
@@ -92,7 +92,7 @@ func TestPoller_getNowPlaying(t *testing.T) {
 		{
 			name: "Missing Fields (Unknowns)",
 			handler: func(w http.ResponseWriter, r *http.Request) {
-				w.Write([]byte(`{"data":{"epg":{}}}`))
+				_, _ = w.Write([]byte(`{"data":{"epg":{}}}`))
 			},
 			wantArtist: "Unknown Artist",
 			wantTitle:  "Unknown Song",
@@ -101,7 +101,7 @@ func TestPoller_getNowPlaying(t *testing.T) {
 		{
 			name: "Clean up year edge case",
 			handler: func(w http.ResponseWriter, r *http.Request) {
-				w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"Artist","playerExtendedSongSubtitle":"2000 - LASA-MA PAPA LA MARE"}}}`))
+				_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"Artist","playerExtendedSongSubtitle":"2000 - LASA-MA PAPA LA MARE"}}}`))
 			},
 			wantArtist: "Artist",
 			wantTitle:  "LASA-MA PAPA LA MARE",
@@ -110,7 +110,7 @@ func TestPoller_getNowPlaying(t *testing.T) {
 		{
 			name: "Clean up string containing dash but not year",
 			handler: func(w http.ResponseWriter, r *http.Request) {
-				w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"Artist","playerExtendedSongSubtitle":"Word - Song Title"}}}`))
+				_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"Artist","playerExtendedSongSubtitle":"Word - Song Title"}}}`))
 			},
 			wantArtist: "Artist",
 			wantTitle:  "Word - Song Title",
@@ -126,7 +126,16 @@ func TestPoller_getNowPlaying(t *testing.T) {
 		{
 			name: "Bad JSON",
 			handler: func(w http.ResponseWriter, r *http.Request) {
-				w.Write([]byte(`{bad-json`))
+				_, _ = w.Write([]byte(`{bad-json`))
+			},
+			wantErr:    true,
+		},
+		{
+			name: "Body Read Error (Unexpected EOF)",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Length", "100")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("short"))
 			},
 			wantErr:    true,
 		},
@@ -164,6 +173,7 @@ func TestPoller_getNowPlaying_BadURL(t *testing.T) {
 	// Test NewRequest error (e.g., bad URL scheme)
 	poller = &Poller{ApiURL: string([]byte{0x7f})}
 	_, err = poller.getNowPlaying()
+	t.Logf("err for \\x7f: %v", err)
 	if err == nil {
 		t.Error("Expected error for bad URL")
 	}
@@ -272,7 +282,7 @@ func TestPoller_checkSong(t *testing.T) {
 func TestPoller_checkSong_DailyLimit(t *testing.T) {
 	activeTime := time.Date(2026, time.June, 17, 12, 0, 0, 0, time.UTC)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"BTS","playerExtendedSongSubtitle":"Dynamite"}}}`))
+		_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"BTS","playerExtendedSongSubtitle":"Dynamite"}}}`))
 	}))
 	defer server.Close()
 
