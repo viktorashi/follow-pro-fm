@@ -16,6 +16,18 @@ def listen_to_icy_stream(url):
     try:
         with urllib.request.urlopen(req) as response:
             # Check if the server supports metadata
+            # print("--- Response Details ---")
+            # print(f"Status: {response.status}")
+            # print(f"Reason: {response.reason}")
+            # print(f"URL: {response.url}")
+            # print("Headers:")
+            # for k, v in response.headers.items():
+            #     print(f"  {k}: {v}")
+            # print("------------------------")
+
+            # If you want to see literally everything (methods and internal fields), you can uncomment:
+            print("All properties:", dir(response))
+            print("Internal dictionary:", vars(response))
             meta_int_header = response.headers.get("icy-metaint")
             if not meta_int_header:
                 print("Error: The server does not support icy-metadata.")
@@ -69,5 +81,5 @@ def listen_to_icy_stream(url):
 if __name__ == "__main__":
     # Example: A random public internet radio stream that actually sends metadata
     # (Note: The Pro FM Digi edge stream strips this out, but this is how it works on standard streams!)
-    example_stream = "http://stream.radioreklama.bg:80/radio1128"
+    example_stream = "https://api.profm.ro/api/v1/radios/article/2918"
     listen_to_icy_stream(example_stream)
