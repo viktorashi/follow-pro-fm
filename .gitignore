@@ -7,3 +7,4 @@ apktool_out
 *.db
 pro-fm-poller
 coverage.out
+*.bin
