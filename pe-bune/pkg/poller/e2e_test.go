@@ -1,7 +1,7 @@
 //go:build e2e
 // +build e2e
 
-package main
+package poller
 
 import (
 	"encoding/json"
@@ -14,7 +14,7 @@ import (
 func TestPoller_E2E(t *testing.T) {
 	// 1. Initialize real WhatsApp client (will prompt for QR if not paired)
 	t.Log("Initializing real WhatsApp client...")
-	client, err := initWhatsApp("tests/e2e.sqlite")
+	client, err := InitWhatsApp("../../tests/e2e.sqlite")
 	if err != nil {
 		t.Fatalf("Failed to initialize WhatsApp: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestPoller_E2E(t *testing.T) {
 		TargetPhone: targetPhone,
 		SendVoiceNote: func(phone string, audioPath string) error {
 			t.Logf("🚀 Triggering real E2E voice note send to %s...", phone)
-			return sendVoiceNote(client, phone, audioPath)
+			return SendVoiceNote(client, phone, "../../"+audioPath)
 		},
 	}
 

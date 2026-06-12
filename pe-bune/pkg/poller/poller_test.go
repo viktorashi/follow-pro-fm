@@ -1,4 +1,4 @@
-package main
+package poller
 
 import (
 	"encoding/json"

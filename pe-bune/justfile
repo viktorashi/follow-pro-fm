@@ -1,16 +1,16 @@
 default:
     just -l
 build:
-    go build
+    go build -o pro-fm-poller ./cmd/pro-fm-poller
 
 run: build
     ./pro-fm-poller
 
 test:
-    go test -v ./...
+    go test -v ./pkg/...
 
 test-e2e:
-    go test -v -tags=e2e ./...
+    go test -v -tags=e2e ./pkg/...
 
 lint:
     ./scripts/golangci-lint-shim.sh run
