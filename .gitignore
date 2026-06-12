@@ -6,3 +6,4 @@ apktool_out
 *.sqlite
 *.db
 pro-fm-poller
+coverage.out

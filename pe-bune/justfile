@@ -14,3 +14,10 @@ test-e2e:
 
 lint:
     ./scripts/golangci-lint-shim.sh run
+
+test-cover:
+    go test -coverprofile=coverage.out ./pkg/...
+    go tool cover -func=coverage.out
+
+test-cover-html: test-cover
+    go tool cover -html=coverage.out
