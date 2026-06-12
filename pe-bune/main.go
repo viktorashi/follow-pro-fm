@@ -78,15 +78,19 @@ var activeCampaigns = []Campaign{
 	{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd"},
 }
 
-var (
+type Poller struct {
+	ApiURL          string
+	PollInterval    time.Duration
+	ActiveCampaigns []Campaign
+	TargetPhone     string
+	SendVoiceNote   func(phone string, audioPath string) error
+
 	matchesToday int
 	lastCheckDay int
-	wappClient   *whatsmeow.Client
-	targetPhone  string
-)
+}
 
-func getNowPlaying() (SongInfo, error) {
-	req, err := http.NewRequest("GET", apiUrl, nil)
+func (p *Poller) getNowPlaying() (SongInfo, error) {
+	req, err := http.NewRequest("GET", p.ApiURL, nil)
 	if err != nil {
 		return SongInfo{}, err
 	}
@@ -148,7 +152,7 @@ func getNowPlaying() (SongInfo, error) {
 
 func main() {
 	// Initialize target phone from environment variable
-	targetPhone = os.Getenv("TARGET_PHONE")
+	targetPhone := os.Getenv("TARGET_PHONE")
 	if targetPhone == "" {
 		targetPhone = "+40762631673"
 	}
@@ -156,42 +160,52 @@ func main() {
 
 	// Initialize WhatsApp client
 	fmt.Println("Initializing WhatsApp client...")
-	var err error
-	wappClient, err = initWhatsApp()
+	wappClient, err := initWhatsApp()
 	if err != nil {
 		log.Fatalf("Failed to initialize WhatsApp: %v", err)
 	}
 	defer wappClient.Disconnect()
 
+	poller := &Poller{
+		ApiURL:          apiUrl,
+		PollInterval:    10 * time.Second,
+		ActiveCampaigns: activeCampaigns,
+		TargetPhone:     targetPhone,
+		SendVoiceNote: func(phone string, audioPath string) error {
+			return sendVoiceNote(wappClient, phone, audioPath)
+		},
+	}
+	poller.Start()
+}
+
+func (p *Poller) Start() {
 	fmt.Println("Fetching Now Playing from Pro FM...")
 	fmt.Println(strings.Repeat("-", 40))
 
 	var currentSong SongInfo
 
 	// Use a cron-like Ticker instead of an infinite sleep loop
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(p.PollInterval)
 	defer ticker.Stop()
 
 	// Trigger immediately on start
-	checkSong(&currentSong)
+	p.checkSong(&currentSong, time.Now())
 
 	// Cron-like polling
 	for {
 		<-ticker.C
-		checkSong(&currentSong)
+		p.checkSong(&currentSong, time.Now())
 	}
 }
 
-func checkSong(currentSong *SongInfo) {
-	now := time.Now()
-
+func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 	// Reset daily matches counter on a new day
-	if now.YearDay() != lastCheckDay {
-		matchesToday = 0
-		lastCheckDay = now.YearDay()
+	if now.YearDay() != p.lastCheckDay {
+		p.matchesToday = 0
+		p.lastCheckDay = now.YearDay()
 	}
 
-	song, err := getNowPlaying()
+	song, err := p.getNowPlaying()
 	if err != nil {
 		log.Printf("Error fetching data: %v\n", err)
 		return
@@ -201,16 +215,16 @@ func checkSong(currentSong *SongInfo) {
 		fmt.Printf("[%s] %s - %s\n", now.Format("15:04:05"), song.Artist, song.Title)
 
 		// Only check campaigns if we haven't hit the daily limit of 6
-		if matchesToday < 6 {
-			for _, campaign := range activeCampaigns {
+		if p.matchesToday < 6 {
+			for _, campaign := range p.ActiveCampaigns {
 				if campaign.IsActive(now) {
 					if strings.Contains(strings.ToLower(song.Artist), strings.ToLower(campaign.Artist)) {
-						matchesToday++
-						fmt.Printf("   🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/6 for today)\n", song.Artist, matchesToday)
+						p.matchesToday++
+						fmt.Printf("   🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/6 for today)\n", song.Artist, p.matchesToday)
 
 						// Trigger actual submission (WhatsApp Voice note)
 						fmt.Println("   Sending WhatsApp voice note...")
-						err := sendVoiceNote(wappClient, targetPhone, "audios/1.ogg")
+						err := p.SendVoiceNote(p.TargetPhone, "audios/1.ogg")
 						if err != nil {
 							log.Printf("   ❌ Error sending voice note: %v\n", err)
 						}

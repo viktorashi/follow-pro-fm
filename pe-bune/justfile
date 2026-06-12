@@ -4,5 +4,11 @@ build:
 run: build
     ./pro-fm-poller
 
+test:
+    go test -v ./...
+
+test-e2e:
+    go test -v -tags=e2e ./...
+
 lint:
     ./scripts/golangci-lint-shim.sh run
