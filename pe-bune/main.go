@@ -99,7 +99,9 @@ func getNowPlaying() (SongInfo, error) {
 	if err != nil {
 		return SongInfo{}, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return SongInfo{}, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -217,7 +219,7 @@ func checkSong(currentSong *SongInfo) {
 			}
 		} else {
 			// Optional: Print a debug message once that the daily quota is reached
-			// fmt.Println("   [INFO] Daily limit of 6 matches reached. Ignoring further campaign matches for today.")
+			fmt.Println("   [INFO] Daily limit of 6 matches reached. Ignoring further campaign matches for today.")
 		}
 
 		*currentSong = song
@@ -259,10 +261,17 @@ func initWhatsApp() (*whatsmeow.Client, error) {
 		fmt.Println("\n👉 Please scan the QR code below using your WhatsApp Business/personal app (Settings -> Linked Devices -> Link a Device):")
 		for evt := range qrChan {
 			if evt.Event == "code" {
+				// Clear screen and reset cursor to override previous QR code
+				fmt.Print("\033[H\033[2J")
+				fmt.Println("\n👉 Please scan the QR code below using your WhatsApp Business/personal app (Settings -> Linked Devices -> Link a Device):")
 				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
 			} else {
 				fmt.Println("Login event:", evt.Event)
 			}
+		}
+
+		if !client.IsLoggedIn() {
+			return nil, fmt.Errorf("login timed out or failed")
 		}
 	} else {
 		// Session exists, connect automatically
@@ -317,7 +326,7 @@ func sendVoiceNote(client *whatsmeow.Client, phone string, audioPath string) err
 			FileSHA256:    uploaded.FileSHA256,
 			FileLength:    proto.Uint64(uint64(len(audioData))),
 			PTT:           proto.Bool(true), // Makes it a native voice note
-			Seconds:       proto.Uint32(9),    // Approx duration for 1.ogg
+			Seconds:       proto.Uint32(9),  // Approx duration for 1.ogg
 		},
 	}
 
