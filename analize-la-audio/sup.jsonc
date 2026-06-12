@@ -1,0 +1,51 @@
+{
+  "data": {
+    "radio": {
+      "id": 2918,
+      "name": "Pro FM",
+      "streamUrl": "https://edge76.rcs-rds.ro/radio/profm/index.m3u8",
+      "image": "https://s.iw.ro/gateway/g/ZmlsZVNvdXJjZT1odHRwcyUzQSUyRiUy/RnN0b3JhZ2VkaWdpb25saW5lMDEucmNz/LXJkcy5ybyUyRnN0b3JhZ2UlMkYyMDI1/JTJGMDklMkYwNSUyRjIzNDQwNTRfMjM0/NDA1NF9sb2dvX3Byb0ZNLnBuZyZoYXNo/PTExZTI4ZWZiNjViYWFlMGY2YmY3MjA0NmI0ZjgzODE2.png",
+      "share": {
+        "url": "https://profm.ro/live",
+        "message": "Profm Radio, cea mai tare combinație de muzică, știri și entertainment. Ascultă Pro FM, oriunde, oricând!"
+      }
+    },
+    "epg": {
+      "playerHomeTitle": "Lost Control",
+      "playerHomeSubtitle": "22:00 - 00:00",
+      "playerHomeArtWork": "https://s.iw.ro/gateway/g/ZmlsZVNvdXJjZT1odHRwcyUzQSUyRiUy/RnMuaXcucm8lMkZnYXRld2F5JTJGZyUy/RlptbHNaVk52ZFhKalpUMW9kSFJ3Y3lV/elFTVXlSaVV5JTJGUm5kM2R5NXdjbTlt/YlM1eWJ5VXlSbk4wWVhScFl5VXklMkZS/blJvWlcxbExYSmxjRzhsTWtaaWFXNGxN/a1pwYldGbiUyRlpYTWxNa1p6YUc5M2N5/VXlSazFoY21NdWNHNW5KbWhoJTJGYzJn/OU5UQTFOelpoT0RCaE16RTRZbVl6TVRn/eU1qY3dZVFl5WVROa05tRmpOREklM0Qu/cG5nJmhhc2g9ZTdkZDY3NTZhNjlmZTA5MDcxODNhNGE2OGViZjcwYTk=.png",
+      "playerExtendedShowTitle": "Lost Control",
+      "playerExtendedShowArtWork": "https://s.iw.ro/gateway/g/ZmlsZVNvdXJjZT1odHRwcyUzQSUyRiUy/RnMuaXcucm8lMkZnYXRld2F5JTJGZyUy/RlptbHNaVk52ZFhKalpUMW9kSFJ3Y3lV/elFTVXlSaVV5JTJGUm5kM2R5NXdjbTlt/YlM1eWJ5VXlSbk4wWVhScFl5VXklMkZS/blJvWlcxbExYSmxjRzhsTWtaaWFXNGxN/a1pwYldGbiUyRlpYTWxNa1p6YUc5M2N5/VXlSazFoY21NdWNHNW5KbWhoJTJGYzJn/OU5UQTFOelpoT0RCaE16RTRZbVl6TVRn/eU1qY3dZVFl5WVROa05tRmpOREklM0Qu/cG5nJmhhc2g9ZTdkZDY3NTZhNjlmZTA5MDcxODNhNGE2OGViZjcwYTk=.png",
+      "playerExtendedSongTitle": "NSYNC",
+      "playerExtendedSongSubtitle": "2000 - BYE BYE BYE",
+      "playerExtendedSongArtWork": "https://s.iw.ro/gateway/g/ZmlsZVNvdXJjZT1odHRwcyUzQSUyRiUy/RnMuaXcucm8lMkZnYXRld2F5JTJGZyUy/RlptbHNaVk52ZFhKalpUMW9kSFJ3Y3lV/elFTVXlSaVV5JTJGUm5kM2R5NXdjbTlt/YlM1eWJ5VXlSbk4wWVhScFl5VXklMkZS/blJvWlcxbExYSmxjRzhsTWtaaWFXNGxN/a1pwYldGbiUyRlpYTWxNa1p6YUc5M2N5/VXlSazFoY21NdWNHNW5KbWhoJTJGYzJn/OU5UQTFOelpoT0RCaE16RTRZbVl6TVRn/eU1qY3dZVFl5WVROa05tRmpOREklM0Qu/cG5nJmhhc2g9ZTdkZDY3NTZhNjlmZTA5MDcxODNhNGE2OGViZjcwYTk=.png",
+      "playerMiniTitle": "Lost Control",
+      "playerMiniSubtitle": "NSYNC - 2000 - BYE BYE BYE",
+      "playerMiniArtWork": "https://s.iw.ro/gateway/g/ZmlsZVNvdXJjZT1odHRwcyUzQSUyRiUy/RnMuaXcucm8lMkZnYXRld2F5JTJGZyUy/RlptbHNaVk52ZFhKalpUMW9kSFJ3Y3lV/elFTVXlSaVV5JTJGUm5kM2R5NXdjbTlt/YlM1eWJ5VXlSbk4wWVhScFl5VXklMkZS/blJvWlcxbExYSmxjRzhsTWtaaWFXNGxN/a1pwYldGbiUyRlpYTWxNa1p6YUc5M2N5/VXlSazFoY21NdWNHNW5KbWhoJTJGYzJn/OU5UQTFOelpoT0RCaE16RTRZbVl6TVRn/eU1qY3dZVFl5WVROa05tRmpOREklM0Qu/cG5nJmhhc2g9ZTdkZDY3NTZhNjlmZTA5MDcxODNhNGE2OGViZjcwYTk=.png",
+      "playerCurrentSongId": "b42ebe0e13a019539bf7e5dec0ec4c6b"
+    },
+    "history": [
+      {
+        "id": "7ce8a785014cb3bdfbe18c6895e89eff",
+        "title": "SONIQUE",
+        "subtitle": "2000 - SKY (PRO FM EDIT 2)",
+        "artWork": "https://s.iw.ro/gateway/g/ZmlsZVNvdXJjZT1odHRwcyUzQSUyRiUy/RmNkbi1pbWFnZXMuZHpjZG4ubmV0JTJG/aW1hZ2VzJTJGY292ZXIlMkYxMmRiM2Ez/MzNmNmFmNDdmNDAzZDk0MDM1NGU5MGRj/MCUyRjI1MHgyNTAtMDAwMDAwLTgwLTAt/MC5qcGcmaGFzaD0yODdkOTVhNmZmZmI5NWYyNDkzMTRmMzk1ZTg0MmI3Mw==.jpg",
+        "lastUpdated": "2026-06-12 21:56:01"
+      },
+      {
+        "id": "17445a1c7f8fb10da0fa970d49302990",
+        "title": "ANDRE",
+        "subtitle": "2000 - LASA-MA PAPA LA MARE",
+        "artWork": "https://s.iw.ro/gateway/g/ZmlsZVNvdXJjZT1odHRwcyUzQSUyRiUy/RmNkbi1pbWFnZXMuZHpjZG4ubmV0JTJG/aW1hZ2VzJTJGY292ZXIlMkY1MTk0MDBl/MjlkMjY4ZjQ0OWNmMDBhZjg3OWU3MWFm/NiUyRjI1MHgyNTAtMDAwMDAwLTgwLTAt/MC5qcGcmaGFzaD0yMjA0MWQ3YTRlZmZkMGFhMzg1MmY1YzI1YzZhMzM3YQ==.jpg",
+        "lastUpdated": "2026-06-12 21:51:41"
+      },
+      {
+        "id": "d4310409115da0b6276bfe5b9cf342a9",
+        "title": "BON JOVI",
+        "subtitle": "2000 - ITS MY LIFE",
+        "artWork": "https://s.iw.ro/gateway/g/ZmlsZVNvdXJjZT1odHRwcyUzQSUyRiUy/RmNkbi1pbWFnZXMuZHpjZG4ubmV0JTJG/aW1hZ2VzJTJGY292ZXIlMkZmNjVhY2Jh/NGY4ZWEzYjc1ODRlOTc2YzA5NTBkZDAy/OCUyRjI1MHgyNTAtMDAwMDAwLTgwLTAt/MC5qcGcmaGFzaD1kNTFhNTUxNWY3Y2ZiMDExOGEzYzEyMjIzMmQxNjczMA==.jpg",
+        "lastUpdated": "2026-06-12 21:48:01"
+      }
+    ]
+  }
+}

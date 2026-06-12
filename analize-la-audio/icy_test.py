@@ -1,14 +1,13 @@
 import urllib.request
-import re
 
 url = "http://edge126.rdsnet.ro:84/profm/profm.mp3"
-req = urllib.request.Request(url, headers={'Icy-MetaData': '1'})
+req = urllib.request.Request(url, headers={"Icy-MetaData": "1"})
 
 try:
     response = urllib.request.urlopen(req, timeout=10)
-    metaint = int(response.headers.get('icy-metaint', 0))
+    metaint = int(response.headers.get("icy-metaint", 0))
     print(f"icy-metaint: {metaint}")
-    
+
     if metaint > 0:
         response.read(metaint)
         meta_byte = response.read(1)
