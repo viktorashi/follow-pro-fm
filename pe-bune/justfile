@@ -6,8 +6,14 @@ build:
 run: build
     ./pro-fm-poller
 
+format:
+    go fmt
+
+alias fmt := format
+alias f := format
+
 test:
-    go test -v ./pkg/...
+    go test ./pkg/...
 
 test-e2e:
     go test -v -tags=e2e ./pkg/...
