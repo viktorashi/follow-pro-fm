@@ -62,7 +62,6 @@ func (c Campaign) IsActive(now time.Time) bool {
 
 // Define the campaigns as requested (2-week periods)
 var activeCampaigns = []Campaign{
-	{StartDate: "25-05-2026", EndDate: "05-06-2026", Artist: "Bruno Mars"},
 	{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
 	{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana"},
 	{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd"},
