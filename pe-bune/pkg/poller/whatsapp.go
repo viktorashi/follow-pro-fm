@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/mdp/qrterminal/v3"
 	"go.mau.fi/whatsmeow"
@@ -75,6 +76,19 @@ func InitWhatsApp(dbPath string) (*whatsmeow.Client, error) {
 
 		if !paired {
 			return nil, fmt.Errorf("login timed out or failed")
+		}
+
+		// After pairing, whatsmeow drops the anonymous websocket and reconnects 
+		// as an authenticated user. We must wait for this to finish before uploading media.
+		for i := 0; i < 30; i++ {
+			if client.IsLoggedIn() && client.IsConnected() {
+				break
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+
+		if !client.IsLoggedIn() || !client.IsConnected() {
+			return nil, fmt.Errorf("login sync timed out")
 		}
 	} else {
 		// Session exists, connect automatically

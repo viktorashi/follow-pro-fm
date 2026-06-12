@@ -312,3 +312,40 @@ func TestPoller_checkSong_DailyLimit(t *testing.T) {
 		t.Errorf("matchesToday should remain 6, got %d", poller.matchesToday)
 	}
 }
+
+func TestNormalizePhoneNumber(t *testing.T) {
+	tests := []struct {
+		name  string
+		phone string
+		want  string
+	}{
+		{
+			name:  "Romanian standard format",
+			phone: "0762631673",
+			want:  "40762631673",
+		},
+		{
+			name:  "International format with plus",
+			phone: "+40762631673",
+			want:  "40762631673",
+		},
+		{
+			name:  "Format with dashes and spaces",
+			phone: "+40 762-631-673",
+			want:  "40762631673",
+		},
+		{
+			name:  "Format with brackets",
+			phone: "(0762) 631 673",
+			want:  "40762631673",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizePhoneNumber(tt.phone); got != tt.want {
+				t.Errorf("normalizePhoneNumber() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
