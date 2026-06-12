@@ -49,6 +49,7 @@ func InitWhatsApp(dbPath string) (*whatsmeow.Client, error) {
 		}
 
 		fmt.Println("\n👉 Please scan the QR code below using your WhatsApp Business/personal app (Settings -> Linked Devices -> Link a Device):")
+		paired := false
 		for evt := range qrChan {
 			if evt.Event == "code" {
 				// Clear screen and reset cursor to override previous QR code
@@ -61,6 +62,7 @@ func InitWhatsApp(dbPath string) (*whatsmeow.Client, error) {
 				switch evt.Event {
 				case "success":
 					fmt.Println("✅ Successfully paired!")
+					paired = true
 				case "timeout":
 					fmt.Println("⏳ QR code scan timed out. Please run the program again.")
 				case "error":
@@ -71,7 +73,7 @@ func InitWhatsApp(dbPath string) (*whatsmeow.Client, error) {
 			}
 		}
 
-		if !client.IsLoggedIn() {
+		if !paired {
 			return nil, fmt.Errorf("login timed out or failed")
 		}
 	} else {
