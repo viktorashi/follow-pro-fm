@@ -1,13 +1,24 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
+
+	"github.com/mdp/qrterminal/v3"
+	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/store/sqlstore"
+	"go.mau.fi/whatsmeow/types"
+	waLog "go.mau.fi/whatsmeow/util/log"
+	"google.golang.org/protobuf/proto"
+	"modernc.org/sqlite"
 )
 
 const apiUrl = "https://api.profm.ro/api/v1/radios/article/2918?appVersion=1.0.0&platform=android"
@@ -69,7 +80,9 @@ var activeCampaigns = []Campaign{
 
 var (
 	matchesToday int
-	lastMatchDay int
+	lastCheckDay int
+	wappClient   *whatsmeow.Client
+	targetPhone  string
 )
 
 func getNowPlaying() (SongInfo, error) {
@@ -132,6 +145,22 @@ func getNowPlaying() (SongInfo, error) {
 }
 
 func main() {
+	// Initialize target phone from environment variable
+	targetPhone = os.Getenv("TARGET_PHONE")
+	if targetPhone == "" {
+		targetPhone = "+40762631673"
+	}
+	fmt.Printf("Destination phone number set to: %s\n", targetPhone)
+
+	// Initialize WhatsApp client
+	fmt.Println("Initializing WhatsApp client...")
+	var err error
+	wappClient, err = initWhatsApp()
+	if err != nil {
+		log.Fatalf("Failed to initialize WhatsApp: %v", err)
+	}
+	defer wappClient.Disconnect()
+
 	fmt.Println("Fetching Now Playing from Pro FM...")
 	fmt.Println(strings.Repeat("-", 40))
 
@@ -155,9 +184,9 @@ func checkSong(currentSong *SongInfo) {
 	now := time.Now()
 
 	// Reset daily matches counter on a new day
-	if now.YearDay() != lastMatchDay {
+	if now.YearDay() != lastCheckDay {
 		matchesToday = 0
-		lastMatchDay = now.YearDay()
+		lastCheckDay = now.YearDay()
 	}
 
 	song, err := getNowPlaying()
@@ -176,7 +205,13 @@ func checkSong(currentSong *SongInfo) {
 					if strings.Contains(strings.ToLower(song.Artist), strings.ToLower(campaign.Artist)) {
 						matchesToday++
 						fmt.Printf("   🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/6 for today)\n", song.Artist, matchesToday)
-						// TODO: Trigger actual submission (WhatsApp/Voice note) here
+
+						// Trigger actual submission (WhatsApp Voice note)
+						fmt.Println("   Sending WhatsApp voice note...")
+						err := sendVoiceNote(wappClient, targetPhone, "audios/1.ogg")
+						if err != nil {
+							log.Printf("   ❌ Error sending voice note: %v\n", err)
+						}
 					}
 				}
 			}
@@ -187,4 +222,111 @@ func checkSong(currentSong *SongInfo) {
 
 		*currentSong = song
 	}
+}
+
+func init() {
+	sqlite.RegisterConnectionHook(func(conn sqlite.ExecQuerierContext, dsn string) error {
+		_, err := conn.ExecContext(context.Background(), "PRAGMA foreign_keys = ON;", nil)
+		return err
+	})
+}
+
+// initWhatsApp initializes the WhatsApp client and handles connection/pairing
+func initWhatsApp() (*whatsmeow.Client, error) {
+	dbLog := waLog.Stdout("Database", "WARN", true)
+	// Open connection to sqlite database using pure Go driver
+	container, err := sqlstore.New(context.Background(), "sqlite", "file:wapp.sqlite?_foreign_keys=on", dbLog)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	deviceStore, err := container.GetFirstDevice(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get first device: %w", err)
+	}
+
+	clientLog := waLog.Stdout("Client", "WARN", true)
+	client := whatsmeow.NewClient(deviceStore, clientLog)
+
+	if client.Store.ID == nil {
+		// No session exists, perform login
+		qrChan, _ := client.GetQRChannel(context.Background())
+		err = client.Connect()
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect for pairing: %w", err)
+		}
+
+		fmt.Println("\n👉 Please scan the QR code below using your WhatsApp Business/personal app (Settings -> Linked Devices -> Link a Device):")
+		for evt := range qrChan {
+			if evt.Event == "code" {
+				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
+			} else {
+				fmt.Println("Login event:", evt.Event)
+			}
+		}
+	} else {
+		// Session exists, connect automatically
+		err := client.Connect()
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect: %w", err)
+		}
+	}
+
+	return client, nil
+}
+
+// normalizePhoneNumber normalizes Romanian and international numbers to numbers-only format
+func normalizePhoneNumber(phone string) string {
+	phone = strings.ReplaceAll(phone, " ", "")
+	phone = strings.ReplaceAll(phone, "-", "")
+	phone = strings.ReplaceAll(phone, "+", "")
+	phone = strings.ReplaceAll(phone, "(", "")
+	phone = strings.ReplaceAll(phone, ")", "")
+
+	if strings.HasPrefix(phone, "0") && len(phone) == 10 {
+		phone = "40" + phone[1:]
+	}
+	return phone
+}
+
+// sendVoiceNote reads the ogg file, uploads it, and sends it as a PTT message (recorded voice note)
+func sendVoiceNote(client *whatsmeow.Client, phone string, audioPath string) error {
+	normalized := normalizePhoneNumber(phone)
+	targetJID := types.NewJID(normalized, types.DefaultUserServer)
+
+	// Read audio file
+	audioData, err := os.ReadFile(audioPath)
+	if err != nil {
+		return fmt.Errorf("failed to read audio file at %s: %w", audioPath, err)
+	}
+
+	// Upload to WhatsApp servers
+	uploaded, err := client.Upload(context.Background(), audioData, whatsmeow.MediaAudio)
+	if err != nil {
+		return fmt.Errorf("failed to upload audio to WhatsApp: %w", err)
+	}
+
+	// Construct AudioMessage with Push-To-Talk set to true (native voice note bubble)
+	msg := &waE2E.Message{
+		AudioMessage: &waE2E.AudioMessage{
+			URL:           proto.String(uploaded.URL),
+			DirectPath:    proto.String(uploaded.DirectPath),
+			MediaKey:      uploaded.MediaKey,
+			Mimetype:      proto.String("audio/ogg; codecs=opus"),
+			FileEncSHA256: uploaded.FileEncSHA256,
+			FileSHA256:    uploaded.FileSHA256,
+			FileLength:    proto.Uint64(uint64(len(audioData))),
+			PTT:           proto.Bool(true), // Makes it a native voice note
+			Seconds:       proto.Uint32(9),    // Approx duration for 1.ogg
+		},
+	}
+
+	// Send message
+	resp, err := client.SendMessage(context.Background(), targetJID, msg)
+	if err != nil {
+		return fmt.Errorf("failed to send message to %s: %w", targetJID, err)
+	}
+
+	fmt.Printf("   ✅ Voice note sent! JID: %s, Message ID: %s, Timestamp: %s\n", targetJID, resp.ID, resp.Timestamp)
+	return nil
 }
