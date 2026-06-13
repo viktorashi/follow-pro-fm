@@ -63,6 +63,9 @@ type Poller struct {
 	ActiveCampaigns []Campaign
 	TargetPhone     string
 	SendVoiceNote   func(phone string, audioPath string) error
+	StateMgr        *StateManager
+	Alerter         Alerter
+	AudiosDir       string
 
 	matchesToday int
 	lastCheckDay int
@@ -129,10 +132,15 @@ func (p *Poller) getNowPlaying() (SongInfo, error) {
 }
 
 func (p *Poller) Start() {
+	p.Alerter.AlertInfo("ProFM Jaguare Poller started! Fetching Now Playing...")
 	fmt.Println("Fetching Now Playing from Pro FM...")
 	fmt.Println(strings.Repeat("-", 40))
 
 	var currentSong SongInfo
+
+	p.StateMgr.Update(func(s *AppState) {
+		s.Status = StatusPolling
+	})
 
 	// Use a cron-like Ticker instead of an infinite sleep loop
 	ticker := time.NewTicker(p.PollInterval)
@@ -170,13 +178,49 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 				if campaign.IsActive(now) {
 					if strings.Contains(strings.ToLower(song.Artist), strings.ToLower(campaign.Artist)) {
 						p.matchesToday++
-						fmt.Printf("   🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/6 for today)\n", song.Artist, p.matchesToday)
+						msg := fmt.Sprintf("🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/6 for today)", song.Artist, p.matchesToday)
+						fmt.Println("   " + msg)
+						p.Alerter.AlertInfo(msg)
+
+						p.StateMgr.Update(func(s *AppState) {
+							s.Status = StatusCampaignTriggered
+						})
+
+						audioFile, err := GetRandomAudio(p.AudiosDir)
+						if err != nil {
+							p.StateMgr.Update(func(s *AppState) {
+								s.Status = StatusAudioExhausted
+								s.LastError = "No unused audios available!"
+							})
+							p.Alerter.AlertCritical("AUDIO POOL EXHAUSTED! Cannot send voice note for " + song.Artist)
+							break
+						}
+
+						p.StateMgr.Update(func(s *AppState) {
+							s.Status = StatusSendingAudio
+						})
 
 						// Trigger actual submission (WhatsApp Voice note)
-						fmt.Println("   Sending WhatsApp voice note...")
-						err := p.SendVoiceNote(p.TargetPhone, "audios/1.ogg")
+						fmt.Println("   Sending WhatsApp voice note using: " + audioFile)
+						err = p.SendVoiceNote(p.TargetPhone, audioFile)
 						if err != nil {
 							log.Printf("   ❌ Error sending voice note: %v\n", err)
+							p.StateMgr.Update(func(s *AppState) {
+								s.Status = StatusError
+								s.LastError = fmt.Sprintf("Voice note failed: %v", err)
+							})
+						} else {
+							// Success!
+							_ = MarkAudioUsed(audioFile)
+							p.Alerter.AlertSuccess("Voice note sent successfully for " + song.Artist)
+							p.StateMgr.Update(func(s *AppState) {
+								s.Status = StatusPolling
+								s.LastError = ""
+								s.LastVoiceNoteSentAt = time.Now()
+								unused, used := GetAudioStats(p.AudiosDir)
+								s.UnusedAudios = unused
+								s.UsedAudios = used
+							})
 						}
 					}
 				}
@@ -186,5 +230,16 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 		}
 
 		*currentSong = song
+		
+		p.StateMgr.Update(func(s *AppState) {
+			s.CurrentSong = song.Artist + " - " + song.Title
+		})
 	}
+
+	// Always update audio stats on each check to keep UI fresh just in case
+	p.StateMgr.Update(func(s *AppState) {
+		unused, used := GetAudioStats(p.AudiosDir)
+		s.UnusedAudios = unused
+		s.UsedAudios = used
+	})
 }

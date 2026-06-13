@@ -3,7 +3,11 @@ module pro-fm-poller
 go 1.26.4
 
 require (
+	github.com/a-h/templ v0.3.1020
+	github.com/labstack/echo/v5 v5.1.1
 	github.com/mdp/qrterminal/v3 v3.2.1
+	github.com/resend/resend-go/v3 v3.7.0
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	go.mau.fi/whatsmeow v0.0.0-20260611094716-089932318bc2
 	google.golang.org/protobuf v1.36.11
 	modernc.org/sqlite v1.52.0
@@ -32,6 +36,7 @@ require (
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/term v0.43.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect

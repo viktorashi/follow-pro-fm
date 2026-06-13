@@ -2,6 +2,7 @@ package poller
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
 	"modernc.org/sqlite"
+	"github.com/skip2/go-qrcode"
 )
 
 func init() {
@@ -25,7 +27,7 @@ func init() {
 }
 
 // InitWhatsApp initializes the WhatsApp client and handles connection/pairing
-func InitWhatsApp(dbPath string) (*whatsmeow.Client, error) {
+func InitWhatsApp(dbPath string, stateMgr *StateManager) (*whatsmeow.Client, error) {
 	dbLog := waLog.Stdout("Database", "WARN", true)
 	// Open connection to sqlite database using pure Go driver
 	container, err := sqlstore.New(context.Background(), "sqlite", "file:"+dbPath+"?_foreign_keys=on", dbLog)
@@ -53,6 +55,14 @@ func InitWhatsApp(dbPath string) (*whatsmeow.Client, error) {
 		paired := false
 		for evt := range qrChan {
 			if evt.Event == "code" {
+				if stateMgr != nil {
+					png, _ := qrcode.Encode(evt.Code, qrcode.Medium, 256)
+					b64 := base64.StdEncoding.EncodeToString(png)
+					stateMgr.Update(func(s *AppState) {
+						s.Status = StatusPairingRequired
+						s.QRCodeData = "data:image/png;base64," + b64
+					})
+				}
 				// Clear screen and reset cursor to override previous QR code
 				fmt.Print("\033[H\033[2J")
 				fmt.Println("\n👉 Please scan the QR code below using your WhatsApp Business/personal app (Settings -> Linked Devices -> Link a Device):")
@@ -64,6 +74,13 @@ func InitWhatsApp(dbPath string) (*whatsmeow.Client, error) {
 				case "success":
 					fmt.Println("✅ Successfully paired!")
 					paired = true
+					if stateMgr != nil {
+						stateMgr.Update(func(s *AppState) {
+							s.Status = StatusConnected
+							s.QRCodeData = ""
+							s.WhatsAppConnected = true
+						})
+					}
 				case "timeout":
 					fmt.Println("⏳ QR code scan timed out. Please run the program again.")
 				case "error":
