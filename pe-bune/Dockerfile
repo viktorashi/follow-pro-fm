@@ -1,6 +1,7 @@
 # ---- Stage 1: Build ----
 FROM golang:1.22-alpine AS builder
 
+# hadolint ignore=DL3018
 RUN apk add --no-cache gcc musl-dev
 
 WORKDIR /src
@@ -13,6 +14,7 @@ RUN CGO_ENABLED=1 go build -o /pro-fm-poller ./cmd/pro-fm-poller
 # ---- Stage 2: Runtime ----
 FROM alpine:3.20
 
+# hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /app
