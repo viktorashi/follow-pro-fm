@@ -58,7 +58,7 @@ func (c Campaign) IsActive(now time.Time) bool {
 }
 
 type Poller struct {
-	ApiURL          string
+	APIURL          string
 	PollInterval    time.Duration
 	ActiveCampaigns []Campaign
 	TargetPhone     string
@@ -69,7 +69,7 @@ type Poller struct {
 }
 
 func (p *Poller) getNowPlaying() (SongInfo, error) {
-	req, err := http.NewRequest("GET", p.ApiURL, nil)
+	req, err := http.NewRequest("GET", p.APIURL, nil)
 	if err != nil {
 		return SongInfo{}, err
 	}
