@@ -1,0 +1,9 @@
+# .dockerignore - keep the build context small and avoid leaking secrets
+wapp.sqlite
+tests/
+coverage.out
+pro-fm-poller
+*.sqlite
+.DS_Store
+.git
+.github

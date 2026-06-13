@@ -30,3 +30,25 @@ test-cover-e2e:
     go test -v -coverprofile=coverage.out -tags=e2e ./pkg/...
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
+
+# ---- Docker ----
+
+docker-build:
+    docker build -t pro-fm-poller .
+
+docker-run: docker-build
+    docker run --rm -v "$(pwd)/wapp.sqlite:/data/wapp.sqlite" -e WAPP_DB_PATH=/data/wapp.sqlite pro-fm-poller
+
+# ---- Fly.io Deployment ----
+
+deploy:
+    @echo "Running tests first..."
+    go test ./pkg/...
+    @echo "Tests passed. Deploying to Fly.io..."
+    flyctl deploy --remote-only
+
+# Push local WhatsApp session to Fly volume (one-time after pairing)
+push-session:
+    @echo "Uploading wapp.sqlite to Fly persistent volume..."
+    flyctl ssh sftp shell <<< "put wapp.sqlite /data/wapp.sqlite"
+    @echo "✅ Session uploaded. Restart with: flyctl apps restart"
