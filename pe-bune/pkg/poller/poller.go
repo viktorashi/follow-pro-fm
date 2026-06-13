@@ -230,7 +230,7 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 		}
 
 		*currentSong = song
-		
+
 		p.StateMgr.Update(func(s *AppState) {
 			s.CurrentSong = song.Artist + " - " + song.Title
 		})

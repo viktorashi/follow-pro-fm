@@ -128,7 +128,7 @@ func (a *AuthManager) RequireAuth() echo.MiddlewareFunc {
 				}
 				return c.Redirect(http.StatusTemporaryRedirect, "/login")
 			}
-			
+
 			// For simplicity, we just use the email as the cookie value since it's a personal app.
 			// In a real app, this should be a signed JWT or session ID.
 			// We check if the email in the cookie is trusted.
@@ -152,12 +152,12 @@ func SetSessionCookie(c *echo.Context, email string) {
 	cookie.Expires = time.Now().Add(24 * 7 * time.Hour) // 1 week
 	cookie.Path = "/"
 	cookie.HttpOnly = true
-	
+
 	// If running over HTTPS (like on Fly.io), set Secure
 	if os.Getenv("FLY_APP_NAME") != "" {
 		cookie.Secure = true
 	}
-	
+
 	c.SetCookie(cookie)
 }
 

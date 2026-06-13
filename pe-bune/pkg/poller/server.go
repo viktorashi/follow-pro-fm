@@ -20,7 +20,7 @@ type TelemetryServer struct {
 
 func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster) *TelemetryServer {
 	e := echo.New()
-	
+
 	// Use modern slog
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{

@@ -11,11 +11,22 @@ name = "go lint"
 entry = "./scripts/golangci-lint-shim.sh run"
 language = "system"
 files = "\\.go$"
-
+pass_filenames = false
 
 [[repos.hooks]]
-id = "go-lint"
+id = "go-format"
 name = "go format"
-entry = "go fmt"
+entry = "go fmt ./..."
 language = "system"
 files = "\\.go$"
+pass_filenames = false
+
+[[repos.hooks]]
+id = "go-test"
+name = "go test"
+entry = "go test ./pkg/..."
+language = "system"
+stages = ["pre-push"]
+pass_filenames = false
+
+

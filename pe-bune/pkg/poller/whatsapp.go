@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mdp/qrterminal/v3"
+	"github.com/skip2/go-qrcode"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store/sqlstore"
@@ -16,7 +17,6 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
 	"modernc.org/sqlite"
-	"github.com/skip2/go-qrcode"
 )
 
 func init() {
