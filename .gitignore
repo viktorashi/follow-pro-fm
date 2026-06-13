@@ -8,3 +8,4 @@ apktool_out
 pro-fm-poller
 coverage.out
 *.bin
+.env
