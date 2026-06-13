@@ -25,16 +25,10 @@ jobs:
           go tool cover -func=coverage.out
 
       - name: Upload to Codecov
+        if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v5
         with:
-          files: pe-bune/coverage.out
-          token: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
-        with:
-          files: pe-bune/junit.xml
+          files: pe-bune/coverage.out,pe-bune/junit.xml
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Lint
