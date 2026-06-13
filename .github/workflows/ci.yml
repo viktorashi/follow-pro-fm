@@ -14,8 +14,12 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: 'pe-bune/go.mod'
-          cache-dependency-path: 'pe-bune/go.sum'
+          go-version-file: "pe-bune/go.mod"
+          cache-dependency-path: "pe-bune/go.sum"
+
+      - name: Lint
+        working-directory: pe-bune
+        run: ./scripts/golangci-lint-shim.sh run
 
       - name: Install gotestsum
         run: |
@@ -41,7 +45,3 @@ jobs:
           files: pe-bune/junit.xml
           token: ${{ secrets.CODECOV_TOKEN }}
           report_type: test_results
-
-      - name: Lint
-        working-directory: pe-bune
-        run: ./scripts/golangci-lint-shim.sh run
