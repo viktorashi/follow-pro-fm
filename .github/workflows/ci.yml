@@ -25,6 +25,5 @@ jobs:
         run: go tool cover -func=coverage.out
 
       - name: Lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          working-directory: pe-bune
+        working-directory: pe-bune
+        run: ./scripts/golangci-lint-shim.sh run
