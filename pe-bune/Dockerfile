@@ -9,7 +9,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=1 go build -o /pro-fm-poller ./cmd/pro-fm-poller
+RUN CGO_ENABLED=1 go build -ldflags "-w -s" -o /pro-fm-poller ./cmd/pro-fm-poller
 
 # ---- Stage 2: Runtime ----
 FROM alpine:3.20
