@@ -17,13 +17,17 @@ jobs:
           go-version-file: 'pe-bune/go.mod'
           cache-dependency-path: 'pe-bune/go.sum'
 
-      - name: Run tests
+      - name: Test & coverage
         working-directory: pe-bune
-        run: go test -coverprofile=coverage.out ./pkg/...
+        run: |
+          go test -coverprofile=coverage.out ./pkg/...
+          go tool cover -func=coverage.out
 
-      - name: Print coverage
-        working-directory: pe-bune
-        run: go tool cover -func=coverage.out
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: pe-bune/coverage.out
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Lint
         working-directory: pe-bune
