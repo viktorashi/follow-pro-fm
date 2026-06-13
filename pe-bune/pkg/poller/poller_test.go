@@ -108,6 +108,15 @@ func TestPoller_getNowPlaying(t *testing.T) {
 			wantErr:    false,
 		},
 		{
+			name: "Clean up year edge case 2",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"BTS","playerExtendedSongSubtitle":"2026 - 2.0"}}}`))
+			},
+			wantArtist: "BTS",
+			wantTitle:  "2.0",
+			wantErr:    false,
+		},
+		{
 			name: "Clean up string containing dash but not year",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"Artist","playerExtendedSongSubtitle":"Word - Song Title"}}}`))
