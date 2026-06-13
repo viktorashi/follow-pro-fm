@@ -17,11 +17,15 @@ jobs:
           go-version-file: 'pe-bune/go.mod'
           cache-dependency-path: 'pe-bune/go.sum'
 
+      - name: Install gotestsum
+        run: |
+          mkdir -p bin
+          curl -sSL https://github.com/gotestyourself/gotestsum/releases/download/v1.13.0/gotestsum_1.13.0_linux_amd64.tar.gz | tar -xz -C bin
+
       - name: Test & coverage
         working-directory: pe-bune
         run: |
-          go install gotest.tools/gotestsum@latest
-          gotestsum --junitfile junit.xml -- -coverprofile=coverage.out ./pkg/...
+          ../bin/gotestsum --junitfile junit.xml -- -coverprofile=coverage.out ./pkg/...
           go tool cover -func=coverage.out
 
       - name: Upload coverage to Codecov
