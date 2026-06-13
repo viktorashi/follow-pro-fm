@@ -83,7 +83,7 @@ func TestPoller_getNowPlaying(t *testing.T) {
 		{
 			name: "Valid Response",
 			handler: func(w http.ResponseWriter, r *http.Request) {
-				_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"BTS","playerExtendedSongSubtitle":"Dynamite"}}}`))
+				_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"BTS","playerExtendedSongSubtitle":"2026 - Dynamite"}}}`))
 			},
 			wantArtist: "BTS",
 			wantTitle:  "Dynamite",
@@ -114,6 +114,24 @@ func TestPoller_getNowPlaying(t *testing.T) {
 			},
 			wantArtist: "BTS",
 			wantTitle:  "2.0",
+			wantErr:    false,
+		},
+		{
+			name: "Cu apostreoafe si chestii",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"Queen","playerExtendedSongSubtitle":"1985 - '39"}}}`))
+			},
+			wantArtist: "Queen",
+			wantTitle:  "'39",
+			wantErr:    false,
+		},
+		{
+			name: "Cu double quotes",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"David Bowie","playerExtendedSongSubtitle":"1977 - \"Heroes\""}}}`))
+			},
+			wantArtist: "David Bowie",
+			wantTitle:  "\"Heroes\"",
 			wantErr:    false,
 		},
 		{
