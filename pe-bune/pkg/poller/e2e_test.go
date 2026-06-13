@@ -14,7 +14,7 @@ import (
 func TestPoller_E2E(t *testing.T) {
 	// 1. Initialize real WhatsApp client (will prompt for QR if not paired)
 	t.Log("Initializing real WhatsApp client...")
-	client, err := InitWhatsApp("../../tests/e2e.sqlite")
+	client, err := InitWhatsApp("../../tests/e2e.sqlite", nil)
 	if err != nil {
 		t.Fatalf("Failed to initialize WhatsApp: %v", err)
 	}
@@ -37,12 +37,15 @@ func TestPoller_E2E(t *testing.T) {
 
 	// Create poller with real WhatsApp send function
 	poller := &Poller{
-		ApiURL:       server.URL,
+		APIURL:       server.URL,
 		PollInterval: 1 * time.Millisecond,
 		ActiveCampaigns: []Campaign{
 			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
 		},
 		TargetPhone: targetPhone,
+		StateMgr:    NewStateManager(),
+		Alerter:     NewMultiAlerter(),
+		AudiosDir:   "../../audios",
 		SendVoiceNote: func(phone string, audioPath string) error {
 			t.Logf("🚀 Triggering real E2E voice note send to %s...", phone)
 			return SendVoiceNote(client, phone, "../../"+audioPath)

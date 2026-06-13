@@ -74,7 +74,7 @@ func (m *DBManager) GetAllTrustedEmails(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var emails []string
 	for rows.Next() {

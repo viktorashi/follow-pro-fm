@@ -101,7 +101,7 @@ func (a *AuthManager) VerifyMagicLink(ctx context.Context, token string) (string
 	}
 
 	// Delete token so it can only be used once
-	a.db.db.ExecContext(ctx, "DELETE FROM auth_tokens WHERE token = ?", token)
+	_, _ = a.db.db.ExecContext(ctx, "DELETE FROM auth_tokens WHERE token = ?", token)
 
 	if time.Now().After(expiresAt) {
 		return "", fmt.Errorf("token expired")

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 )
@@ -278,6 +279,8 @@ func TestPoller_checkSong(t *testing.T) {
 			defer server.Close()
 
 			voiceCalls := 0
+			audiosDir := t.TempDir()
+			_ = os.WriteFile(audiosDir+"/test.ogg", []byte("fake"), 0644)
 			poller := &Poller{
 				APIURL:       server.URL,
 				PollInterval: 1 * time.Millisecond,
@@ -285,6 +288,9 @@ func TestPoller_checkSong(t *testing.T) {
 					{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
 				},
 				TargetPhone: "+40762631673",
+				StateMgr:    NewStateManager(),
+				Alerter:     NewMultiAlerter(),
+				AudiosDir:   audiosDir,
 				SendVoiceNote: func(phone string, audioPath string) error {
 					voiceCalls++
 					if tt.simulateVoiceError {
@@ -323,6 +329,9 @@ func TestPoller_checkSong_DailyLimit(t *testing.T) {
 		matchesToday: 6,
 		lastCheckDay: activeTime.YearDay(), // Prevent matchesToday from being reset
 		TargetPhone:  "+40762631673",
+		StateMgr:     NewStateManager(),
+		Alerter:      NewMultiAlerter(),
+		AudiosDir:    t.TempDir(),
 		SendVoiceNote: func(phone string, audioPath string) error {
 			voiceCalls++
 			return nil

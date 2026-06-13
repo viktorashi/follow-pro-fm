@@ -15,12 +15,12 @@ type SSEEvent struct {
 func (e *SSEEvent) Marshal() []byte {
 	var buf bytes.Buffer
 	if e.Event != "" {
-		buf.WriteString(fmt.Sprintf("event: %s\n", e.Event))
+		fmt.Fprintf(&buf, "event: %s\n", e.Event)
 	}
 	// HTMX SSE expects data lines
 	lines := bytes.Split(e.Data, []byte("\n"))
 	for _, line := range lines {
-		buf.WriteString(fmt.Sprintf("data: %s\n", line))
+		fmt.Fprintf(&buf, "data: %s\n", line)
 	}
 	buf.WriteString("\n")
 	return buf.Bytes()

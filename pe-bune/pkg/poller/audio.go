@@ -6,12 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
 
 // InitAudioPool ensures the used directory exists.
 func InitAudioPool(audiosDir string) error {

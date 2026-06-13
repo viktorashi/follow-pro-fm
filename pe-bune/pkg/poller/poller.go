@@ -132,7 +132,7 @@ func (p *Poller) getNowPlaying() (SongInfo, error) {
 }
 
 func (p *Poller) Start() {
-	p.Alerter.AlertInfo("ProFM Jaguare Poller started! Fetching Now Playing...")
+	_ = p.Alerter.AlertInfo("ProFM Jaguare Poller started! Fetching Now Playing...")
 	fmt.Println("Fetching Now Playing from Pro FM...")
 	fmt.Println(strings.Repeat("-", 40))
 
@@ -180,7 +180,7 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 						p.matchesToday++
 						msg := fmt.Sprintf("🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/6 for today)", song.Artist, p.matchesToday)
 						fmt.Println("   " + msg)
-						p.Alerter.AlertInfo(msg)
+						_ = p.Alerter.AlertInfo(msg)
 
 						p.StateMgr.Update(func(s *AppState) {
 							s.Status = StatusCampaignTriggered
@@ -192,7 +192,7 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 								s.Status = StatusAudioExhausted
 								s.LastError = "No unused audios available!"
 							})
-							p.Alerter.AlertCritical("AUDIO POOL EXHAUSTED! Cannot send voice note for " + song.Artist)
+							_ = p.Alerter.AlertCritical("AUDIO POOL EXHAUSTED! Cannot send voice note for " + song.Artist)
 							break
 						}
 
@@ -212,12 +212,12 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 						} else {
 							// Success!
 							_ = MarkAudioUsed(audioFile)
-							p.Alerter.AlertSuccess("Voice note sent successfully for " + song.Artist)
+							_ = p.Alerter.AlertSuccess("Voice note sent successfully for " + song.Artist)
+							unused, used := GetAudioStats(p.AudiosDir)
 							p.StateMgr.Update(func(s *AppState) {
 								s.Status = StatusPolling
 								s.LastError = ""
 								s.LastVoiceNoteSentAt = time.Now()
-								unused, used := GetAudioStats(p.AudiosDir)
 								s.UnusedAudios = unused
 								s.UsedAudios = used
 							})
@@ -236,9 +236,9 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 		})
 	}
 
-	// Always update audio stats on each check to keep UI fresh just in case
+	// Always update audio stats on each check to keep UI fresh
+	unused, used := GetAudioStats(p.AudiosDir)
 	p.StateMgr.Update(func(s *AppState) {
-		unused, used := GetAudioStats(p.AudiosDir)
 		s.UnusedAudios = unused
 		s.UsedAudios = used
 	})
