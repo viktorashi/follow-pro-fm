@@ -121,14 +121,14 @@ func TestPoller_getNowPlaying(t *testing.T) {
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 			},
-			wantErr:    true,
+			wantErr: true,
 		},
 		{
 			name: "Bad JSON",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				_, _ = w.Write([]byte(`{bad-json`))
 			},
-			wantErr:    true,
+			wantErr: true,
 		},
 		{
 			name: "Body Read Error (Unexpected EOF)",
@@ -137,7 +137,7 @@ func TestPoller_getNowPlaying(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte("short"))
 			},
-			wantErr:    true,
+			wantErr: true,
 		},
 	}
 
@@ -184,10 +184,10 @@ func TestPoller_checkSong(t *testing.T) {
 	activeTime := time.Date(2026, time.June, 17, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
-		name           string
-		mockArtist     string
-		mockTitle      string
-		currentSong    *SongInfo
+		name               string
+		mockArtist         string
+		mockTitle          string
+		currentSong        *SongInfo
 		wantMatches        int
 		wantVoiceCalls     int
 		simulateError      bool

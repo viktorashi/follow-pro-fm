@@ -78,7 +78,7 @@ func InitWhatsApp(dbPath string) (*whatsmeow.Client, error) {
 			return nil, fmt.Errorf("login timed out or failed")
 		}
 
-		// After pairing, whatsmeow drops the anonymous websocket and reconnects 
+		// After pairing, whatsmeow drops the anonymous websocket and reconnects
 		// as an authenticated user. We must wait for this to finish before uploading media.
 		for i := 0; i < 30; i++ {
 			if client.IsLoggedIn() && client.IsConnected() {

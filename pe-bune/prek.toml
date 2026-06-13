@@ -1,0 +1,21 @@
+default_install_hook_types = ["pre-commit", "pre-push"]
+orphan = true
+default_stages = ["pre-commit"]
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "go-lint"
+name = "go lint"
+entry = "./scripts/golangci-lint-shim.sh run"
+language = "system"
+files = "\\.go$"
+
+
+[[repos.hooks]]
+id = "go-lint"
+name = "go format"
+entry = "go fmt"
+language = "system"
+files = "\\.go$"
