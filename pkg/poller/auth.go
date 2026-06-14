@@ -10,28 +10,29 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v5"
-	"github.com/resend/resend-go/v3"
+	"github.com/sendgrid/sendgrid-go"
+	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
 
 type AuthManager struct {
-	db           *DBManager
-	resendClient *resend.Client
-	fromEmail    string
-	adminPass    string
-	baseURL      string
+	db             *DBManager
+	sendgridClient *sendgrid.Client
+	fromEmail      string
+	adminPass      string
+	baseURL        string
 }
 
-func NewAuthManager(db *DBManager, resendKey, fromEmail, adminPass, baseURL string) *AuthManager {
-	var rc *resend.Client
-	if resendKey != "" {
-		rc = resend.NewClient(resendKey)
+func NewAuthManager(db *DBManager, sendgridKey, fromEmail, adminPass, baseURL string) *AuthManager {
+	var sc *sendgrid.Client
+	if sendgridKey != "" {
+		sc = sendgrid.NewSendClient(sendgridKey)
 	}
 	return &AuthManager{
-		db:           db,
-		resendClient: rc,
-		fromEmail:    fromEmail,
-		adminPass:    adminPass,
-		baseURL:      baseURL,
+		db:             db,
+		sendgridClient: sc,
+		fromEmail:      fromEmail,
+		adminPass:      adminPass,
+		baseURL:        baseURL,
 	}
 }
 
@@ -61,8 +62,8 @@ func (a *AuthManager) GenerateAndSendMagicLink(ctx context.Context, email string
 		return fmt.Errorf("email not trusted")
 	}
 
-	if a.resendClient == nil {
-		return fmt.Errorf("resend not configured")
+	if a.sendgridClient == nil {
+		return fmt.Errorf("sendgrid not configured")
 	}
 
 	b := make([]byte, 32)
@@ -79,15 +80,22 @@ func (a *AuthManager) GenerateAndSendMagicLink(ctx context.Context, email string
 
 	magicURL := fmt.Sprintf("%s/auth/magic?token=%s", a.baseURL, token)
 
-	params := &resend.SendEmailRequest{
-		From:    a.fromEmail,
-		To:      []string{email},
-		Subject: "Your Magic Link - ProFM Poller",
-		Html:    fmt.Sprintf("<p>Click the link below to login instantly:</p><p><a href='%s'>Login</a></p>", magicURL),
+	from := mail.NewEmail("ProFM Poller", a.fromEmail)
+	subject := "Your Magic Link - ProFM Poller"
+	to := mail.NewEmail("", email)
+	htmlContent := fmt.Sprintf("<p>Click the link below to login instantly:</p><p><a href='%s'>Login</a></p>", magicURL)
+	message := mail.NewSingleEmail(from, subject, to, "", htmlContent)
+
+	response, err := a.sendgridClient.Send(message)
+	if err != nil {
+		return err
 	}
 
-	_, err = a.resendClient.Emails.Send(params)
-	return err
+	if response.StatusCode >= 400 {
+		return fmt.Errorf("sendgrid returned status %d: %s", response.StatusCode, response.Body)
+	}
+
+	return nil
 }
 
 // VerifyMagicLink consumes the token and returns the associated email.

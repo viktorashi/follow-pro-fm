@@ -46,9 +46,9 @@ func TestPoller_E2E(t *testing.T) {
 	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
 	tgAlerter := NewTelegramAlerter(telegramToken, telegramChatID)
 
-	resendKey := os.Getenv("RESEND_API_KEY")
+	sendgridKey := os.Getenv("SENDGRID_API_KEY")
 	emailFrom := os.Getenv("EMAIL_FROM")
-	emAlerter := NewEmailAlerter(resendKey, emailFrom, filepath.Join(rootDir, "data/trusted-emails.txt"))
+	emAlerter := NewEmailAlerter(sendgridKey, emailFrom, filepath.Join(rootDir, "data/trusted-emails.txt"))
 
 	multiAlerter := NewMultiAlerter(tgAlerter, emAlerter)
 

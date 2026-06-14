@@ -8,7 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/resend/resend-go/v3"
+	"github.com/sendgrid/sendgrid-go"
+	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
 
 // Alerter defines the interface for all notification modules.
@@ -64,7 +65,10 @@ type TelegramAlerter struct {
 }
 
 func NewTelegramAlerter(token, chatID string) *TelegramAlerter {
-	return &TelegramAlerter{BotToken: token, ChatID: chatID}
+	return &TelegramAlerter{
+		BotToken: token,
+		ChatID:   chatID,
+	}
 }
 
 func (t *TelegramAlerter) send(prefix, msg string) error {
@@ -103,9 +107,9 @@ func (t *TelegramAlerter) AlertSuccess(msg string) error {
 	return t.send("✅ [SUCCESS]", msg)
 }
 
-// EmailAlerter sends notifications via Resend API.
+// EmailAlerter sends notifications via SendGrid API.
 type EmailAlerter struct {
-	Client      *resend.Client
+	Client      *sendgrid.Client
 	FromEmail   string
 	TargetsFile string // Path to file containing trusted emails
 }
@@ -115,7 +119,7 @@ func NewEmailAlerter(apiKey string, from string, targetsFile string) *EmailAlert
 		return &EmailAlerter{} // Disabled
 	}
 	return &EmailAlerter{
-		Client:      resend.NewClient(apiKey),
+		Client:      sendgrid.NewSendClient(apiKey),
 		FromEmail:   from,
 		TargetsFile: targetsFile,
 	}
@@ -140,15 +144,39 @@ func (e *EmailAlerter) send(prefix, msg string) error {
 		return nil // No one to email
 	}
 
-	params := &resend.SendEmailRequest{
-		From:    e.FromEmail,
-		To:      targets,
-		Subject: prefix + " ProFM Poller Alert",
-		Html:    fmt.Sprintf("<p>%s</p>", msg),
+	from := mail.NewEmail("ProFM Poller", e.FromEmail)
+	subject := prefix + " ProFM Poller Alert"
+	htmlContent := fmt.Sprintf("<p>%s</p>", msg)
+
+	// SendGrid uses personalizations for multiple BCC/To
+	m := mail.NewV3Mail()
+	m.SetFrom(from)
+	m.Subject = subject
+
+	p := mail.NewPersonalization()
+	for i, t := range targets {
+		to := mail.NewEmail("", t)
+		if i == 0 {
+			p.AddTos(to)
+		} else {
+			p.AddBCCs(to)
+		}
+	}
+	m.AddPersonalizations(p)
+
+	content := mail.NewContent("text/html", htmlContent)
+	m.AddContent(content)
+
+	response, err := e.Client.Send(m)
+	if err != nil {
+		return fmt.Errorf("sendgrid send error: %w", err)
 	}
 
-	_, err := e.Client.Emails.Send(params)
-	return err
+	if response.StatusCode >= 400 {
+		return fmt.Errorf("sendgrid returned status %d: %s", response.StatusCode, response.Body)
+	}
+
+	return nil
 }
 
 func (e *EmailAlerter) AlertCritical(msg string) error {
