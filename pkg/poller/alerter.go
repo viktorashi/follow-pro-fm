@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/resend/resend-go/v3"
 )
@@ -103,30 +105,44 @@ func (t *TelegramAlerter) AlertSuccess(msg string) error {
 
 // EmailAlerter sends notifications via Resend API.
 type EmailAlerter struct {
-	Client     *resend.Client
-	FromEmail  string
-	TargetDirs []string // List of trusted emails to alert
+	Client      *resend.Client
+	FromEmail   string
+	TargetsFile string // Path to file containing trusted emails
 }
 
-func NewEmailAlerter(apiKey string, from string, targets []string) *EmailAlerter {
+func NewEmailAlerter(apiKey string, from string, targetsFile string) *EmailAlerter {
 	if apiKey == "" {
 		return &EmailAlerter{} // Disabled
 	}
 	return &EmailAlerter{
-		Client:     resend.NewClient(apiKey),
-		FromEmail:  from,
-		TargetDirs: targets,
+		Client:      resend.NewClient(apiKey),
+		FromEmail:   from,
+		TargetsFile: targetsFile,
 	}
 }
 
 func (e *EmailAlerter) send(prefix, msg string) error {
-	if e.Client == nil || len(e.TargetDirs) == 0 {
+	if e.Client == nil || e.TargetsFile == "" {
 		return nil
+	}
+
+	var targets []string
+	if data, err := os.ReadFile(e.TargetsFile); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			email := strings.TrimSpace(line)
+			if email != "" {
+				targets = append(targets, email)
+			}
+		}
+	}
+
+	if len(targets) == 0 {
+		return nil // No one to email
 	}
 
 	params := &resend.SendEmailRequest{
 		From:    e.FromEmail,
-		To:      e.TargetDirs,
+		To:      targets,
 		Subject: prefix + " ProFM Poller Alert",
 		Html:    fmt.Sprintf("<p>%s</p>", msg),
 	}

@@ -21,7 +21,7 @@ func TestTelegramAlerter(t *testing.T) {
 
 func TestEmailAlerter(t *testing.T) {
 	// With empty api key, it should just return nil
-	alerter := NewEmailAlerter("", "from@example.com", []string{"to@example.com"})
+	alerter := NewEmailAlerter("", "from@example.com", "")
 
 	if err := alerter.AlertInfo("test info"); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -36,7 +36,7 @@ func TestEmailAlerter(t *testing.T) {
 
 func TestMultiAlerter(t *testing.T) {
 	tg := NewTelegramAlerter("", "")
-	em := NewEmailAlerter("", "", nil)
+	em := NewEmailAlerter("", "", "")
 
 	multi := NewMultiAlerter(tg, em)
 

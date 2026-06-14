@@ -48,18 +48,7 @@ func TestPoller_E2E(t *testing.T) {
 
 	resendKey := os.Getenv("RESEND_API_KEY")
 	emailFrom := os.Getenv("EMAIL_FROM")
-	var emailTargets []string
-
-	// Read trusted emails from data/trusted-emails.txt
-	if emailsData, err := os.ReadFile(filepath.Join(rootDir, "data/trusted-emails.txt")); err == nil {
-		for _, line := range strings.Split(string(emailsData), "\n") {
-			email := strings.TrimSpace(line)
-			if email != "" {
-				emailTargets = append(emailTargets, email)
-			}
-		}
-	}
-	emAlerter := NewEmailAlerter(resendKey, emailFrom, emailTargets)
+	emAlerter := NewEmailAlerter(resendKey, emailFrom, filepath.Join(rootDir, "data/trusted-emails.txt"))
 
 	multiAlerter := NewMultiAlerter(tgAlerter, emAlerter)
 
