@@ -47,8 +47,9 @@ deploy:
     @echo "Tests passed. Deploying to Fly.io..."
     flyctl deploy --remote-only
 
-# Push local WhatsApp session to Fly volume (one-time after pairing)
-push-session:
+# Push local WhatsApp session and audios to Fly volume (one-time after pairing)
+push-files:
     @echo "Uploading tests/e2e.sqlite to Fly persistent volume..."
     flyctl ssh sftp shell <<< "put tests/e2e.sqlite /data/wapp.sqlite"
+    flyctl ssh sftp shell <<< "put audios /data/audios"
     @echo "✅ Session uploaded. Restart with: flyctl apps restart"

@@ -9,6 +9,7 @@ primary_region = 'otp'  # Bucharest (OTP) - closest to ProFM's servers
 [env]
   TZ = 'Europe/Bucharest'
   WAPP_DB_PATH = '/data/wapp.sqlite'
+  AUDIOS_DIR = '/data/audios'
 
 # Persistent volume for WhatsApp session database
 [mounts]
