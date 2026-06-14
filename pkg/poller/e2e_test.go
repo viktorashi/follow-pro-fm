@@ -36,6 +36,11 @@ func TestPoller_E2E(t *testing.T) {
 	}
 	defer client.Disconnect()
 
+	// Initialize Audio Pool (creates the 'used' folder if it doesn't exist)
+	if err := InitAudioPool(audiosDir); err != nil {
+		t.Fatalf("Failed to initialize audio pool: %v", err)
+	}
+
 	// 2. Setup Alerters from .env
 	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
