@@ -7,14 +7,22 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
 
 func TestPoller_E2E(t *testing.T) {
+	// Dynamically compute the project root directory relative to this test file.
+	_, filename, _, _ := runtime.Caller(0)
+	rootDir := filepath.Join(filepath.Dir(filename), "../..")
+	dbPath := filepath.Join(rootDir, "data/wapp.sqlite")
+	audiosDir := filepath.Join(rootDir, "data/audios")
+
 	// 1. Initialize real WhatsApp client (will prompt for QR if not paired)
 	t.Log("Initializing real WhatsApp client...")
-	client, err := InitWhatsApp("../../tests/e2e.sqlite", nil)
+	client, err := InitWhatsApp(dbPath, nil)
 	if err != nil {
 		t.Fatalf("Failed to initialize WhatsApp: %v", err)
 	}
@@ -45,10 +53,10 @@ func TestPoller_E2E(t *testing.T) {
 		TargetPhone: targetPhone,
 		StateMgr:    NewStateManager(),
 		Alerter:     NewMultiAlerter(),
-		AudiosDir:   "../../data/audios",
+		AudiosDir:   audiosDir,
 		SendVoiceNote: func(phone string, audioPath string) error {
 			t.Logf("🚀 Triggering real E2E voice note send to %s...", phone)
-			return SendVoiceNote(client, phone, "../../"+audioPath)
+			return SendVoiceNote(client, phone, audioPath)
 		},
 	}
 
