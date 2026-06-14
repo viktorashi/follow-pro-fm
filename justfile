@@ -33,7 +33,7 @@ test-cover-e2e-nowapp:
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
 
-test-cover-e2e:
+test-cover-e2e-all:
     go test -v -coverprofile=coverage.out -tags=e2e ./pkg/...
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
