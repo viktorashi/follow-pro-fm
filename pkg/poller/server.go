@@ -31,7 +31,8 @@ func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaste
 	logger := slog.New(slog.NewJSONHandler(logWriter, nil))
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogValuesFunc: func(c *echo.Context, v middleware.RequestLoggerValues) error {
-			logger.Info("request",
+			logger.Info(
+				"request",
 				slog.String("URI", v.URI),
 				slog.Int("status", v.Status),
 			)
