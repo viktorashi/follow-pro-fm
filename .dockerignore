@@ -7,3 +7,7 @@ pro-fm-poller
 .DS_Store
 .git
 .github
+audios/
+data/
+.gemini/
+storim-da-brain/

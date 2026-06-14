@@ -43,77 +43,103 @@ func InitWhatsApp(dbPath string, stateMgr *StateManager) (*whatsmeow.Client, err
 	clientLog := waLog.Stdout("Client", "WARN", true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 
-	if client.Store.ID == nil {
-		// No session exists, perform login
-		qrChan, _ := client.GetQRChannel(context.Background())
-		err = client.Connect()
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect for pairing: %w", err)
-		}
-
-		fmt.Println("\n👉 Please scan the QR code below using your WhatsApp Business/personal app (Settings -> Linked Devices -> Link a Device):")
-		paired := false
-		for evt := range qrChan {
-			if evt.Event == "code" {
-				if stateMgr != nil {
-					png, _ := qrcode.Encode(evt.Code, qrcode.Medium, 256)
-					b64 := base64.StdEncoding.EncodeToString(png)
-					stateMgr.Update(func(s *AppState) {
-						s.Status = StatusPairingRequired
-						s.QRCodeData = "data:image/png;base64," + b64
-					})
-				}
-				// Clear screen and reset cursor to override previous QR code
-				fmt.Print("\033[H\033[2J")
-				fmt.Println("\n👉 Please scan the QR code below using your WhatsApp Business/personal app (Settings -> Linked Devices -> Link a Device):")
-				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-			} else {
-				// Clear the QR code from the screen for other events
-				fmt.Print("\033[H\033[2J")
-				switch evt.Event {
-				case "success":
-					fmt.Println("✅ Successfully paired!")
-					paired = true
+	// Run connection logic asynchronously so we don't block the telemetry server
+	// and so we can retry on network failures.
+	go func() {
+		for {
+			if client.Store.ID == nil {
+				// No session exists, perform login
+				qrChan, _ := client.GetQRChannel(context.Background())
+				err = client.Connect()
+				if err != nil {
 					if stateMgr != nil {
 						stateMgr.Update(func(s *AppState) {
-							s.Status = StatusConnected
-							s.QRCodeData = ""
-							s.WhatsAppConnected = true
+							s.Status = StatusError
+							s.WhatsAppConnected = false
 						})
 					}
-				case "timeout":
-					fmt.Println("⏳ QR code scan timed out. Please run the program again.")
-				case "error":
-					fmt.Printf("❌ Pairing error: %v\n", evt.Error)
-				default:
-					fmt.Printf("ℹ️ Login event: %s\n", evt.Event)
+					fmt.Printf("❌ Failed to connect for pairing (retrying in 5s): %v\n", err)
+					time.Sleep(5 * time.Second)
+					continue
 				}
+
+				fmt.Println("\n👉 Please scan the QR code below using your WhatsApp Business/personal app (Settings -> Linked Devices -> Link a Device):")
+				paired := false
+				for evt := range qrChan {
+					if evt.Event == "code" {
+						if stateMgr != nil {
+							png, _ := qrcode.Encode(evt.Code, qrcode.Medium, 256)
+							b64 := base64.StdEncoding.EncodeToString(png)
+							stateMgr.Update(func(s *AppState) {
+								s.Status = StatusPairingRequired
+								s.QRCodeData = "data:image/png;base64," + b64
+							})
+						}
+						fmt.Print("\033[H\033[2J")
+						fmt.Println("\n👉 Please scan the QR code below using your WhatsApp Business/personal app (Settings -> Linked Devices -> Link a Device):")
+						qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
+					} else {
+						fmt.Print("\033[H\033[2J")
+						switch evt.Event {
+						case "success":
+							fmt.Println("✅ Successfully paired!")
+							paired = true
+							if stateMgr != nil {
+								stateMgr.Update(func(s *AppState) {
+									s.Status = StatusConnected
+									s.QRCodeData = ""
+									s.WhatsAppConnected = true
+								})
+							}
+						case "timeout":
+							fmt.Println("⏳ QR code scan timed out. Retrying connection...")
+						case "error":
+							fmt.Printf("❌ Pairing error: %v\n", evt.Error)
+						default:
+							fmt.Printf("ℹ️ Login event: %s\n", evt.Event)
+						}
+					}
+				}
+
+				if !paired {
+					fmt.Println("❌ Login timed out or failed, retrying...")
+					client.Disconnect()
+					time.Sleep(5 * time.Second)
+					continue
+				}
+
+				for i := 0; i < 30; i++ {
+					if client.IsLoggedIn() && client.IsConnected() {
+						break
+					}
+					time.Sleep(500 * time.Millisecond)
+				}
+				break // Successfully paired and connected
+			} else {
+				// Session exists, connect automatically
+				err := client.Connect()
+				if err != nil {
+					if stateMgr != nil {
+						stateMgr.Update(func(s *AppState) {
+							s.Status = StatusError
+							s.WhatsAppConnected = false
+						})
+					}
+					fmt.Printf("❌ Failed to connect (retrying in 5s): %v\n", err)
+					time.Sleep(5 * time.Second)
+					continue
+				}
+
+				if stateMgr != nil {
+					stateMgr.Update(func(s *AppState) {
+						s.Status = StatusConnected
+						s.WhatsAppConnected = true
+					})
+				}
+				break // Successfully connected
 			}
 		}
-
-		if !paired {
-			return nil, fmt.Errorf("login timed out or failed")
-		}
-
-		// After pairing, whatsmeow drops the anonymous websocket and reconnects
-		// as an authenticated user. We must wait for this to finish before uploading media.
-		for i := 0; i < 30; i++ {
-			if client.IsLoggedIn() && client.IsConnected() {
-				break
-			}
-			time.Sleep(500 * time.Millisecond)
-		}
-
-		if !client.IsLoggedIn() || !client.IsConnected() {
-			return nil, fmt.Errorf("login sync timed out")
-		}
-	} else {
-		// Session exists, connect automatically
-		err := client.Connect()
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect: %w", err)
-		}
-	}
+	}()
 
 	return client, nil
 }
