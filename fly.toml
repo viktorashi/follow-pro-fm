@@ -8,8 +8,6 @@ primary_region = 'fra'  # Frankfurt (FRA) - closest available to Romania
 
 [env]
 TZ = 'Europe/Bucharest'
-WAPP_DB_PATH = '/data/wapp.sqlite'
-AUDIOS_DIR = '/data/audios'
 
 # Persistent volume for everything the app needs
 [mounts]

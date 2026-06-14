@@ -1,11 +1,5 @@
 default:
     just -l
-build:
-    go build -o pro-fm-poller ./cmd/pro-fm-poller
-
-# Sincer ar cam trebui sa dai `just dev` sa porneasca tot composeu, ca asa simulezi  destul de bine
-single-binary-run: build
-    ./pro-fm-poller
 
 format:
     go fmt ./...
@@ -38,11 +32,8 @@ test-cover-e2e:
 
 # ---- Docker ----
 
-docker-build:
-    docker build -t pro-fm-poller .
-
-run: docker-build
-    docker run --rm -p 8080:8080 -v "$(pwd)/data:/data" pro-fm-poller
+run:
+    docker compose up --build
 
 # ---- Fly.io Deployment ----
 
