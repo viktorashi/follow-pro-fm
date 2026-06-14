@@ -12,6 +12,13 @@ format:
 alias fmt := format
 alias f := format
 
+setup-dev:
+    prek install -f
+    go mod tidy
+
+dev:
+    docker compose up --build
+
 test:
     go test ./pkg/...
 
