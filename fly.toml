@@ -2,7 +2,7 @@
 # See https://fly.io/docs/reference/configuration/
 
 app = 'pro-fm-poller'
-primary_region = 'otp' # Bucharest (OTP) - closest to ProFM's servers
+primary_region = 'fra'  # Frankfurt (FRA) - closest available to Romania
 
 [build]
 
