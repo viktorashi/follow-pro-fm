@@ -287,7 +287,7 @@ func TestPoller_checkSong(t *testing.T) {
 				ActiveCampaigns: []Campaign{
 					{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
 				},
-				TargetPhone: "+40762631673",
+				TargetPhone: "+40770661491",
 				StateMgr:    NewStateManager(),
 				Alerter:     NewMultiAlerter(),
 				AudiosDir:   audiosDir,
@@ -328,7 +328,7 @@ func TestPoller_checkSong_DailyLimit(t *testing.T) {
 		},
 		matchesToday: 6,
 		lastCheckDay: activeTime.YearDay(), // Prevent matchesToday from being reset
-		TargetPhone:  "+40762631673",
+		TargetPhone:  "+40770661491",
 		StateMgr:     NewStateManager(),
 		Alerter:      NewMultiAlerter(),
 		AudiosDir:    t.TempDir(),

@@ -16,6 +16,8 @@ import (
 	"github.com/joho/godotenv"
 )
 
+const TARGET_PHONE = "+40770661491"
+
 func TestPoller_E2E(t *testing.T) {
 	// Dynamically compute the project root directory relative to this test file.
 	_, filename, _, _ := runtime.Caller(0)
@@ -49,7 +51,7 @@ func TestPoller_E2E(t *testing.T) {
 	// target phone
 	targetPhone := os.Getenv("TARGET_PHONE")
 	if targetPhone == "" {
-		targetPhone = "+40762631673"
+		targetPhone = TARGET_PHONE
 	}
 
 	// A Wednesday at 12:00 PM (Active time for campaigns)
