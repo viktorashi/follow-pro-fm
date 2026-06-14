@@ -7,7 +7,7 @@ run: build
     ./pro-fm-poller
 
 format:
-    go fmt
+    go fmt ./...
 
 alias fmt := format
 alias f := format

@@ -8,7 +8,7 @@ repo = "local"
 [[repos.hooks]]
 id = "go-lint"
 name = "go lint"
-entry = "./scripts/golangci-lint-shim.sh run"
+entry = "just -f pe-bune/justfile -d pe-bune lint"
 language = "system"
 files = "\\.go$"
 pass_filenames = false
@@ -16,7 +16,7 @@ pass_filenames = false
 [[repos.hooks]]
 id = "go-format"
 name = "go format"
-entry = "go fmt ./..."
+entry = "just -f pe-bune/justfile -d pe-bune format"
 language = "system"
 files = "\\.go$"
 pass_filenames = false
@@ -24,7 +24,7 @@ pass_filenames = false
 [[repos.hooks]]
 id = "go-test"
 name = "go test"
-entry = "go test ./pkg/..."
+entry = "just -f pe-bune/justfile -d pe-bune test"
 language = "system"
 stages = ["pre-push"]
 pass_filenames = false
