@@ -26,7 +26,6 @@ func NewAuthManager(db *DBManager, sendgridKey, fromEmail, adminPass, baseURL st
 	var sc *sendgrid.Client
 	if sendgridKey != "" {
 		sc = sendgrid.NewSendClient(sendgridKey)
-		sc.Request, _ = sendgrid.SetDataResidency(sc.Request, "eu")
 	}
 	return &AuthManager{
 		db:             db,
