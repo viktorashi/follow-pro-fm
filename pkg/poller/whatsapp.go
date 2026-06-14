@@ -63,6 +63,7 @@ func InitWhatsApp(dbPath string, stateMgr *StateManager) (*whatsmeow.Client, err
 					continue
 				}
 
+				fmt.Print("\033[s") // Save cursor position
 				fmt.Println("\n👉 Please scan the QR code below using your WhatsApp Business/personal app (Settings -> Linked Devices -> Link a Device):")
 				paired := false
 				for evt := range qrChan {
@@ -75,11 +76,11 @@ func InitWhatsApp(dbPath string, stateMgr *StateManager) (*whatsmeow.Client, err
 								s.QRCodeData = "data:image/png;base64," + b64
 							})
 						}
-						fmt.Print("\033[H\033[2J")
+						fmt.Print("\033[u\033[J") // Restore cursor and clear to end of screen
 						fmt.Println("\n👉 Please scan the QR code below using your WhatsApp Business/personal app (Settings -> Linked Devices -> Link a Device):")
 						qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
 					} else {
-						fmt.Print("\033[H\033[2J")
+						fmt.Print("\033[u\033[J") // Restore cursor and clear to end of screen
 						switch evt.Event {
 						case "success":
 							fmt.Println("✅ Successfully paired!")
