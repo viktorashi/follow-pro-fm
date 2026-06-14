@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	_ "modernc.org/sqlite"
@@ -11,7 +13,8 @@ import (
 
 // DBManager handles application-specific data stored alongside whatsmeow's data.
 type DBManager struct {
-	db *sql.DB
+	db                *sql.DB
+	trustedEmailsPath string
 }
 
 func NewDBManager(dbPath string) (*DBManager, error) {
@@ -24,14 +27,14 @@ func NewDBManager(dbPath string) (*DBManager, error) {
 		return nil, err
 	}
 
-	return &DBManager{db: db}, nil
+	return &DBManager{
+		db:                db,
+		trustedEmailsPath: filepath.Join(filepath.Dir(dbPath), "trusted-emails.txt"),
+	}, nil
 }
 
 func initSchema(db *sql.DB) error {
 	queries := []string{
-		`CREATE TABLE IF NOT EXISTS trusted_emails (
-			email TEXT PRIMARY KEY
-		);`,
 		`CREATE TABLE IF NOT EXISTS auth_tokens (
 			token TEXT PRIMARY KEY,
 			email TEXT NOT NULL,
@@ -47,42 +50,29 @@ func initSchema(db *sql.DB) error {
 	return nil
 }
 
-func (m *DBManager) AddTrustedEmail(ctx context.Context, email string) error {
-	email = strings.ToLower(strings.TrimSpace(email))
-	_, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO trusted_emails (email) VALUES (?)", email)
-	return err
-}
-
-func (m *DBManager) RemoveTrustedEmail(ctx context.Context, email string) error {
-	email = strings.ToLower(strings.TrimSpace(email))
-	_, err := m.db.ExecContext(ctx, "DELETE FROM trusted_emails WHERE email = ?", email)
-	return err
-}
-
 func (m *DBManager) IsTrustedEmail(ctx context.Context, email string) (bool, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
-	var count int
-	err := m.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM trusted_emails WHERE email = ?", email).Scan(&count)
-	if err != nil {
-		return false, err
+	if email == "" {
+		return false, nil
 	}
-	return count > 0, nil
-}
 
-func (m *DBManager) GetAllTrustedEmails(ctx context.Context) ([]string, error) {
-	rows, err := m.db.QueryContext(ctx, "SELECT email FROM trusted_emails ORDER BY email ASC")
+	data, err := os.ReadFile(m.trustedEmailsPath)
 	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var emails []string
-	for rows.Next() {
-		var email string
-		if err := rows.Scan(&email); err != nil {
-			return nil, err
+		if os.IsNotExist(err) {
+			// Create the file empty if it doesn't exist
+			_ = os.WriteFile(m.trustedEmailsPath, []byte(""), 0644)
+			return false, nil
 		}
-		emails = append(emails, email)
+		return false, fmt.Errorf("failed to read trusted emails file: %w", err)
 	}
-	return emails, rows.Err()
+
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		line = strings.ToLower(strings.TrimSpace(line))
+		if line == email {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
