@@ -54,3 +54,6 @@ push-files:
     @echo "Uploading data folder to Fly persistent volume..."
     tar -cf - --exclude='wapp.sqlite' -C data . | flyctl ssh console -C 'mkdir -p /data && tar -xf - -C /data'
     @echo "✅ Files uploaded."
+
+fly-list-secrets:
+    flyctl secrets list
