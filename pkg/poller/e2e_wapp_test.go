@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
@@ -28,20 +27,7 @@ func TestPoller_E2E(t *testing.T) {
 	// Load local .env variables
 	_ = godotenv.Load(envPath)
 
-	// 1. Initialize real WhatsApp client (will prompt for QR if not paired)
-	t.Log("Initializing real WhatsApp client...")
-	client, err := InitWhatsApp(dbPath, nil)
-	if err != nil {
-		t.Fatalf("Failed to initialize WhatsApp: %v", err)
-	}
-	defer client.Disconnect()
-
-	// Initialize Audio Pool (creates the 'used' folder if it doesn't exist)
-	if err := InitAudioPool(audiosDir); err != nil {
-		t.Fatalf("Failed to initialize audio pool: %v", err)
-	}
-
-	// 2. Setup Alerters from .env
+	// 1. Setup Alerters from .env
 	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
 	tgAlerter := NewTelegramAlerter(telegramToken, telegramChatID)
@@ -51,6 +37,14 @@ func TestPoller_E2E(t *testing.T) {
 	emAlerter := NewEmailAlerter(sendgridKey, emailFrom, filepath.Join(rootDir, "data/trusted-emails.txt"))
 
 	multiAlerter := NewMultiAlerter(tgAlerter, emAlerter)
+
+	// 2. Initialize real WhatsApp client (will prompt for QR if not paired)
+	t.Log("Initializing real WhatsApp client...")
+	client, err := InitWhatsApp(dbPath, nil, multiAlerter, "")
+	if err != nil {
+		t.Fatalf("Failed to initialize WhatsApp: %v", err)
+	}
+	defer client.Disconnect()
 
 	// target phone
 	targetPhone := os.Getenv("TARGET_PHONE")
