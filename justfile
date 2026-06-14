@@ -4,6 +4,12 @@ default:
 format:
     go fmt ./...
 
+build:
+    CGO_ENABLED=1 go build -o ./pro-fm-poller ./cmd/pro-fm-poller/main.go 
+
+air-run:
+    air --build.cmd "CGO_ENABLED=1 go build -o ./pro-fm-poller ./cmd/pro-fm-poller/main.go" --build.entrypoint "./pro-fm-poller"
+
 alias fmt := format
 alias f := format
 
