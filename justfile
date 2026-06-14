@@ -11,20 +11,19 @@ setup-dev:
     prek install -f
     go mod tidy
 
-test:
-    go test ./pkg/...
-
-test-e2e-wapp:
-    go test -v -tags=e2e ./pkg/...
-
-test-e2e-nowapp:
-    go test -v -tags="e2e,nowapp" ./pkg/...
-
 lint:
     ./scripts/golangci-lint-shim.sh run
 
+test:
+    go test ./pkg/...
+
 test-cover:
     go test -coverprofile=coverage.out ./pkg/...
+    go tool cover -func=coverage.out
+    go tool cover -html=coverage.out
+
+test-cover-e2e-nowapp:
+    go test -v -coverprofile=coverage.out -tags="e2e,nowapp" ./pkg/...
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
 
