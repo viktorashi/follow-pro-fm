@@ -2,19 +2,19 @@
 # See https://fly.io/docs/reference/configuration/
 
 app = 'pro-fm-poller'
-primary_region = 'otp'  # Bucharest (OTP) - closest to ProFM's servers
+primary_region = 'otp' # Bucharest (OTP) - closest to ProFM's servers
 
 [build]
 
 [env]
-  TZ = 'Europe/Bucharest'
-  WAPP_DB_PATH = '/data/wapp.sqlite'
-  AUDIOS_DIR = '/data/audios'
+TZ = 'Europe/Bucharest'
+WAPP_DB_PATH = '/data/wapp.sqlite'
+AUDIOS_DIR = '/data/audios'
 
-# Persistent volume for WhatsApp session database
+# Persistent volume for everything the app needs
 [mounts]
-  source = 'wapp_data'
-  destination = '/data'
+source = 'pro_fm_data'
+destination = '/data'
 
 # This is a worker process (no HTTP), so no [[services]] block needed.
 # Fly will keep it running as a long-lived process.
