@@ -189,10 +189,17 @@ func SendVoiceNote(client *whatsmeow.Client, phone string, audioPath string) err
 		return fmt.Errorf("failed to read audio file at %s: %w", audioPath, err)
 	}
 
-	// Estimate duration based on Opus bitrate (approx 2.5KB/s)
-	estimatedSeconds := uint32(len(audioData) / 2500)
-	if estimatedSeconds < 3 {
-		estimatedSeconds = 3
+	// Get exact duration of the audio (falls back to heuristic if not supported)
+	duration, err := GetAudioDuration(audioPath)
+	if err != nil {
+		fmt.Printf("   ⚠️ Failed to get audio duration for %s: %v\n", audioPath, err)
+		// Fallback size heuristic if duration extraction totally failed
+		duration = time.Duration(len(audioData)/2500) * time.Second
+	}
+
+	estimatedSeconds := uint32(duration.Seconds())
+	if estimatedSeconds < 1 {
+		estimatedSeconds = 1
 	} else if estimatedSeconds > 30 {
 		estimatedSeconds = 30
 	}
