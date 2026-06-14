@@ -189,6 +189,23 @@ func SendVoiceNote(client *whatsmeow.Client, phone string, audioPath string) err
 		return fmt.Errorf("failed to read audio file at %s: %w", audioPath, err)
 	}
 
+	// Estimate duration based on Opus bitrate (approx 2.5KB/s)
+	estimatedSeconds := uint32(len(audioData) / 2500)
+	if estimatedSeconds < 3 {
+		estimatedSeconds = 3
+	} else if estimatedSeconds > 30 {
+		estimatedSeconds = 30
+	}
+
+	// 1. Send "recording audio" state to make it look authentic
+	_ = client.SendChatPresence(context.Background(), targetJID, types.ChatPresenceComposing, types.ChatPresenceMediaAudio)
+
+	// 2. Sleep for the duration of the audio to simulate recording time
+	time.Sleep(time.Duration(estimatedSeconds) * time.Second)
+
+	// 3. Clear recording state (optional but good practice)
+	_ = client.SendChatPresence(context.Background(), targetJID, types.ChatPresencePaused, types.ChatPresenceMediaAudio)
+
 	// Upload to WhatsApp servers
 	uploaded, err := client.Upload(context.Background(), audioData, whatsmeow.MediaAudio)
 	if err != nil {
@@ -206,7 +223,7 @@ func SendVoiceNote(client *whatsmeow.Client, phone string, audioPath string) err
 			FileSHA256:    uploaded.FileSHA256,
 			FileLength:    proto.Uint64(uint64(len(audioData))),
 			PTT:           proto.Bool(true), // Makes it a native voice note
-			Seconds:       proto.Uint32(9),  // Approx duration for 1.ogg
+			Seconds:       proto.Uint32(estimatedSeconds),
 		},
 	}
 
