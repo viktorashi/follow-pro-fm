@@ -7,10 +7,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 func TestPoller_E2E(t *testing.T) {
@@ -19,6 +23,10 @@ func TestPoller_E2E(t *testing.T) {
 	rootDir := filepath.Join(filepath.Dir(filename), "../..")
 	dbPath := filepath.Join(rootDir, "data/wapp.sqlite")
 	audiosDir := filepath.Join(rootDir, "data/audios")
+	envPath := filepath.Join(rootDir, ".env")
+
+	// Load local .env variables
+	_ = godotenv.Load(envPath)
 
 	// 1. Initialize real WhatsApp client (will prompt for QR if not paired)
 	t.Log("Initializing real WhatsApp client...")
@@ -28,8 +36,33 @@ func TestPoller_E2E(t *testing.T) {
 	}
 	defer client.Disconnect()
 
-	// bubu phfon
-	targetPhone := "+40762631673"
+	// 2. Setup Alerters from .env
+	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
+	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
+	tgAlerter := NewTelegramAlerter(telegramToken, telegramChatID)
+
+	resendKey := os.Getenv("RESEND_API_KEY")
+	emailFrom := os.Getenv("EMAIL_FROM")
+	var emailTargets []string
+
+	// Read trusted emails from data/trusted-emails.txt
+	if emailsData, err := os.ReadFile(filepath.Join(rootDir, "data/trusted-emails.txt")); err == nil {
+		for _, line := range strings.Split(string(emailsData), "\n") {
+			email := strings.TrimSpace(line)
+			if email != "" {
+				emailTargets = append(emailTargets, email)
+			}
+		}
+	}
+	emAlerter := NewEmailAlerter(resendKey, emailFrom, emailTargets)
+
+	multiAlerter := NewMultiAlerter(tgAlerter, emAlerter)
+
+	// target phone
+	targetPhone := os.Getenv("TARGET_PHONE")
+	if targetPhone == "" {
+		targetPhone = "+40762631673"
+	}
 
 	// A Wednesday at 12:00 PM (Active time for campaigns)
 	activeTime := time.Date(2026, time.June, 17, 12, 0, 0, 0, time.UTC)
@@ -52,7 +85,7 @@ func TestPoller_E2E(t *testing.T) {
 		},
 		TargetPhone: targetPhone,
 		StateMgr:    NewStateManager(),
-		Alerter:     NewMultiAlerter(),
+		Alerter:     multiAlerter,
 		AudiosDir:   audiosDir,
 		SendVoiceNote: func(phone string, audioPath string) error {
 			t.Logf("🚀 Triggering real E2E voice note send to %s...", phone)
