@@ -42,7 +42,7 @@ docker-build:
     docker build -t pro-fm-poller .
 
 run: docker-build
-    docker run --rm -v "$(pwd)/data:/data" pro-fm-poller
+    docker run --rm -p 8080:8080 -v "$(pwd)/data:/data" pro-fm-poller
 
 # ---- Fly.io Deployment ----
 
