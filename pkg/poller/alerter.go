@@ -118,8 +118,11 @@ func NewEmailAlerter(apiKey string, from string, targetsFile string) *EmailAlert
 	if apiKey == "" {
 		return &EmailAlerter{} // Disabled
 	}
+	client := sendgrid.NewSendClient(apiKey)
+	client.Request, _ = sendgrid.SetDataResidency(client.Request, "eu")
+
 	return &EmailAlerter{
-		Client:      sendgrid.NewSendClient(apiKey),
+		Client:      client,
 		FromEmail:   from,
 		TargetsFile: targetsFile,
 	}
