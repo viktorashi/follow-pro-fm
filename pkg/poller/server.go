@@ -1,6 +1,7 @@
 package poller
 
 import (
+	"encoding/base64"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,13 +17,18 @@ type TelemetryServer struct {
 	authMgr     *AuthManager
 	stateMgr    *StateManager
 	broadcaster *SSEBroadcaster
+	logWriter   *SSELogWriter
 }
 
-func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster) *TelemetryServer {
+func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster, logWriter *SSELogWriter) *TelemetryServer {
 	e := echo.New()
 
-	// Use modern slog
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	if logWriter == nil {
+		logWriter = NewSSELogWriter(os.Stdout, broadcaster) // fallback
+	}
+
+	// Use modern slog to the log writer
+	logger := slog.New(slog.NewJSONHandler(logWriter, nil))
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogValuesFunc: func(c *echo.Context, v middleware.RequestLoggerValues) error {
 			logger.Info("request",
@@ -39,6 +45,7 @@ func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaste
 		authMgr:     authMgr,
 		stateMgr:    stateMgr,
 		broadcaster: broadcaster,
+		logWriter:   logWriter,
 	}
 
 	ts.registerRoutes()
@@ -51,11 +58,14 @@ func (s *TelemetryServer) registerRoutes() {
 	s.echo.POST("/login", s.handleLoginSubmit)
 	s.echo.POST("/auth/magic/request", s.handleMagicLinkRequest)
 	s.echo.GET("/auth/magic", s.handleMagicLinkVerify)
+	s.echo.GET("/qr.png", s.handleQRImage) // New unauthenticated QR endpoint for email
 
 	// Protected routes
 	protected := s.echo.Group("", s.authMgr.RequireAuth())
 	protected.GET("/", s.handleDashboardView)
-	protected.GET("/sse", s.handleSSE)
+	protected.GET("/logs", s.handleLogsView)
+	protected.GET("/events/dashboard", s.handleDashboardStream)
+	protected.GET("/events/logs", s.handleLogsStream)
 }
 
 func (s *TelemetryServer) Start(addr string) error {
@@ -105,10 +115,63 @@ func (s *TelemetryServer) handleDashboardView(c *echo.Context) error {
 	return Render(c, http.StatusOK, Dashboard())
 }
 
-func (s *TelemetryServer) handleSSE(c *echo.Context) error {
+func (s *TelemetryServer) handleLogsView(c *echo.Context) error {
+	return Render(c, http.StatusOK, LogsPage())
+}
+
+func (s *TelemetryServer) handleQRImage(c *echo.Context) error {
+	state := s.stateMgr.Get()
+	b64 := state.QRCodeData
+	if b64 == "" || state.Status != StatusPairingRequired {
+		// Return 404 or a placeholder if no QR is needed
+		return c.String(http.StatusNotFound, "No QR Code active")
+	}
+
+	prefix := "data:image/png;base64,"
+	if len(b64) > len(prefix) {
+		b64 = b64[len(prefix):]
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Failed to decode QR code")
+	}
+
+	// Tell email clients not to cache this image
+	c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	c.Response().Header().Set("Pragma", "no-cache")
+	c.Response().Header().Set("Expires", "0")
+
+	return c.Blob(http.StatusOK, "image/png", decoded)
+}
+
+func (s *TelemetryServer) handleDashboardStream(c *echo.Context) error {
+	return s.streamEvents(c, false)
+}
+
+func (s *TelemetryServer) handleLogsStream(c *echo.Context) error {
+	return s.streamEvents(c, true)
+}
+
+func (s *TelemetryServer) streamEvents(c *echo.Context, isLogs bool) error {
 	c.Response().Header().Set(echo.HeaderContentType, "text/event-stream")
 	c.Response().Header().Set(echo.HeaderCacheControl, "no-cache")
 	c.Response().Header().Set(echo.HeaderConnection, "keep-alive")
+	if isLogs && s.logWriter != nil {
+		s.logWriter.AddSubscriber()
+		defer s.logWriter.RemoveSubscriber()
+
+		// Send recent history
+		for _, line := range s.logWriter.GetRecentLogs() {
+			ev := &SSEEvent{Event: "log", Data: line}
+			if _, err := c.Response().Write(ev.Marshal()); err != nil {
+				return nil
+			}
+		}
+		if f, ok := c.Response().(http.Flusher); ok {
+			f.Flush()
+		}
+	}
 
 	ch := s.broadcaster.Subscribe()
 	defer s.broadcaster.Unsubscribe(ch)
@@ -118,6 +181,10 @@ func (s *TelemetryServer) handleSSE(c *echo.Context) error {
 		case <-c.Request().Context().Done():
 			return nil
 		case ev := <-ch:
+			// If this client is not on the logs page, ignore "log" events to save bandwidth
+			if !isLogs && ev.Event == "log" {
+				continue
+			}
 			if _, err := c.Response().Write(ev.Marshal()); err != nil {
 				return nil
 			}

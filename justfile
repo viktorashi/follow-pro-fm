@@ -14,8 +14,11 @@ setup-dev:
 test:
     go test ./pkg/...
 
-test-e2e:
+test-e2e-wapp:
     go test -v -tags=e2e ./pkg/...
+
+test-e2e-nowapp:
+    go test -v -tags="e2e,nowapp" ./pkg/...
 
 lint:
     ./scripts/golangci-lint-shim.sh run
@@ -43,9 +46,11 @@ deploy:
     @echo "Tests passed. Deploying to Fly.io..."
     flyctl deploy --remote-only
 
-# Push local WhatsApp session and audios to Fly volume (one-time after pairing)
+fly-ssh:
+    flyctl ssh console
+
+# Push local data to Fly volume (explicitly EXCLUDING wapp.sqlite to prevent disconnecting real session)
 push-files:
-    @echo "Uploading data/wapp.sqlite to Fly persistent volume..."
-    flyctl ssh sftp shell <<< "put data/wapp.sqlite /data/wapp.sqlite"
-    flyctl ssh sftp shell <<< "put data/audios /data/audios"
-    @echo "✅ Session and audios uploaded. Restart with: flyctl apps restart"
+    @echo "Uploading data folder to Fly persistent volume..."
+    tar -cf - --exclude='wapp.sqlite' -C data . | flyctl ssh console -C 'mkdir -p /data && tar -xf - -C /data'
+    @echo "✅ Files uploaded."

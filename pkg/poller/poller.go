@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const MaxDailyMatches = 6
+
 type EPGData struct {
 	Data struct {
 		Epg struct {
@@ -172,15 +174,17 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 	if song != *currentSong {
 		fmt.Printf("[%s] %s - %s\n", now.Format("15:04:05"), song.Artist, song.Title)
 
-		// Only check campaigns if we haven't hit the daily limit of 6
-		if p.matchesToday < 6 {
+		// Only check campaigns if we haven't hit the daily limit of matches
+		if p.matchesToday < MaxDailyMatches {
 			for _, campaign := range p.ActiveCampaigns {
 				if campaign.IsActive(now) {
 					if strings.Contains(strings.ToLower(song.Artist), strings.ToLower(campaign.Artist)) {
 						p.matchesToday++
-						msg := fmt.Sprintf("🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/6 for today)", song.Artist, p.matchesToday)
+						msg := fmt.Sprintf("🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/%d for today)", song.Artist, p.matchesToday, MaxDailyMatches)
 						fmt.Println("   " + msg)
-						_ = p.Alerter.AlertInfo(msg)
+						if alertErr := p.Alerter.AlertInfo(msg); alertErr != nil {
+							log.Printf("   ⚠️ Alerter warning: %v\n", alertErr)
+						}
 
 						p.StateMgr.Update(func(s *AppState) {
 							s.Status = StatusCampaignTriggered
@@ -226,7 +230,7 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 				}
 			}
 		} else {
-			fmt.Println("   [INFO] Daily limit of 6 matches reached. Ignoring further campaign matches for today.")
+			fmt.Printf("   [INFO] Daily limit of %d matches reached. Ignoring further campaign matches for today.\n", MaxDailyMatches)
 		}
 
 		*currentSong = song

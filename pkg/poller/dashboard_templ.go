@@ -142,7 +142,7 @@ func Dashboard() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div class=\"container mx-auto p-4 md:p-8\" hx-ext=\"sse\" sse-connect=\"/sse\"><header class=\"flex justify-between items-center mb-8\"><h1 class=\"text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400\">🐆 ProFM Jaguare Telemetry</h1><a href=\"/logout\" class=\"px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm font-medium transition-colors\">Logout</a></header><div class=\"grid grid-cols-1 lg:grid-cols-3 gap-6\"><!-- Left Column: Status & Stats --><div class=\"space-y-6 lg:col-span-2\"><!-- State Machine Status --><div class=\"glass p-6 rounded-2xl\" id=\"status-card\" sse-swap=\"status\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div class=\"container mx-auto p-4 md:p-8\" hx-ext=\"sse\" sse-connect=\"/events/dashboard\"><header class=\"flex justify-between items-center mb-8\"><h1 class=\"text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400\">🐆 ProFM Jaguare Telemetry</h1><a href=\"/logout\" class=\"px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm font-medium transition-colors\">Logout</a></header><div class=\"grid grid-cols-1 lg:grid-cols-3 gap-6\"><!-- Left Column: Status & Stats --><div class=\"space-y-6 lg:col-span-2\"><!-- State Machine Status --><div class=\"glass p-6 rounded-2xl\" id=\"status-card\" sse-swap=\"status\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -442,7 +442,7 @@ func QRComponent(b64 string) templ.Component {
 			templ_7745c5c3_Var18 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<h2 class=\"text-sm uppercase tracking-wider text-slate-400 mb-4\">WhatsApp Pairing</h2><div class=\"flex-grow flex items-center justify-center bg-white rounded-xl p-4\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<h2 class=\"text-sm uppercase tracking-wider text-slate-400 mb-4\">WhatsApp Pairing</h2><div class=\"flex-grow flex flex-col items-center justify-center bg-white rounded-xl p-4 relative overflow-hidden\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -465,12 +465,59 @@ func QRComponent(b64 string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "\" class=\"max-w-full h-auto\" alt=\"WhatsApp QR Code\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "\" class=\"max-w-full h-auto z-10\" alt=\"WhatsApp QR Code\"><div class=\"w-full mt-4 h-2 bg-slate-200 rounded overflow-hidden z-10 relative\"><div id=\"qr-progress\" class=\"h-full bg-emerald-500 w-full origin-left transition-all duration-100 ease-linear\"></div></div><p class=\"text-xs text-slate-500 mt-2 z-10 font-medium\">Expires in <span id=\"qr-countdown\">40</span>s</p><script>\n\t\t\t\t(function() {\n\t\t\t\t\tlet timeLeft = 40;\n\t\t\t\t\tconst progress = document.getElementById('qr-progress');\n\t\t\t\t\tconst countdown = document.getElementById('qr-countdown');\n\t\t\t\t\t\n\t\t\t\t\tconst timer = setInterval(() => {\n\t\t\t\t\t\ttimeLeft -= 0.1;\n\t\t\t\t\t\tif (timeLeft <= 0) {\n\t\t\t\t\t\t\tclearInterval(timer);\n\t\t\t\t\t\t\tprogress.style.width = '0%';\n\t\t\t\t\t\t\tcountdown.innerText = '0';\n\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\tprogress.style.width = (timeLeft / 40 * 100) + '%';\n\t\t\t\t\t\t\tcountdown.innerText = Math.ceil(timeLeft);\n\t\t\t\t\t\t}\n\t\t\t\t\t}, 100);\n\t\t\t\t})();\n\t\t\t</script>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "</div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+func LogsPage() templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var20 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var20 == nil {
+			templ_7745c5c3_Var20 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Var21 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<div class=\"container mx-auto p-4 md:p-8 h-screen flex flex-col\" hx-ext=\"sse\" sse-connect=\"/events/logs\"><header class=\"flex justify-between items-center mb-4\"><div><h1 class=\"text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400\">🐆 Live Logs</h1><p class=\"text-slate-400 text-sm\">Streaming system output...</p></div><a href=\"/\" class=\"px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm font-medium transition-colors\">Back to Dashboard</a></header><!-- We use an auto-scrolling container for logs --><div class=\"flex-grow glass rounded-2xl overflow-hidden flex flex-col p-4 bg-black/50\"><pre id=\"log-container\" class=\"text-xs md:text-sm font-mono text-emerald-400 overflow-y-auto flex-grow break-words whitespace-pre-wrap\" sse-swap=\"log\" hx-swap=\"beforeend\"></pre></div><script>\n\t\t\t\tconst container = document.getElementById('log-container');\n\t\t\t\t// Simple observer to auto-scroll when new content arrives\n\t\t\t\tconst observer = new MutationObserver(() => {\n\t\t\t\t\tcontainer.scrollTop = container.scrollHeight;\n\t\t\t\t});\n\t\t\t\tobserver.observe(container, { childList: true });\n\t\t\t</script></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = Layout("Live Logs - ProFM Jaguare").Render(templ.WithChildren(ctx, templ_7745c5c3_Var21), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
