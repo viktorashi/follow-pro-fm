@@ -45,7 +45,7 @@ func TestPoller_E2E(t *testing.T) {
 		TargetPhone: targetPhone,
 		StateMgr:    NewStateManager(),
 		Alerter:     NewMultiAlerter(),
-		AudiosDir:   "../../audios",
+		AudiosDir:   "../../data/audios",
 		SendVoiceNote: func(phone string, audioPath string) error {
 			t.Logf("🚀 Triggering real E2E voice note send to %s...", phone)
 			return SendVoiceNote(client, phone, "../../"+audioPath)

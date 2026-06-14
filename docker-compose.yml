@@ -8,7 +8,5 @@ services:
       - WAPP_DB_PATH=/data/wapp.sqlite
       # Add any other required environment variables for local testing here
     volumes:
-      # Mount the local ./audios directory to /data/audios in the container
-      - ./audios:/data/audios
-      # Mount a local data directory for the SQLite database so it persists between restarts
+      # Mount the local data directory (containing audios/ and wapp.sqlite) to /data
       - ./data:/data

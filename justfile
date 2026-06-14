@@ -3,7 +3,8 @@ default:
 build:
     go build -o pro-fm-poller ./cmd/pro-fm-poller
 
-run: build
+# Sincer ar cam trebui sa dai `just dev` sa porneasca tot composeu, ca asa simulezi  destul de bine
+single-binary-run: build
     ./pro-fm-poller
 
 format:
@@ -15,9 +16,6 @@ alias f := format
 setup-dev:
     prek install -f
     go mod tidy
-
-dev:
-    docker compose up --build
 
 test:
     go test ./pkg/...
@@ -43,8 +41,8 @@ test-cover-e2e:
 docker-build:
     docker build -t pro-fm-poller .
 
-docker-run: docker-build
-    docker run --rm -v "$(pwd)/tests/e2e.sqlite:/data/wapp.sqlite" -e WAPP_DB_PATH=/data/wapp.sqlite pro-fm-poller
+run: docker-build
+    docker run --rm -v "$(pwd)/data:/data" pro-fm-poller
 
 # ---- Fly.io Deployment ----
 
@@ -56,7 +54,7 @@ deploy:
 
 # Push local WhatsApp session and audios to Fly volume (one-time after pairing)
 push-files:
-    @echo "Uploading tests/e2e.sqlite to Fly persistent volume..."
-    flyctl ssh sftp shell <<< "put tests/e2e.sqlite /data/wapp.sqlite"
-    flyctl ssh sftp shell <<< "put audios /data/audios"
-    @echo "✅ Session uploaded. Restart with: flyctl apps restart"
+    @echo "Uploading data/wapp.sqlite to Fly persistent volume..."
+    flyctl ssh sftp shell <<< "put data/wapp.sqlite /data/wapp.sqlite"
+    flyctl ssh sftp shell <<< "put data/audios /data/audios"
+    @echo "✅ Session and audios uploaded. Restart with: flyctl apps restart"
