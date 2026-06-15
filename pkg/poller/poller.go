@@ -176,6 +176,12 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 	if song != *currentSong {
 		fmt.Printf("[%s] %s - %s\n", now.Format("15:04:05"), song.Artist, song.Title)
 
+		// Abort immediately if the bot has been permanently killed
+		if p.StateMgr != nil && p.StateMgr.Get().KillSwitchActive {
+			fmt.Printf("   ⛔️ KILL SWITCH ACTIVE! Ignoring all campaign matches for '%s'.\n", song.Artist)
+			return
+		}
+
 		// Only check campaigns if we haven't hit the daily limit of matches
 		if p.matchesToday < MaxDailyMatches {
 			for _, campaign := range p.ActiveCampaigns {

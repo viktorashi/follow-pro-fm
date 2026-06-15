@@ -59,10 +59,25 @@ templ Login() {
 
 templ Dashboard() {
 	@Layout("Dashboard - ProFM Jaguare") {
+		<script>
+			function toggleKillSwitch(active) {
+				const pw = prompt(active ? "⚠️ DANGER! Enter Admin Password to permanently disable the bot:" : "Enter Admin Password to re-enable the bot:");
+				if (!pw) return;
+				fetch('/api/kill-switch', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ password: pw, active: active })
+				}).then(res => {
+					if (!res.ok) alert("Invalid password or server error");
+				});
+			}
+		</script>
 		<div class="container" hx-ext="sse" sse-connect="/events/dashboard">
 			<header class="header flex justify-between items-center">
 				<h1 class="title m-0">🐆 ProFM Jaguare Telemetry</h1>
 				<div class="flex gap-2">
+					<button onclick="toggleKillSwitch(true)" class="btn btn-danger btn-sm">🏆 I WON (KILL BOT)</button>
+					<button onclick="toggleKillSwitch(false)" class="btn btn-secondary btn-sm">UNDO KILL</button>
 					<a href="/logs" class="btn btn-secondary btn-sm">Logs</a>
 					<a href="/logout" class="btn btn-secondary btn-sm">Logout</a>
 				</div>
@@ -111,6 +126,10 @@ templ StatusComponent(state AppState) {
 			  <span class="status-dot"></span>
 			</span>
 			<span class="text-2xl font-semibold text-warning">{ string(state.Status) }</span>
+		} else if state.Status == StatusKilled {
+			<span class="text-3xl font-black text-warning tracking-widest text-center block w-full py-6">
+			  🎉 WINNER! BOT IS PERMANENTLY DISABLED
+			</span>
 		} else if state.Status == StatusError || state.Status == StatusAudioExhausted {
 			<span class="status-indicator status-danger">
 			  <span class="status-ping"></span>

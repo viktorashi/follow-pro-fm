@@ -56,6 +56,10 @@ func initSchema(db *sql.DB) error {
 			played_date TEXT NOT NULL,
 			UNIQUE(artist, title, played_date)
 		);`,
+		`CREATE TABLE IF NOT EXISTS app_settings (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		);`,
 	}
 
 	for _, q := range queries {
@@ -112,4 +116,27 @@ func (m *DBManager) RecordSongPlay(ctx context.Context, artist, title string, da
 	dateStr := date.Format("2006-01-02")
 	_, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO played_songs (artist, title, played_date) VALUES (?, ?, ?)", artist, title, dateStr)
 	return err
+}
+
+// SetKillSwitch updates the kill switch state in the database
+func (m *DBManager) SetKillSwitch(ctx context.Context, active bool) error {
+	valStr := "false"
+	if active {
+		valStr = "true"
+	}
+	_, err := m.db.ExecContext(ctx, "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('kill_switch', ?)", valStr)
+	return err
+}
+
+// IsKillSwitchActive reads the kill switch state from the database
+func (m *DBManager) IsKillSwitchActive(ctx context.Context) (bool, error) {
+	var valStr string
+	err := m.db.QueryRowContext(ctx, "SELECT value FROM app_settings WHERE key = 'kill_switch'").Scan(&valStr)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	return valStr == "true", nil
 }

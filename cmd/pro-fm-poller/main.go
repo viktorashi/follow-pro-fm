@@ -65,6 +65,16 @@ func main() {
 
 	// 4. Initialize State Manager and SSE Broadcaster
 	stateMgr := poller.NewStateManager()
+
+	// Load Kill Switch state
+	isKilled, err := dbMgr.IsKillSwitchActive(context.Background())
+	if err == nil && isKilled {
+		stateMgr.Update(func(s *poller.AppState) {
+			s.KillSwitchActive = true
+			s.Status = poller.StatusKilled
+		})
+	}
+
 	sseBroadcaster := poller.NewSSEBroadcaster()
 
 	// 4.5 Initialize SSE Logger
@@ -121,7 +131,7 @@ func main() {
 	}()
 
 	// 8. Start Web Dashboard (Telemetry Server)
-	telemetryServer := poller.NewTelemetryServer(authMgr, stateMgr, sseBroadcaster, logWriter)
+	telemetryServer := poller.NewTelemetryServer(authMgr, stateMgr, sseBroadcaster, logWriter, dbMgr)
 	go func() {
 		fmt.Println("🚀 Telemetry UI available at", baseURL)
 		if err := telemetryServer.Start("0.0.0.0:8080"); err != nil {

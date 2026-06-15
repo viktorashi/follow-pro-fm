@@ -21,9 +21,10 @@ type TelemetryServer struct {
 	stateMgr    *StateManager
 	broadcaster *SSEBroadcaster
 	logWriter   *SSELogWriter
+	dbMgr       *DBManager
 }
 
-func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster, logWriter *SSELogWriter) *TelemetryServer {
+func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster, logWriter *SSELogWriter, dbMgr *DBManager) *TelemetryServer {
 	e := echo.New()
 
 	if logWriter == nil {
@@ -50,6 +51,7 @@ func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaste
 		stateMgr:    stateMgr,
 		broadcaster: broadcaster,
 		logWriter:   logWriter,
+		dbMgr:       dbMgr,
 	}
 
 	ts.registerRoutes()
@@ -83,6 +85,7 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.GET("/logs", s.handleLogsView)
 	protected.GET("/events/dashboard", s.handleDashboardStream)
 	protected.GET("/events/logs", s.handleLogsStream)
+	protected.POST("/api/kill-switch", s.handleKillSwitch)
 }
 
 func (s *TelemetryServer) Start(addr string) error {
@@ -253,4 +256,37 @@ func Render(c *echo.Context, statusCode int, t templ.Component) error {
 	c.Response().WriteHeader(statusCode)
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextHTML)
 	return t.Render(c.Request().Context(), c.Response())
+}
+
+func (s *TelemetryServer) handleKillSwitch(c *echo.Context) error {
+	var payload struct {
+		Password string `json:"password"`
+		Active   bool   `json:"active"`
+	}
+	if err := c.Bind(&payload); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid payload"})
+	}
+
+	adminPass := os.Getenv("ADMIN_PASSWORD")
+	if payload.Password != adminPass {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid password"})
+	}
+
+	if s.dbMgr != nil {
+		err := s.dbMgr.SetKillSwitch(c.Request().Context(), payload.Active)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to save to database"})
+		}
+	}
+
+	s.stateMgr.Update(func(state *AppState) {
+		state.KillSwitchActive = payload.Active
+		if payload.Active {
+			state.Status = StatusKilled
+		} else {
+			state.Status = StatusPolling
+		}
+	})
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
 }

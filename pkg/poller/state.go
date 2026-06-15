@@ -16,11 +16,13 @@ const (
 	StatusSendingAudio      AppStatus = "Sending Audio"
 	StatusAudioExhausted    AppStatus = "Audio Exhausted (Critical)"
 	StatusError             AppStatus = "Error"
+	StatusKilled            AppStatus = "Killed (Won Prize)"
 )
 
 type AppState struct {
 	Status              AppStatus
 	WhatsAppConnected   bool
+	KillSwitchActive    bool
 	CurrentSong         string
 	UnusedAudios        int
 	UsedAudios          int
