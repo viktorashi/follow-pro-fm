@@ -111,6 +111,9 @@ fly-status:
     @echo "\n=== Persistent Volumes ==="
     flyctl volumes list
 
+fly-logs:
+    fly logs -a pro-fm-poller
+
 # List all Fly.io volumes for this application
 fly-list-volumes:
     flyctl volumes list
