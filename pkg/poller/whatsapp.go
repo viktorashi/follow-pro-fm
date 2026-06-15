@@ -183,6 +183,18 @@ func SendVoiceNote(client *whatsmeow.Client, phone string, audioPath string) err
 	normalized := normalizePhoneNumber(phone)
 	targetJID := types.NewJID(normalized, types.DefaultUserServer)
 
+	// Wait up to 15 seconds for the client to be fully connected and logged in
+	for i := 0; i < 30; i++ {
+		if client.IsConnected() && client.IsLoggedIn() {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	if !client.IsConnected() || !client.IsLoggedIn() {
+		return fmt.Errorf("whatsapp client is not fully connected or logged in after waiting")
+	}
+
 	// Read audio file
 	audioData, err := os.ReadFile(audioPath)
 	if err != nil {
@@ -214,9 +226,18 @@ func SendVoiceNote(client *whatsmeow.Client, phone string, audioPath string) err
 	_ = client.SendChatPresence(context.Background(), targetJID, types.ChatPresencePaused, types.ChatPresenceMediaAudio)
 
 	// Upload to WhatsApp servers
-	uploaded, err := client.Upload(context.Background(), audioData, whatsmeow.MediaAudio)
-	if err != nil {
-		return fmt.Errorf("failed to upload audio to WhatsApp: %w", err)
+	var uploaded whatsmeow.UploadResponse
+	var uploadErr error
+	for i := 0; i < 3; i++ {
+		uploaded, uploadErr = client.Upload(context.Background(), audioData, whatsmeow.MediaAudio)
+		if uploadErr == nil {
+			break
+		}
+		fmt.Printf("   ⚠️ Upload attempt %d failed: %v. Retrying in 2s...\n", i+1, uploadErr)
+		time.Sleep(2 * time.Second)
+	}
+	if uploadErr != nil {
+		return fmt.Errorf("failed to upload audio to WhatsApp after retries: %w", uploadErr)
 	}
 
 	// Construct AudioMessage with Push-To-Talk set to true (native voice note bubble)
@@ -235,9 +256,18 @@ func SendVoiceNote(client *whatsmeow.Client, phone string, audioPath string) err
 	}
 
 	// Send message
-	resp, err := client.SendMessage(context.Background(), targetJID, msg)
-	if err != nil {
-		return fmt.Errorf("failed to send message to %s: %w", targetJID, err)
+	var resp whatsmeow.SendResponse
+	var sendErr error
+	for i := 0; i < 3; i++ {
+		resp, sendErr = client.SendMessage(context.Background(), targetJID, msg)
+		if sendErr == nil {
+			break
+		}
+		fmt.Printf("   ⚠️ Send message attempt %d failed: %v. Retrying in 2s...\n", i+1, sendErr)
+		time.Sleep(2 * time.Second)
+	}
+	if sendErr != nil {
+		return fmt.Errorf("failed to send message to %s after retries: %w", targetJID, sendErr)
 	}
 
 	fmt.Printf("   ✅ Voice note sent! JID: %s, Message ID: %s, Timestamp: %s\n", targetJID, resp.ID, resp.Timestamp)
