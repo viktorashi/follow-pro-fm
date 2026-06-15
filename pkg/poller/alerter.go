@@ -71,13 +71,15 @@ type TelegramAlerter struct {
 	BotToken string
 	ChatID   string
 	Env      string
+	BaseURL  string
 }
 
-func NewTelegramAlerter(token, chatID, env string) *TelegramAlerter {
+func NewTelegramAlerter(token, chatID, env, baseURL string) *TelegramAlerter {
 	return &TelegramAlerter{
 		BotToken: token,
 		ChatID:   chatID,
 		Env:      env,
+		BaseURL:  baseURL,
 	}
 }
 
@@ -101,6 +103,10 @@ func (t *TelegramAlerter) send(prefix string, event AlertEvent) error {
 			label = "Click Here"
 		}
 		msg += fmt.Sprintf("\n\n<a href=\"%s\">%s</a>", event.ActionURL, label)
+	}
+
+	if t.BaseURL != "" && event.ActionURL != t.BaseURL {
+		msg += fmt.Sprintf("\n\n🌐 <a href=\"%s\">Live Dashboard</a>", t.BaseURL)
 	}
 
 	payload := map[string]string{
@@ -140,9 +146,10 @@ type EmailAlerter struct {
 	FromEmail   string
 	TargetsFile string // Path to file containing trusted emails
 	Env         string
+	BaseURL     string
 }
 
-func NewEmailAlerter(apiKey string, from string, targetsFile string, env string) *EmailAlerter {
+func NewEmailAlerter(apiKey string, from string, targetsFile string, env string, baseURL string) *EmailAlerter {
 	if apiKey == "" {
 		return &EmailAlerter{} // Disabled
 	}
@@ -153,6 +160,7 @@ func NewEmailAlerter(apiKey string, from string, targetsFile string, env string)
 		FromEmail:   from,
 		TargetsFile: targetsFile,
 		Env:         env,
+		BaseURL:     baseURL,
 	}
 }
 
@@ -208,6 +216,11 @@ func (e *EmailAlerter) send(prefix string, event AlertEvent) error {
 			label = "Click Here"
 		}
 		htmlContent += fmt.Sprintf("<br><br><a href=\"%s\" style=\"padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;\">%s</a>", event.ActionURL, label)
+	}
+
+	if e.BaseURL != "" && event.ActionURL != e.BaseURL {
+		plainTextContent += fmt.Sprintf("\n\nLive Dashboard: %s", e.BaseURL)
+		htmlContent += fmt.Sprintf("<br><br>🌐 <a href=\"%s\">Live Dashboard</a>", e.BaseURL)
 	}
 
 	m := mail.NewV3Mail()
