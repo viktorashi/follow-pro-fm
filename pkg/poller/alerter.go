@@ -148,10 +148,22 @@ func (e *EmailAlerter) send(prefix, msg string) error {
 	}
 
 	from := mail.NewEmail("ProFM Poller", e.FromEmail)
-	subject := prefix + " ProFM Poller Alert"
-	htmlContent := fmt.Sprintf("<p>%s</p>", strings.ReplaceAll(msg, "\n", "<br>"))
+	subject := prefix + " Notification"
 
-	// SendGrid uses personalizations for multiple BCC/To
+	// Create a plain text version of the HTML message
+	plainTextContent := strings.ReplaceAll(msg, "<br>", "\n")
+	for {
+		start := strings.Index(plainTextContent, "<")
+		if start == -1 {
+			break
+		}
+		end := strings.Index(plainTextContent[start:], ">")
+		if end == -1 {
+			break
+		}
+		plainTextContent = plainTextContent[:start] + plainTextContent[start+end+1:]
+	}
+
 	m := mail.NewV3Mail()
 	m.SetFrom(from)
 	m.Subject = subject
@@ -167,8 +179,8 @@ func (e *EmailAlerter) send(prefix, msg string) error {
 	}
 	m.AddPersonalizations(p)
 
-	content := mail.NewContent("text/html", htmlContent)
-	m.AddContent(content)
+	m.AddContent(mail.NewContent("text/plain", plainTextContent))
+	m.AddContent(mail.NewContent("text/html", msg))
 
 	response, err := e.Client.Send(m)
 	if err != nil {

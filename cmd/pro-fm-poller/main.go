@@ -82,26 +82,37 @@ func main() {
 	// 7. Start the SSE Broadcaster Bridge
 	go func() {
 		sub := stateMgr.Subscribe()
+		var lastState poller.AppState
 		for state := range sub {
 			// Broadcast Status
-			var statusBuf bytes.Buffer
-			_ = poller.StatusComponent(state).Render(context.Background(), &statusBuf)
-			sseBroadcaster.Broadcast("status", statusBuf.Bytes())
+			if state.Status != lastState.Status || state.LastError != lastState.LastError || state.WhatsAppConnected != lastState.WhatsAppConnected {
+				var statusBuf bytes.Buffer
+				_ = poller.StatusComponent(state).Render(context.Background(), &statusBuf)
+				sseBroadcaster.Broadcast("status", statusBuf.Bytes())
+			}
 
 			// Broadcast Song
-			var songBuf bytes.Buffer
-			_ = poller.SongComponent(state.CurrentSong).Render(context.Background(), &songBuf)
-			sseBroadcaster.Broadcast("song", songBuf.Bytes())
+			if state.CurrentSong != lastState.CurrentSong {
+				var songBuf bytes.Buffer
+				_ = poller.SongComponent(state.CurrentSong).Render(context.Background(), &songBuf)
+				sseBroadcaster.Broadcast("song", songBuf.Bytes())
+			}
 
 			// Broadcast Audio Stats
-			var audioBuf bytes.Buffer
-			_ = poller.AudioStatsComponent(state.UnusedAudios, state.UsedAudios).Render(context.Background(), &audioBuf)
-			sseBroadcaster.Broadcast("audio", audioBuf.Bytes())
+			if state.UnusedAudios != lastState.UnusedAudios || state.UsedAudios != lastState.UsedAudios {
+				var audioBuf bytes.Buffer
+				_ = poller.AudioStatsComponent(state.UnusedAudios, state.UsedAudios).Render(context.Background(), &audioBuf)
+				sseBroadcaster.Broadcast("audio", audioBuf.Bytes())
+			}
 
 			// Broadcast QR Code
-			var qrBuf bytes.Buffer
-			_ = poller.QRComponent(state.QRCodeData).Render(context.Background(), &qrBuf)
-			sseBroadcaster.Broadcast("qrcode", qrBuf.Bytes())
+			if state.QRCodeData != lastState.QRCodeData || state.Status != lastState.Status {
+				var qrBuf bytes.Buffer
+				_ = poller.QRComponent(state.QRCodeData).Render(context.Background(), &qrBuf)
+				sseBroadcaster.Broadcast("qrcode", qrBuf.Bytes())
+			}
+
+			lastState = state
 		}
 	}()
 
