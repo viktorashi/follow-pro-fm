@@ -10,5 +10,5 @@ urls=(
 )
 
 for url in "${urls[@]}"; do
-  open "$url"
+  explorer.exe "$url"
 done
