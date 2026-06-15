@@ -117,7 +117,7 @@ fly-status:
     flyctl volumes list
 
 fly-logs:
-    fly logs -a pro-fm-poller
+    fly logs 
 
 # List all Fly.io volumes for this application
 fly-list-volumes:
