@@ -45,13 +45,15 @@ run:
 
 # ---- Fly.io Deployment ----
 
-deploy:
-    @echo "Running tests first..."
-    go test -count=1 ./pkg/...
-    @echo "Tests passed. Deploying to Fly.io..."
-    flyctl deploy --remote-only
-    @echo "Deployment complete! Checking running machines..."
-    flyctl machine list
+# Mai bine da-i commit si push pe main, sincer avem acolo tot CI/CD-u
+# deploy:
+#     @echo "Running tests first..."
+#     go test -count=1 ./pkg/...
+#     @echo "Tests passed. Deploying to Fly.io..."
+#     flyctl deploy --remote-only
+#     @echo "Deployment complete! Checking running machines..."
+#     flyctl machine list
+#
 
 fly-ssh:
     flyctl ssh console
