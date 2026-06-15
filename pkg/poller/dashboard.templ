@@ -60,9 +60,12 @@ templ Login() {
 templ Dashboard() {
 	@Layout("Dashboard - ProFM Jaguare") {
 		<div class="container" hx-ext="sse" sse-connect="/events/dashboard">
-			<header class="header">
-				<h1 class="title">🐆 ProFM Jaguare Telemetry</h1>
-				<a href="/logout" class="btn btn-secondary btn-sm">Logout</a>
+			<header class="header flex justify-between items-center">
+				<h1 class="title m-0">🐆 ProFM Jaguare Telemetry</h1>
+				<div class="flex gap-2">
+					<a href="/logs" class="btn btn-secondary btn-sm">Logs</a>
+					<a href="/logout" class="btn btn-secondary btn-sm">Logout</a>
+				</div>
 			</header>
 
 			<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -55,7 +55,19 @@ func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaste
 
 func (s *TelemetryServer) registerRoutes() {
 	// Public routes
-	s.echo.Static("/static", "static")
+	// Find the static directory
+	staticDirs := []string{"static", "../static", "../../static"}
+	var staticPath string
+	for _, dir := range staticDirs {
+		if _, err := os.Stat(dir); err == nil {
+			staticPath = dir
+			break
+		}
+	}
+	if staticPath == "" {
+		staticPath = "static" // fallback
+	}
+	s.echo.Static("/static", staticPath)
 	s.echo.GET("/login", s.handleLoginView)
 	s.echo.POST("/login", s.handleLoginSubmit)
 	s.echo.POST("/auth/magic/request", s.handleMagicLinkRequest)
