@@ -147,8 +147,8 @@ func (p *Poller) Start() {
 		ActionLabel: "View Dashboard",
 		ActionURL:   p.BaseURL,
 	})
-	fmt.Println("Fetching Now Playing from Pro FM...")
-	fmt.Println(strings.Repeat("-", 40))
+	log.Println("Fetching Now Playing from Pro FM...")
+	log.Println(strings.Repeat("-", 40))
 
 	var currentSong SongInfo
 
@@ -184,11 +184,11 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 	}
 
 	if song != *currentSong {
-		fmt.Printf("[%s] %s - %s\n", now.Format("15:04:05"), song.Artist, song.Title)
+		log.Printf("[%s] %s - %s", now.Format("15:04:05"), song.Artist, song.Title)
 
 		// Abort immediately if the bot has been permanently killed
 		if p.StateMgr != nil && p.StateMgr.Get().KillSwitchActive {
-			fmt.Printf("   ⛔️ KILL SWITCH ACTIVE! Ignoring all campaign matches for '%s'.\n", song.Artist)
+			log.Printf("   ⛔️ KILL SWITCH ACTIVE! Ignoring all campaign matches for '%s'.", song.Artist)
 			return
 		}
 
@@ -204,13 +204,13 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 							if err != nil {
 								log.Printf("   ⚠️ DB Check Error: %v\n", err)
 							} else if played {
-								fmt.Printf("   [INFO] Song '%s - %s' already triggered a campaign recently. Skipping duplicate.\n", song.Artist, song.Title)
+								log.Printf("   [INFO] Song '%s - %s' already triggered a campaign recently. Skipping duplicate.", song.Artist, song.Title)
 								break // break out of campaign loop
 							}
 						}
 						p.matchesToday++
 						msg := fmt.Sprintf("🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/%d for today)", song.Artist, p.matchesToday, MaxDailyMatches)
-						fmt.Println("   " + msg)
+						log.Println("   " + msg)
 						if alertErr := p.Alerter.AlertInfo(AlertEvent{
 							Title:   "Campaign Alert",
 							Message: msg,
@@ -228,7 +228,7 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 								s.Status = StatusAudioExhausted
 								s.LastError = "No unused audios available!"
 							})
-							fmt.Printf("   ❌ NO UNUSED AUDIO FOUND FOR %s!\n", song.Artist)
+							log.Printf("   ❌ NO UNUSED AUDIO FOUND FOR %s!", song.Artist)
 							_ = p.Alerter.AlertCritical(AlertEvent{
 								Title:   "AUDIO POOL EXHAUSTED",
 								Message: "Cannot send voice note for " + song.Artist + "\nNo unused audio files found in " + p.AudiosDir,
@@ -241,7 +241,7 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 						})
 
 						// Trigger actual submission (WhatsApp Voice note)
-						fmt.Println("   Sending WhatsApp voice note using: " + audioFile)
+						log.Println("   Sending WhatsApp voice note using: " + audioFile)
 						err = p.SendVoiceNote(p.TargetPhone, audioFile)
 						if err != nil {
 							log.Printf("   ❌ Error sending voice note: %v\n", err)
@@ -255,7 +255,7 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 								_ = p.DBMgr.RecordSongPlay(context.Background(), song.Artist, song.Title, now)
 							}
 							_ = MarkAudioUsed(audioFile)
-							fmt.Println("   ✅ Voice note sent successfully!")
+							log.Println("   ✅ Voice note sent successfully!")
 							_ = p.Alerter.AlertSuccess(AlertEvent{
 								Title:   "Voice Note Sent",
 								Message: fmt.Sprintf("Artist: %s\nSong: %s\nAudio File: %s", song.Artist, song.Title, filepath.Base(audioFile)),
@@ -273,7 +273,7 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 				}
 			}
 		} else {
-			fmt.Printf("   [INFO] Daily limit of %d matches reached. Ignoring further campaign matches for today.\n", MaxDailyMatches)
+			log.Printf("   [INFO] Daily limit of %d matches reached. Ignoring further campaign matches for today.", MaxDailyMatches)
 		}
 
 		*currentSong = song
