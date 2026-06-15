@@ -131,6 +131,34 @@ func (m *DBManager) WasSongInLastNPlays(ctx context.Context, artist, title strin
 	return false, nil
 }
 
+type RadioLog struct {
+	ID             int
+	Artist         string
+	Title          string
+	PlayedDatetime string
+}
+
+func (m *DBManager) GetRadioLogs(ctx context.Context, limit int) ([]RadioLog, error) {
+	rows, err := m.db.QueryContext(ctx, "SELECT id, artist, title, played_datetime FROM radio_log ORDER BY id DESC LIMIT ?", limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var logs []RadioLog
+	for rows.Next() {
+		var l RadioLog
+		if err := rows.Scan(&l.ID, &l.Artist, &l.Title, &l.PlayedDatetime); err != nil {
+			return nil, err
+		}
+		logs = append(logs, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return logs, nil
+}
+
 // RecordSongPlay records that a song was played today.
 func (m *DBManager) RecordSongPlay(ctx context.Context, artist, title string, date time.Time) error {
 	dateStr := date.Format("2006-01-02 15:04")
