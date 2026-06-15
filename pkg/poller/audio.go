@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // InitAudioPool ensures the used directory exists.
@@ -79,6 +80,10 @@ func MarkAudioUsed(audioPath string) error {
 	if err := os.Rename(audioPath, newPath); err != nil {
 		return fmt.Errorf("failed to move audio to used folder: %w", err)
 	}
+
+	// Update the file's modification time so the user knows exactly when it was used
+	now := time.Now()
+	_ = os.Chtimes(newPath, now, now)
 
 	return nil
 }

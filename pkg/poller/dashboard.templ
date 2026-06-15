@@ -2,6 +2,7 @@ package poller
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -249,6 +250,62 @@ templ LogsPage() {
 				});
 				observer.observe(container, { childList: true });
 			</script>
+		</div>
+	}
+}
+
+templ DataViewer(files []FileInfo) {
+	@Layout("Data Viewer - ProFM Jaguare") {
+		<div class="container">
+			<header class="header flex justify-between items-center mb-6">
+				<h1 class="title m-0">📂 Data Viewer</h1>
+				<a href="/" class="btn btn-secondary btn-sm">Back to Dashboard</a>
+			</header>
+
+			<div class="glass p-6 overflow-x-auto">
+				<table class="w-full text-left border-collapse">
+					<thead>
+						<tr class="border-b border-white/10 text-sm tracking-widest text-white/50 uppercase">
+							<th class="p-3">File</th>
+							<th class="p-3">Size</th>
+							<th class="p-3">Modified</th>
+							<th class="p-3">Preview</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, f := range files {
+							if !f.IsDir {
+								<tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+									<td class="p-3 font-mono text-sm break-all">
+										<a href={ templ.URL("/raw-data/" + f.Path) } target="_blank" class="text-primary hover:underline">
+											{ f.Path }
+										</a>
+									</td>
+									<td class="p-3 text-sm text-white/70">
+										{ fmt.Sprintf("%d bytes", f.Size) }
+									</td>
+									<td class="p-3 text-sm text-white/70 whitespace-nowrap">
+										{ f.ModTime }
+									</td>
+									<td class="p-3">
+										if strings.HasSuffix(f.Name, ".ogg") || strings.HasSuffix(f.Name, ".mp3") || strings.HasSuffix(f.Name, ".wav") {
+											<audio controls preload="none" style="height: 32px; width: 250px;">
+												<source src={ "/raw-data/" + f.Path } type="audio/ogg" />
+												Your browser does not support the audio element.
+											</audio>
+										}
+									</td>
+								</tr>
+							}
+						}
+						if len(files) == 0 {
+							<tr>
+								<td colspan="4" class="p-6 text-center text-white/50">No files found.</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
 		</div>
 	}
 }

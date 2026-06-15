@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -22,9 +23,10 @@ type TelemetryServer struct {
 	broadcaster *SSEBroadcaster
 	logWriter   *SSELogWriter
 	dbMgr       *DBManager
+	dataDir     string
 }
 
-func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster, logWriter *SSELogWriter, dbMgr *DBManager) *TelemetryServer {
+func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster, logWriter *SSELogWriter, dbMgr *DBManager, dataDir string) *TelemetryServer {
 	e := echo.New()
 
 	if logWriter == nil {
@@ -52,6 +54,7 @@ func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaste
 		broadcaster: broadcaster,
 		logWriter:   logWriter,
 		dbMgr:       dbMgr,
+		dataDir:     dataDir,
 	}
 
 	ts.registerRoutes()
@@ -83,6 +86,8 @@ func (s *TelemetryServer) registerRoutes() {
 	protected := s.echo.Group("", s.authMgr.RequireAuth())
 	protected.GET("/", s.handleDashboardView)
 	protected.GET("/logs", s.handleLogsView)
+	protected.GET("/data", s.handleDataView)
+	protected.Static("/raw-data", s.dataDir)
 	protected.GET("/events/dashboard", s.handleDashboardStream)
 	protected.GET("/events/logs", s.handleLogsStream)
 	protected.POST("/api/kill-switch", s.handleKillSwitch)
@@ -257,7 +262,6 @@ func Render(c *echo.Context, statusCode int, t templ.Component) error {
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextHTML)
 	return t.Render(c.Request().Context(), c.Response())
 }
-
 func (s *TelemetryServer) handleKillSwitch(c *echo.Context) error {
 	var payload struct {
 		Password string `json:"password"`
@@ -289,4 +293,50 @@ func (s *TelemetryServer) handleKillSwitch(c *echo.Context) error {
 	})
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
+}
+
+type FileInfo struct {
+	Name    string
+	Path    string
+	Size    int64
+	ModTime string
+	IsDir   bool
+}
+
+func (s *TelemetryServer) handleDataView(c *echo.Context) error {
+	var files []FileInfo
+
+	err := filepath.WalkDir(s.dataDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			return nil // skip
+		}
+
+		rel, _ := filepath.Rel(s.dataDir, path)
+		if rel == "." {
+			return nil
+		}
+
+		files = append(files, FileInfo{
+			Name:    d.Name(),
+			Path:    rel,
+			Size:    info.Size(),
+			ModTime: info.ModTime().Format("2006-01-02 15:04:05"),
+			IsDir:   d.IsDir(),
+		})
+
+		return nil
+	})
+
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error reading data directory: "+err.Error())
+	}
+
+	t := DataViewer(files)
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextHTML)
+	return t.Render(c.Request().Context(), c.Response())
 }
