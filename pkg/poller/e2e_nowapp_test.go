@@ -39,6 +39,9 @@ func TestPoller_E2E_NoWhatsApp(t *testing.T) {
 	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
 	appEnv := os.Getenv("APP_ENV")
+	if appEnv == "" {
+		appEnv = "dev"
+	}
 	tgAlerter := NewTelegramAlerter(telegramToken, telegramChatID, appEnv, "http://localhost:8080")
 
 	sendgridKey := os.Getenv("SENDGRID_API_KEY")
@@ -60,7 +63,7 @@ func TestPoller_E2E_NoWhatsApp(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		epg := EPGData{}
 		epg.Data.Epg.Title = "BTS"
-		epg.Data.Epg.Subtitle = "Dynamite E2E Test"
+		epg.Data.Epg.Subtitle = "Dynamite"
 		_ = json.NewEncoder(w).Encode(epg)
 	}))
 	defer server.Close()
