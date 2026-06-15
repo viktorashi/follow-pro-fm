@@ -60,5 +60,33 @@ push-files:
     tar -cf - --exclude='wapp.sqlite' -C data . | flyctl ssh console -C 'mkdir -p /data && tar -xf - -C /data'
     @echo "✅ Files uploaded."
 
+# List all files inside the Fly.io persistent volume
+fly-list-files:
+    flyctl ssh console -C 'find /data -maxdepth 4'
+
+# Read the contents of a specific file inside the Fly.io persistent volume (usage: just fly-cat <filepath>)
+fly-cat filepath:
+    flyctl ssh console -C 'cat /data/{{ filepath }}'
+
+# Pull all files from Fly.io persistent volume to local data directory (excluding wapp.sqlite)
+fly-pull-files:
+    @echo "Downloading files from Fly persistent volume to local 'data' directory..."
+    flyctl ssh console -C 'tar -cf - --exclude="wapp.sqlite" -C /data .' | tar -xf - -C data
+    @echo "✅ Files downloaded."
+
+# Pull the wapp.sqlite database file from Fly.io persistent volume
+fly-pull-db:
+    @echo "Downloading wapp.sqlite from Fly persistent volume..."
+    flyctl ssh console -C 'tar -cf - -C /data wapp.sqlite' | tar -xf - -C data
+    @echo "✅ Database downloaded."
+
 fly-list-secrets:
     flyctl secrets list
+
+# Show status of Fly.io application and its machines
+fly-status:
+    flyctl status
+
+# List all Fly.io volumes for this application
+fly-list-volumes:
+    flyctl volumes list
