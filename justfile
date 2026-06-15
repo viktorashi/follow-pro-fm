@@ -50,6 +50,8 @@ deploy:
     go test -count=1 ./pkg/...
     @echo "Tests passed. Deploying to Fly.io..."
     flyctl deploy --remote-only
+    @echo "Deployment complete! Checking running machines..."
+    flyctl machine list
 
 fly-ssh:
     flyctl ssh console
@@ -101,9 +103,13 @@ fly-pull-all:
 fly-list-secrets:
     flyctl secrets list
 
-# Show status of Fly.io application and its machines
+# Show comprehensive status of Fly.io application, machines, and volumes
 fly-status:
     flyctl status
+    @echo "\n=== Running Machines ==="
+    flyctl machine list
+    @echo "\n=== Persistent Volumes ==="
+    flyctl volumes list
 
 # List all Fly.io volumes for this application
 fly-list-volumes:
