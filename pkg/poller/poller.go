@@ -186,6 +186,12 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 	if song != *currentSong {
 		log.Printf("[%s] %s - %s", now.Format("15:04:05"), song.Artist, song.Title)
 
+		if p.DBMgr != nil {
+			if err := p.DBMgr.LogRadioSong(context.Background(), song.Artist, song.Title, now); err != nil {
+				log.Printf("   ⚠️ DB Log Error: %v\n", err)
+			}
+		}
+
 		// Abort immediately if the bot has been permanently killed
 		if p.StateMgr != nil && p.StateMgr.Get().KillSwitchActive {
 			log.Printf("   ⛔️ KILL SWITCH ACTIVE! Ignoring all campaign matches for '%s'.", song.Artist)
@@ -200,11 +206,11 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 					titleKeywordMatch := strings.Contains(strings.ToLower(song.Title), followProFMKeyword)
 					if artistMatch || titleKeywordMatch {
 						if p.DBMgr != nil {
-							played, err := p.DBMgr.HasSongPlayedTheLastHalfHour(context.Background(), song.Artist, song.Title, now)
+							played, err := p.DBMgr.WasSongInLastNPlays(context.Background(), song.Artist, song.Title, 2)
 							if err != nil {
 								log.Printf("   ⚠️ DB Check Error: %v\n", err)
 							} else if played {
-								log.Printf("   [INFO] Song '%s - %s' already triggered a campaign recently. Skipping duplicate.", song.Artist, song.Title)
+								log.Printf("   [INFO] Song '%s - %s' played within the last 2 songs. Skipping duplicate.", song.Artist, song.Title)
 								break // break out of campaign loop
 							}
 						}
