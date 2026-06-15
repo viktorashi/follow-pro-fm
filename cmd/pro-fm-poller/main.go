@@ -121,7 +121,7 @@ func main() {
 	// 10. Start Poller
 	p := &poller.Poller{
 		APIURL:          apiURL,
-		PollInterval:    6 * time.Second,
+		PollInterval:    4 * time.Second,
 		ActiveCampaigns: activeCampaigns,
 		TargetPhone:     targetPhone,
 		StateMgr:        stateMgr,
