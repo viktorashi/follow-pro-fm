@@ -78,7 +78,7 @@ func main() {
 
 	envName := os.Getenv("ENVIRONMENT")
 	if envName == "" {
-		envName = "prod"
+		envName = "production"
 	}
 
 	// 5. Initialize Alerters
