@@ -47,6 +47,8 @@ run:
 
 # Mai bine da-i commit si push pe main, sincer avem acolo tot CI/CD-u
 # BUT BE SURE YOU ACTUALLY HAVE STAGED EVERYTHING. It's pretty load heavy if you do small pushes, instead commit a lot locally and run tests or whatnot, then push once after the feature seems ready.
+#
+# Also, before starting to make changes to dev branch (which is reccomended) please makes sure you're all up-to-date with main
 # deploy:
 #     @echo "Running tests first..."
 #     go test -count=1 ./pkg/...
