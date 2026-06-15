@@ -53,8 +53,8 @@ func initSchema(db *sql.DB) error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			artist TEXT NOT NULL,
 			title TEXT NOT NULL,
-			played_date TEXT NOT NULL,
-			UNIQUE(artist, title, played_date)
+			played_datetime TEXT NOT NULL,
+			UNIQUE(artist, title, played_datetime)
 		);`,
 		`CREATE TABLE IF NOT EXISTS app_settings (
 			key TEXT PRIMARY KEY,
@@ -80,7 +80,7 @@ func (m *DBManager) IsTrustedEmail(ctx context.Context, email string) (bool, err
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Create the file empty if it doesn't exist
-			_ = os.WriteFile(m.trustedEmailsPath, []byte(""), 0644)
+			_ = os.WriteFile(m.trustedEmailsPath, []byte(""), 0o644)
 			return false, nil
 		}
 		return false, fmt.Errorf("failed to read trusted emails file: %w", err)
@@ -97,11 +97,10 @@ func (m *DBManager) IsTrustedEmail(ctx context.Context, email string) (bool, err
 	return false, nil
 }
 
-// HasSongPlayedToday checks if the given song has already been recorded as played today.
-func (m *DBManager) HasSongPlayedToday(ctx context.Context, artist, title string, date time.Time) (bool, error) {
-	dateStr := date.Format("2006-01-02")
+func (m *DBManager) HasSongPlayedTheLastHalfHour(ctx context.Context, artist, title string, date time.Time) (bool, error) {
+	dateStr := date.Format("2006-01-02 15:04")
 	var id int
-	err := m.db.QueryRowContext(ctx, "SELECT id FROM played_songs WHERE artist = ? AND title = ? AND played_date = ?", artist, title, dateStr).Scan(&id)
+	err := m.db.QueryRowContext(ctx, "SELECT id FROM played_songs WHERE artist = ? AND title = ? AND played_datetime >= datetime(?, '-30 minutes')", artist, title, dateStr).Scan(&id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return false, nil
@@ -113,8 +112,8 @@ func (m *DBManager) HasSongPlayedToday(ctx context.Context, artist, title string
 
 // RecordSongPlay records that a song was played today.
 func (m *DBManager) RecordSongPlay(ctx context.Context, artist, title string, date time.Time) error {
-	dateStr := date.Format("2006-01-02")
-	_, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO played_songs (artist, title, played_date) VALUES (?, ?, ?)", artist, title, dateStr)
+	dateStr := date.Format("2006-01-02 15:04")
+	_, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO played_songs (artist, title, played_datetime) VALUES (?, ?, ?)", artist, title, dateStr)
 	return err
 }
 

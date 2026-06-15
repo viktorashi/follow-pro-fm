@@ -200,11 +200,11 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 					titleKeywordMatch := strings.Contains(strings.ToLower(song.Title), followProFMKeyword)
 					if artistMatch || titleKeywordMatch {
 						if p.DBMgr != nil {
-							played, err := p.DBMgr.HasSongPlayedToday(context.Background(), song.Artist, song.Title, now)
+							played, err := p.DBMgr.HasSongPlayedTheLastHalfHour(context.Background(), song.Artist, song.Title, now)
 							if err != nil {
 								log.Printf("   ⚠️ DB Check Error: %v\n", err)
 							} else if played {
-								fmt.Printf("   [INFO] Song '%s - %s' already triggered a campaign today. Skipping duplicate.\n", song.Artist, song.Title)
+								fmt.Printf("   [INFO] Song '%s - %s' already triggered a campaign recently. Skipping duplicate.\n", song.Artist, song.Title)
 								break // break out of campaign loop
 							}
 						}
