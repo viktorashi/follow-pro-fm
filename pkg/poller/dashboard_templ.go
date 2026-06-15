@@ -46,7 +46,7 @@ func Layout(title string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</title><!-- HTMX --><script src=\"/static/htmx.min.js\"></script><script src=\"/static/sse.js\"></script><!-- Tailwind CSS (via CDN for UI rapid prototyping) --><script src=\"https://cdn.tailwindcss.com\"></script><style>\n\t\t\tbody { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f8fafc; }\n\t\t\t.glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }\n\t\t</style></head><body class=\"min-h-screen flex flex-col antialiased\"><div class=\"flex-grow flex flex-col\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</title><!-- HTMX --><script src=\"/static/htmx.min.js\"></script><script src=\"/static/sse.js\"></script><link rel=\"stylesheet\" href=\"/static/style.css\"></head><body class=\"flex flex-col\"><div class=\"flex-grow flex flex-col\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -95,7 +95,7 @@ func Login() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"flex flex-col items-center justify-center flex-grow p-4\"><div class=\"glass p-8 rounded-2xl w-full max-w-md shadow-2xl\"><h1 class=\"text-3xl font-bold mb-6 text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400\">Jaguare Login</h1><form action=\"/login\" method=\"POST\" class=\"space-y-4\"><div><label class=\"block text-sm font-medium mb-1\">Trusted Email</label> <input type=\"email\" name=\"email\" required class=\"w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none\"></div><div><label class=\"block text-sm font-medium mb-1\">Password</label> <input type=\"password\" name=\"password\" required class=\"w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none\"></div><button type=\"submit\" class=\"w-full py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors\">Login</button></form><div class=\"mt-6 border-t border-slate-700 pt-6\"><form hx-post=\"/auth/magic/request\" hx-target=\"#magic-result\" class=\"space-y-4\"><p class=\"text-sm text-slate-400 text-center mb-2\">Or use Magic Link</p><div><input type=\"email\" name=\"email\" placeholder=\"Enter Trusted Email\" required class=\"w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none\"></div><button type=\"submit\" class=\"w-full py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg font-semibold transition-colors\">NU MAI STIU PAROLA AAA</button><div id=\"magic-result\" class=\"text-sm text-emerald-400 text-center mt-2\"></div></form></div></div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"flex flex-col items-center justify-center flex-grow p-4\"><div class=\"glass p-8 max-w-md w-full\"><h1 class=\"title-large\">Jaguare Login</h1><form action=\"/login\" method=\"POST\" class=\"space-y-4\"><div><label class=\"text-sm font-medium mb-1\">Trusted Email</label> <input type=\"email\" name=\"email\" required class=\"input\"></div><div><label class=\"text-sm font-medium mb-1\">Password</label> <input type=\"password\" name=\"password\" required class=\"input\"></div><button type=\"submit\" class=\"btn btn-primary\">Login</button></form><div class=\"mt-6 border-t pt-6\"><form hx-post=\"/auth/magic/request\" hx-target=\"#magic-result\" class=\"space-y-4\"><p class=\"text-sm text-muted text-center mb-2\">Or use Magic Link</p><div><input type=\"email\" name=\"email\" placeholder=\"Enter Trusted Email\" required class=\"input\"></div><button type=\"submit\" class=\"btn btn-success\">NU MAI STIU PAROLA AAA</button><div id=\"magic-result\" class=\"text-sm text-success text-center mt-2\"></div></form></div></div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -142,7 +142,7 @@ func Dashboard() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div class=\"container mx-auto p-4 md:p-8\" hx-ext=\"sse\" sse-connect=\"/events/dashboard\"><header class=\"flex justify-between items-center mb-8\"><h1 class=\"text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400\">🐆 ProFM Jaguare Telemetry</h1><a href=\"/logout\" class=\"px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm font-medium transition-colors\">Logout</a></header><div class=\"grid grid-cols-1 lg:grid-cols-3 gap-6\"><!-- Left Column: Status & Stats --><div class=\"space-y-6 lg:col-span-2\"><!-- State Machine Status --><div class=\"glass p-6 rounded-2xl\" id=\"status-card\" sse-swap=\"status\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div class=\"container\" hx-ext=\"sse\" sse-connect=\"/events/dashboard\"><header class=\"header\"><h1 class=\"title\">🐆 ProFM Jaguare Telemetry</h1><a href=\"/logout\" class=\"btn btn-secondary btn-sm\">Logout</a></header><div class=\"grid grid-cols-1 lg:grid-cols-3 gap-6\"><!-- Left Column: Status & Stats --><div class=\"space-y-6 col-span-2\"><!-- State Machine Status --><div class=\"glass\" id=\"status-card\" sse-swap=\"status\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -150,7 +150,7 @@ func Dashboard() templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</div><!-- Current Song --><div class=\"glass p-6 rounded-2xl\" id=\"song-card\" sse-swap=\"song\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</div><!-- Current Song --><div class=\"glass\" id=\"song-card\" sse-swap=\"song\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -158,7 +158,7 @@ func Dashboard() templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div><!-- Audio Stats --><div class=\"glass p-6 rounded-2xl flex justify-between\" id=\"audio-card\" sse-swap=\"audio\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div><!-- Audio Stats --><div class=\"glass flex justify-between\" id=\"audio-card\" sse-swap=\"audio\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -166,7 +166,7 @@ func Dashboard() templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div></div><!-- Right Column: QR Code & Logs --><div class=\"glass p-6 rounded-2xl h-[600px] flex flex-col\" id=\"qr-card\" sse-swap=\"qrcode\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div></div><!-- Right Column: QR Code & Logs --><div class=\"glass qr-card\" id=\"qr-card\" sse-swap=\"qrcode\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -209,19 +209,19 @@ func StatusComponent(state AppState) templ.Component {
 			templ_7745c5c3_Var7 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<h2 class=\"text-sm uppercase tracking-wider text-slate-400 mb-2\">System Status</h2><div class=\"flex items-center space-x-3\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<h2 class=\"text-sm uppercase text-muted mb-2\">System Status</h2><div class=\"flex items-center space-x-3\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if state.Status == StatusConnected || state.Status == StatusPolling {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<span class=\"relative flex h-4 w-4\"><span class=\"animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75\"></span> <span class=\"relative inline-flex rounded-full h-4 w-4 bg-emerald-500\"></span></span> <span class=\"text-2xl font-semibold text-emerald-400\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<span class=\"status-indicator status-success\"><span class=\"status-ping\"></span> <span class=\"status-dot\"></span></span> <span class=\"text-2xl font-semibold text-success\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(string(state.Status))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 109, Col: 79}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 104, Col: 75}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -232,14 +232,14 @@ func StatusComponent(state AppState) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else if state.Status == StatusPairingRequired {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<span class=\"relative flex h-4 w-4\"><span class=\"animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75\"></span> <span class=\"relative inline-flex rounded-full h-4 w-4 bg-amber-500\"></span></span> <span class=\"text-2xl font-semibold text-amber-400\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<span class=\"status-indicator status-warning\"><span class=\"status-ping\"></span> <span class=\"status-dot\"></span></span> <span class=\"text-2xl font-semibold text-warning\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(string(state.Status))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 115, Col: 77}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 110, Col: 75}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
@@ -250,14 +250,14 @@ func StatusComponent(state AppState) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else if state.Status == StatusError || state.Status == StatusAudioExhausted {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<span class=\"relative flex h-4 w-4\"><span class=\"animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75\"></span> <span class=\"relative inline-flex rounded-full h-4 w-4 bg-red-500\"></span></span> <span class=\"text-2xl font-semibold text-red-400\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<span class=\"status-indicator status-danger\"><span class=\"status-ping\"></span> <span class=\"status-dot\"></span></span> <span class=\"text-2xl font-semibold text-danger\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var10 string
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(string(state.Status))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 121, Col: 75}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 116, Col: 74}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
@@ -268,14 +268,14 @@ func StatusComponent(state AppState) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<span class=\"relative flex h-4 w-4\"><span class=\"relative inline-flex rounded-full h-4 w-4 bg-slate-500\"></span></span> <span class=\"text-2xl font-semibold text-slate-400\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<span class=\"status-indicator status-neutral\"><span class=\"status-dot\"></span></span> <span class=\"text-2xl font-semibold text-muted\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(string(state.Status))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 126, Col: 77}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 121, Col: 73}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -291,14 +291,14 @@ func StatusComponent(state AppState) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if state.LastError != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<div class=\"mt-4 p-3 bg-red-900/50 border border-red-500/50 rounded text-red-200 text-sm\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<div class=\"error-box\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var12 string
 			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(state.LastError)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 131, Col: 20}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 126, Col: 20}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
@@ -334,24 +334,24 @@ func SongComponent(song string) templ.Component {
 			templ_7745c5c3_Var13 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<h2 class=\"text-sm uppercase tracking-wider text-slate-400 mb-2\">Currently Playing</h2>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<h2 class=\"text-sm uppercase text-muted mb-2\">Currently Playing</h2>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if song == "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<div class=\"text-xl text-slate-500 italic\">Waiting for broadcast...</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<div class=\"text-xl text-muted italic\">Waiting for broadcast...</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<div class=\"text-2xl font-bold text-white\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<div class=\"text-2xl font-bold\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var14 string
 			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(song)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 141, Col: 51}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 136, Col: 40}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 			if templ_7745c5c3_Err != nil {
@@ -387,27 +387,27 @@ func AudioStatsComponent(unused, used int) templ.Component {
 			templ_7745c5c3_Var15 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<div class=\"flex-1\"><h2 class=\"text-sm uppercase tracking-wider text-slate-400 mb-2\">Unused Audios</h2><div class=\"text-3xl font-bold text-emerald-400\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<div class=\"flex-grow\"><h2 class=\"text-sm uppercase text-muted mb-2\">Unused Audios</h2><div class=\"text-3xl font-bold text-success\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", unused))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 148, Col: 78}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 143, Col: 74}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</div></div><div class=\"flex-1\"><h2 class=\"text-sm uppercase tracking-wider text-slate-400 mb-2\">Used Audios</h2><div class=\"text-3xl font-bold text-amber-400\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</div></div><div class=\"flex-grow\"><h2 class=\"text-sm uppercase text-muted mb-2\">Used Audios</h2><div class=\"text-3xl font-bold text-warning\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", used))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 152, Col: 74}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 147, Col: 72}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 		if templ_7745c5c3_Err != nil {
@@ -442,12 +442,12 @@ func QRComponent(b64 string) templ.Component {
 			templ_7745c5c3_Var18 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<h2 class=\"text-sm uppercase tracking-wider text-slate-400 mb-4\">WhatsApp Pairing</h2><div class=\"flex-grow flex flex-col items-center justify-center bg-white rounded-xl p-4 relative overflow-hidden\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<h2 class=\"text-sm uppercase text-muted mb-4\">WhatsApp Pairing</h2><div class=\"qr-container\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if b64 == "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<div class=\"text-slate-500 text-center\"><svg class=\"w-16 h-16 mx-auto mb-2 text-slate-400\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z\"></path></svg><p>Session active.<br>No QR code needed.</p></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<div class=\"text-muted text-center\"><svg class=\"svg-icon\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z\"></path></svg><p>Session active.<br>No QR code needed.</p></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -459,13 +459,13 @@ func QRComponent(b64 string) templ.Component {
 			var templ_7745c5c3_Var19 string
 			templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue(b64)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 165, Col: 17}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 160, Col: 17}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "\" class=\"max-w-full h-auto z-10\" alt=\"WhatsApp QR Code\"><div class=\"w-full mt-4 h-2 bg-slate-200 rounded overflow-hidden z-10 relative\"><div id=\"qr-progress\" class=\"h-full bg-emerald-500 w-full origin-left transition-all duration-100 ease-linear\"></div></div><p class=\"text-xs text-slate-500 mt-2 z-10 font-medium\">Expires in <span id=\"qr-countdown\">40</span>s</p><script>\n\t\t\t\t(function() {\n\t\t\t\t\tlet timeLeft = 40;\n\t\t\t\t\tconst progress = document.getElementById('qr-progress');\n\t\t\t\t\tconst countdown = document.getElementById('qr-countdown');\n\t\t\t\t\t\n\t\t\t\t\tconst timer = setInterval(() => {\n\t\t\t\t\t\ttimeLeft -= 0.1;\n\t\t\t\t\t\tif (timeLeft <= 0) {\n\t\t\t\t\t\t\tclearInterval(timer);\n\t\t\t\t\t\t\tprogress.style.width = '0%';\n\t\t\t\t\t\t\tcountdown.innerText = '0';\n\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\tprogress.style.width = (timeLeft / 40 * 100) + '%';\n\t\t\t\t\t\t\tcountdown.innerText = Math.ceil(timeLeft);\n\t\t\t\t\t\t}\n\t\t\t\t\t}, 100);\n\t\t\t\t})();\n\t\t\t</script>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "\" class=\"qr-image\" alt=\"WhatsApp QR Code\"><div class=\"progress-bar\"><div id=\"qr-progress\" class=\"progress-fill\"></div></div><p class=\"qr-text\">Expires in <span id=\"qr-countdown\">40</span>s</p><script>\n\t\t\t\t(function() {\n\t\t\t\t\tlet timeLeft = 40;\n\t\t\t\t\tconst progress = document.getElementById('qr-progress');\n\t\t\t\t\tconst countdown = document.getElementById('qr-countdown');\n\t\t\t\t\t\n\t\t\t\t\tconst timer = setInterval(() => {\n\t\t\t\t\t\ttimeLeft -= 0.1;\n\t\t\t\t\t\tif (timeLeft <= 0) {\n\t\t\t\t\t\t\tclearInterval(timer);\n\t\t\t\t\t\t\tprogress.style.width = '0%';\n\t\t\t\t\t\t\tcountdown.innerText = '0';\n\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\tprogress.style.width = (timeLeft / 40 * 100) + '%';\n\t\t\t\t\t\t\tcountdown.innerText = Math.ceil(timeLeft);\n\t\t\t\t\t\t}\n\t\t\t\t\t}, 100);\n\t\t\t\t})();\n\t\t\t</script>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -511,7 +511,7 @@ func LogsPage() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<div class=\"container mx-auto p-4 md:p-8 h-screen flex flex-col\" hx-ext=\"sse\" sse-connect=\"/events/logs\"><header class=\"flex justify-between items-center mb-4\"><div><h1 class=\"text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400\">🐆 Live Logs</h1><p class=\"text-slate-400 text-sm\">Streaming system output...</p></div><a href=\"/\" class=\"px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm font-medium transition-colors\">Back to Dashboard</a></header><!-- We use an auto-scrolling container for logs --><div class=\"flex-grow glass rounded-2xl overflow-hidden flex flex-col p-4 bg-black/50\"><pre id=\"log-container\" class=\"text-xs md:text-sm font-mono text-emerald-400 overflow-y-auto flex-grow break-words whitespace-pre-wrap\" sse-swap=\"log\" hx-swap=\"beforeend\"></pre></div><script>\n\t\t\t\tconst container = document.getElementById('log-container');\n\t\t\t\t// Simple observer to auto-scroll when new content arrives\n\t\t\t\tconst observer = new MutationObserver(() => {\n\t\t\t\t\tcontainer.scrollTop = container.scrollHeight;\n\t\t\t\t});\n\t\t\t\tobserver.observe(container, { childList: true });\n\t\t\t</script></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<div class=\"container h-screen flex flex-col\" hx-ext=\"sse\" sse-connect=\"/events/logs\"><header class=\"header mb-4\"><div><h1 class=\"title\">🐆 Live Logs</h1><p class=\"text-muted text-sm\">Streaming system output...</p></div><a href=\"/\" class=\"btn btn-secondary btn-sm\">Back to Dashboard</a></header><!-- We use an auto-scrolling container for logs --><div class=\"logs-container\"><pre id=\"log-container\" class=\"logs-pre\" sse-swap=\"log\" hx-swap=\"beforeend\"></pre></div><script>\n\t\t\t\tconst container = document.getElementById('log-container');\n\t\t\t\t// Simple observer to auto-scroll when new content arrives\n\t\t\t\tconst observer = new MutationObserver(() => {\n\t\t\t\t\tcontainer.scrollTop = container.scrollHeight;\n\t\t\t\t});\n\t\t\t\tobserver.observe(container, { childList: true });\n\t\t\t</script></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

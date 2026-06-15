@@ -55,6 +55,7 @@ func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaste
 
 func (s *TelemetryServer) registerRoutes() {
 	// Public routes
+	s.echo.Static("/static", "static")
 	s.echo.GET("/login", s.handleLoginView)
 	s.echo.POST("/login", s.handleLoginSubmit)
 	s.echo.POST("/auth/magic/request", s.handleMagicLinkRequest)
