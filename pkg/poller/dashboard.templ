@@ -96,6 +96,7 @@ templ Dashboard() {
 						<button onclick="toggleKillSwitch(true)" class="btn btn-danger btn-sm">🏆 I WON (KILL BOT)</button>
 						<button onclick="toggleKillSwitch(false)" class="btn btn-secondary btn-sm">UNDO KILL</button>
 						<a href="/data" class="btn btn-secondary btn-sm">Files</a>
+						<a href="/radio-logs" class="btn btn-secondary btn-sm">Radio History</a>
 						<a href="/logs" class="btn btn-secondary btn-sm">Logs</a>
 						<a href="/logout" class="btn btn-secondary btn-sm">Logout</a>
 					</div>
@@ -302,6 +303,45 @@ templ DataViewer(files []FileInfo) {
 						if len(files) == 0 {
 							<tr>
 								<td colspan="4" class="p-6 text-center text-white/50">No files found.</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	}
+}
+
+templ RadioLogsPage(logs []RadioLog) {
+	@Layout("Radio Log History - ProFM Jaguare") {
+		<div class="container">
+			<header class="header flex justify-between items-center mb-6">
+				<h1 class="title m-0">📻 Radio Log History</h1>
+				<a href="/" class="btn btn-secondary btn-sm">Back to Dashboard</a>
+			</header>
+
+			<div class="glass p-6 overflow-x-auto">
+				<table class="w-full text-left border-collapse">
+					<thead>
+						<tr class="border-b border-white/10 text-sm tracking-widest text-white/50 uppercase">
+							<th class="p-3">ID</th>
+							<th class="p-3">Time Played</th>
+							<th class="p-3">Artist</th>
+							<th class="p-3">Title</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, l := range logs {
+							<tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+								<td class="p-3 font-mono text-sm">{ fmt.Sprintf("%d", l.ID) }</td>
+								<td class="p-3 text-sm text-white/70">{ l.PlayedDatetime }</td>
+								<td class="p-3 font-semibold">{ l.Artist }</td>
+								<td class="p-3">{ l.Title }</td>
+							</tr>
+						}
+						if len(logs) == 0 {
+							<tr>
+								<td colspan="4" class="p-6 text-center text-white/50">No radio logs recorded yet.</td>
 							</tr>
 						}
 					</tbody>

@@ -170,7 +170,7 @@ func Dashboard() templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div><div class=\"flex gap-2\"><button onclick=\"toggleKillSwitch(true)\" class=\"btn btn-danger btn-sm\">🏆 I WON (KILL BOT)</button> <button onclick=\"toggleKillSwitch(false)\" class=\"btn btn-secondary btn-sm\">UNDO KILL</button> <a href=\"/data\" class=\"btn btn-secondary btn-sm\">Files</a> <a href=\"/logs\" class=\"btn btn-secondary btn-sm\">Logs</a> <a href=\"/logout\" class=\"btn btn-secondary btn-sm\">Logout</a></div></div></header><div class=\"grid grid-cols-1 lg:grid-cols-3 gap-6\"><!-- Left Column: Status & Stats --><div class=\"space-y-6 col-span-2\"><!-- State Machine Status --><div class=\"glass\" id=\"status-card\" sse-swap=\"status\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</div><div class=\"flex gap-2\"><button onclick=\"toggleKillSwitch(true)\" class=\"btn btn-danger btn-sm\">🏆 I WON (KILL BOT)</button> <button onclick=\"toggleKillSwitch(false)\" class=\"btn btn-secondary btn-sm\">UNDO KILL</button> <a href=\"/data\" class=\"btn btn-secondary btn-sm\">Files</a> <a href=\"/radio-logs\" class=\"btn btn-secondary btn-sm\">Radio History</a> <a href=\"/logs\" class=\"btn btn-secondary btn-sm\">Logs</a> <a href=\"/logout\" class=\"btn btn-secondary btn-sm\">Logout</a></div></div></header><div class=\"grid grid-cols-1 lg:grid-cols-3 gap-6\"><!-- Left Column: Status & Stats --><div class=\"space-y-6 col-span-2\"><!-- State Machine Status --><div class=\"glass\" id=\"status-card\" sse-swap=\"status\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -249,7 +249,7 @@ func StatusComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var10 string
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(string(state.Status))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 141, Col: 75}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 142, Col: 75}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
@@ -267,7 +267,7 @@ func StatusComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(string(state.Status))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 147, Col: 75}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 148, Col: 75}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -290,7 +290,7 @@ func StatusComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var12 string
 			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(string(state.Status))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 157, Col: 74}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 158, Col: 74}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
@@ -308,7 +308,7 @@ func StatusComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var13 string
 			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(string(state.Status))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 162, Col: 73}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 163, Col: 73}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
@@ -331,7 +331,7 @@ func StatusComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var14 string
 			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(state.LastError)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 167, Col: 20}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 168, Col: 20}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 			if templ_7745c5c3_Err != nil {
@@ -384,7 +384,7 @@ func SongComponent(song string) templ.Component {
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(song)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 177, Col: 40}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 178, Col: 40}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
@@ -427,7 +427,7 @@ func AudioStatsComponent(unused, used int) templ.Component {
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", unused))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 184, Col: 74}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 185, Col: 74}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 		if templ_7745c5c3_Err != nil {
@@ -440,7 +440,7 @@ func AudioStatsComponent(unused, used int) templ.Component {
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", used))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 188, Col: 72}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 189, Col: 72}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 		if templ_7745c5c3_Err != nil {
@@ -492,7 +492,7 @@ func QRComponent(b64 string) templ.Component {
 			var templ_7745c5c3_Var21 string
 			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(b64)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 201, Col: 17}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 202, Col: 17}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 			if templ_7745c5c3_Err != nil {
@@ -604,7 +604,7 @@ func DataViewer(files []FileInfo) templ.Component {
 					var templ_7745c5c3_Var26 templ.SafeURL
 					templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/raw-data/" + f.Path))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 281, Col: 52}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 282, Col: 52}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 					if templ_7745c5c3_Err != nil {
@@ -617,7 +617,7 @@ func DataViewer(files []FileInfo) templ.Component {
 					var templ_7745c5c3_Var27 string
 					templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(f.Path)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 282, Col: 19}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 283, Col: 19}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 					if templ_7745c5c3_Err != nil {
@@ -630,7 +630,7 @@ func DataViewer(files []FileInfo) templ.Component {
 					var templ_7745c5c3_Var28 string
 					templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d bytes", f.Size))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 286, Col: 43}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 287, Col: 43}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 					if templ_7745c5c3_Err != nil {
@@ -643,7 +643,7 @@ func DataViewer(files []FileInfo) templ.Component {
 					var templ_7745c5c3_Var29 string
 					templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(f.ModTime)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 289, Col: 21}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 290, Col: 21}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 					if templ_7745c5c3_Err != nil {
@@ -661,7 +661,7 @@ func DataViewer(files []FileInfo) templ.Component {
 						var templ_7745c5c3_Var30 string
 						templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.ResolveAttributeValue("/raw-data/" + f.Path)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 294, Col: 47}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 295, Col: 47}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var30)
 						if templ_7745c5c3_Err != nil {
@@ -691,6 +691,121 @@ func DataViewer(files []FileInfo) templ.Component {
 			return nil
 		})
 		templ_7745c5c3_Err = Layout("Data Viewer - ProFM Jaguare").Render(templ.WithChildren(ctx, templ_7745c5c3_Var25), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+func RadioLogsPage(logs []RadioLog) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var31 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var31 == nil {
+			templ_7745c5c3_Var31 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Var32 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "<div class=\"container\"><header class=\"header flex justify-between items-center mb-6\"><h1 class=\"title m-0\">📻 Radio Log History</h1><a href=\"/\" class=\"btn btn-secondary btn-sm\">Back to Dashboard</a></header><div class=\"glass p-6 overflow-x-auto\"><table class=\"w-full text-left border-collapse\"><thead><tr class=\"border-b border-white/10 text-sm tracking-widest text-white/50 uppercase\"><th class=\"p-3\">ID</th><th class=\"p-3\">Time Played</th><th class=\"p-3\">Artist</th><th class=\"p-3\">Title</th></tr></thead> <tbody>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			for _, l := range logs {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "<tr class=\"border-b border-white/5 hover:bg-white/5 transition-colors\"><td class=\"p-3 font-mono text-sm\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var33 string
+				templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", l.ID))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 336, Col: 67}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "</td><td class=\"p-3 text-sm text-white/70\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var34 string
+				templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(l.PlayedDatetime)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 337, Col: 64}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</td><td class=\"p-3 font-semibold\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var35 string
+				templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(l.Artist)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 338, Col: 48}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "</td><td class=\"p-3\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var36 string
+				templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(l.Title)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 339, Col: 33}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "</td></tr>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			if len(logs) == 0 {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "<tr><td colspan=\"4\" class=\"p-6 text-center text-white/50\">No radio logs recorded yet.</td></tr>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "</tbody></table></div></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = Layout("Radio Log History - ProFM Jaguare").Render(templ.WithChildren(ctx, templ_7745c5c3_Var32), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
