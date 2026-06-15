@@ -221,8 +221,8 @@ func (s *TelemetryServer) streamEvents(c *echo.Context, isLogs bool) error {
 	ch := s.broadcaster.Subscribe()
 	defer s.broadcaster.Unsubscribe(ch)
 
-	// 1-second ticker to send server time and act as keepalive
-	ticker := time.NewTicker(1 * time.Second)
+	// Keep-alive to prevent Fly.io proxy from closing idle connections
+	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -230,16 +230,8 @@ func (s *TelemetryServer) streamEvents(c *echo.Context, isLogs bool) error {
 		case <-c.Request().Context().Done():
 			return nil
 		case <-ticker.C:
-			if !isLogs {
-				timeStr := time.Now().Format("15:04:05")
-				timeEv := &SSEEvent{Event: "time", Data: []byte(timeStr)}
-				if _, err := c.Response().Write(timeEv.Marshal()); err != nil {
-					return nil
-				}
-			} else {
-				if _, err := c.Response().Write([]byte(": keepalive\n\n")); err != nil {
-					return nil
-				}
+			if _, err := c.Response().Write([]byte(": keepalive\n\n")); err != nil {
+				return nil
 			}
 			if f, ok := c.Response().(http.Flusher); ok {
 				f.Flush()

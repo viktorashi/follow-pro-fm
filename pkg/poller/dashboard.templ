@@ -2,6 +2,7 @@ package poller
 
 import (
 	"fmt"
+	"time"
 )
 
 templ Layout(title string) {
@@ -71,13 +72,24 @@ templ Dashboard() {
 					if (!res.ok) alert("Invalid password or server error");
 				});
 			}
+
+			document.addEventListener("DOMContentLoaded", function() {
+				// Initialize the ticking clock using the server's time
+				const timeEl = document.getElementById('server-time');
+				let currentServerMs = parseInt(timeEl.getAttribute('data-server-time'), 10);
+				setInterval(() => {
+					currentServerMs += 1000;
+					const d = new Date(currentServerMs);
+					timeEl.innerText = d.toLocaleTimeString('ro-RO');
+				}, 1000);
+			});
 		</script>
 		<div class="container" hx-ext="sse" sse-connect="/events/dashboard">
 			<header class="header flex justify-between items-center">
 				<h1 class="title m-0">🐆 ProFM Jaguare Telemetry</h1>
 				<div class="flex items-center gap-4">
-					<div class="text-sm font-mono bg-black/20 px-3 py-1 rounded border border-white/10" id="server-time" sse-swap="time">
-						00:00:00
+					<div class="text-sm font-mono bg-black/20 px-3 py-1 rounded border border-white/10" id="server-time" data-server-time={ fmt.Sprintf("%d", time.Now().UnixMilli()) }>
+						{ time.Now().Format("15:04:05") }
 					</div>
 					<div class="flex gap-2">
 						<button onclick="toggleKillSwitch(true)" class="btn btn-danger btn-sm">🏆 I WON (KILL BOT)</button>
