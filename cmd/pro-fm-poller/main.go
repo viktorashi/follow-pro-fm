@@ -33,7 +33,11 @@ func main() {
 	adminPass := os.Getenv("ADMIN_PASSWORD")
 	baseURL := os.Getenv("BASE_URL")
 	if baseURL == "" {
-		baseURL = "http://localhost:8080"
+		if appName := os.Getenv("FLY_APP_NAME"); appName != "" {
+			baseURL = fmt.Sprintf("https://%s.fly.dev", appName)
+		} else {
+			baseURL = "http://localhost:8080"
+		}
 	}
 
 	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")

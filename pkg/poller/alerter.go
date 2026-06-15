@@ -78,8 +78,9 @@ func (t *TelegramAlerter) send(prefix, msg string) error {
 
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", t.BotToken)
 	payload := map[string]string{
-		"chat_id": t.ChatID,
-		"text":    prefix + " " + msg,
+		"chat_id":    t.ChatID,
+		"text":       prefix + " " + msg,
+		"parse_mode": "HTML",
 	}
 	body, _ := json.Marshal(payload)
 
@@ -148,7 +149,7 @@ func (e *EmailAlerter) send(prefix, msg string) error {
 
 	from := mail.NewEmail("ProFM Poller", e.FromEmail)
 	subject := prefix + " ProFM Poller Alert"
-	htmlContent := fmt.Sprintf("<p>%s</p>", msg)
+	htmlContent := fmt.Sprintf("<p>%s</p>", strings.ReplaceAll(msg, "\n", "<br>"))
 
 	// SendGrid uses personalizations for multiple BCC/To
 	m := mail.NewV3Mail()
