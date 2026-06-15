@@ -1,13 +1,11 @@
-jadx_out
-apktool_out
 *.apk
 *.DS_Store
 *.swp
 *.sqlite
 *.db
-pro-fm-poller
 coverage.out
 *.bin
 .env
 audios/
 data/
+storim-da-brain
