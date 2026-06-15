@@ -88,10 +88,12 @@ func InitWhatsApp(dbPath string, stateMgr *StateManager, alerter Alerter, baseUR
 						}
 
 						if !alertSent && alerter != nil && baseURL != "" {
-							_ = alerter.AlertCritical(fmt.Sprintf(
-								"WhatsApp disconnected! Action required immediately.\n\nScan the QR by opening the Live Dashboard:\n<a href='%s'>Live Dashboard</a>",
-								baseURL,
-							))
+							_ = alerter.AlertCritical(AlertEvent{
+								Title:       "WhatsApp Disconnected",
+								Message:     "WhatsApp disconnected! Action required immediately. Scan the QR code on the dashboard.",
+								ActionLabel: "Open Live Dashboard",
+								ActionURL:   baseURL,
+							})
 							alertSent = true
 						}
 

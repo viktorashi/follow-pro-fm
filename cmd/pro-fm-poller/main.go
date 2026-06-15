@@ -158,6 +158,7 @@ func main() {
 		Alerter:         alerter,
 		AudiosDir:       audiosDir,
 		DBMgr:           dbMgr,
+		BaseURL:         baseURL,
 		SendVoiceNote: func(phone string, audioPath string) error {
 			return poller.SendVoiceNote(wappClient, phone, audioPath)
 		},

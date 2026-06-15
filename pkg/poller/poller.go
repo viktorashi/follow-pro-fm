@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -73,6 +74,7 @@ type Poller struct {
 	Alerter         Alerter
 	AudiosDir       string
 	DBMgr           *DBManager
+	BaseURL         string
 
 	matchesToday int
 	lastCheckDay int
@@ -139,7 +141,12 @@ func (p *Poller) getNowPlaying() (SongInfo, error) {
 }
 
 func (p *Poller) Start() {
-	_ = p.Alerter.AlertInfo("ProFM Jaguare Poller started! Fetching Now Playing...")
+	_ = p.Alerter.AlertInfo(AlertEvent{
+		Title:       "Service Started",
+		Message:     "ProFM Jaguare Poller started! Fetching Now Playing...",
+		ActionLabel: "View Dashboard",
+		ActionURL:   p.BaseURL,
+	})
 	fmt.Println("Fetching Now Playing from Pro FM...")
 	fmt.Println(strings.Repeat("-", 40))
 
@@ -204,7 +211,10 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 						p.matchesToday++
 						msg := fmt.Sprintf("🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/%d for today)", song.Artist, p.matchesToday, MaxDailyMatches)
 						fmt.Println("   " + msg)
-						if alertErr := p.Alerter.AlertInfo(msg); alertErr != nil {
+						if alertErr := p.Alerter.AlertInfo(AlertEvent{
+							Title:   "Campaign Alert",
+							Message: msg,
+						}); alertErr != nil {
 							log.Printf("   ⚠️ Alerter warning: %v\n", alertErr)
 						}
 
@@ -218,7 +228,11 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 								s.Status = StatusAudioExhausted
 								s.LastError = "No unused audios available!"
 							})
-							_ = p.Alerter.AlertCritical("AUDIO POOL EXHAUSTED! Cannot send voice note for " + song.Artist)
+							fmt.Printf("   ❌ NO UNUSED AUDIO FOUND FOR %s!\n", song.Artist)
+							_ = p.Alerter.AlertCritical(AlertEvent{
+								Title:   "AUDIO POOL EXHAUSTED",
+								Message: "Cannot send voice note for " + song.Artist + "\nNo unused audio files found in " + p.AudiosDir,
+							})
 							break
 						}
 
@@ -241,7 +255,11 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 								_ = p.DBMgr.RecordSongPlay(context.Background(), song.Artist, song.Title, now)
 							}
 							_ = MarkAudioUsed(audioFile)
-							_ = p.Alerter.AlertSuccess("Voice note sent successfully for " + song.Artist)
+							fmt.Println("   ✅ Voice note sent successfully!")
+							_ = p.Alerter.AlertSuccess(AlertEvent{
+								Title:   "Voice Note Sent",
+								Message: fmt.Sprintf("Artist: %s\nSong: %s\nAudio File: %s", song.Artist, song.Title, filepath.Base(audioFile)),
+							})
 							unused, used := GetAudioStats(p.AudiosDir)
 							p.StateMgr.Update(func(s *AppState) {
 								s.Status = StatusPolling
