@@ -1,10 +1,12 @@
 package poller
 
 import (
+	"bytes"
 	"encoding/base64"
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v5"
@@ -142,9 +144,7 @@ func (s *TelemetryServer) handleQRImage(c *echo.Context) error {
 	}
 
 	prefix := "data:image/png;base64,"
-	if len(b64) > len(prefix) {
-		b64 = b64[len(prefix):]
-	}
+	b64 = strings.TrimPrefix(b64, prefix)
 
 	decoded, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
@@ -186,6 +186,29 @@ func (s *TelemetryServer) streamEvents(c *echo.Context, isLogs bool) error {
 				return nil
 			}
 		}
+		if f, ok := c.Response().(http.Flusher); ok {
+			f.Flush()
+		}
+	} else if !isLogs && s.stateMgr != nil {
+		// Send current state for dashboard
+		state := s.stateMgr.Get()
+
+		var statusBuf bytes.Buffer
+		_ = StatusComponent(state).Render(c.Request().Context(), &statusBuf)
+		_, _ = c.Response().Write((&SSEEvent{Event: "status", Data: statusBuf.Bytes()}).Marshal())
+
+		var songBuf bytes.Buffer
+		_ = SongComponent(state.CurrentSong).Render(c.Request().Context(), &songBuf)
+		_, _ = c.Response().Write((&SSEEvent{Event: "song", Data: songBuf.Bytes()}).Marshal())
+
+		var audioBuf bytes.Buffer
+		_ = AudioStatsComponent(state.UnusedAudios, state.UsedAudios).Render(c.Request().Context(), &audioBuf)
+		_, _ = c.Response().Write((&SSEEvent{Event: "audio", Data: audioBuf.Bytes()}).Marshal())
+
+		var qrBuf bytes.Buffer
+		_ = QRComponent(state.QRCodeData).Render(c.Request().Context(), &qrBuf)
+		_, _ = c.Response().Write((&SSEEvent{Event: "qrcode", Data: qrBuf.Bytes()}).Marshal())
+
 		if f, ok := c.Response().(http.Flusher); ok {
 			f.Flush()
 		}

@@ -55,9 +55,10 @@ fly-ssh:
     flyctl ssh console
 
 # Push local data to Fly volume (explicitly EXCLUDING wapp.sqlite to prevent disconnecting real session)
+# and preventing the re-upload of already used audio files
 push-files:
     @echo "Uploading data folder to Fly persistent volume..."
-    tar -cf - --exclude='wapp.sqlite' -C data . | flyctl ssh console -C "sh -c 'mkdir -p /data && tar -xf - -C /data'"
+    tar -cf - --exclude='wapp.sqlite' -C data . | flyctl ssh console -C 'mkdir -p /tmp/px && tar -xf - -C /tmp/px && if [ -d /tmp/px/audios ]; then for f in /tmp/px/audios/*; do [ -e "$$f" ] || continue; name="$${f##*/}"; if [ -f "/data/audios/used/$$name" ]; then echo "Skipping already used file: $$name"; rm -f "$$f"; fi; done; fi && tar -cf - -C /tmp/px . | tar -xf - -C /data && rm -rf /tmp/px'
     @echo "✅ Files uploaded."
 
 # List all files inside the Fly.io persistent volume
