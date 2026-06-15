@@ -58,7 +58,7 @@ fly-ssh:
 # and preventing the re-upload of already used audio files
 push-files:
     @echo "Uploading data folder to Fly persistent volume..."
-    tar -cf - --exclude='wapp.sqlite' -C data . | flyctl ssh console -C 'mkdir -p /tmp/px && tar -xf - -C /tmp/px && if [ -d /tmp/px/audios ]; then for f in /tmp/px/audios/*; do [ -e "$$f" ] || continue; name="$${f##*/}"; if [ -f "/data/audios/used/$$name" ]; then echo "Skipping already used file: $$name"; rm -f "$$f"; fi; done; fi && tar -cf - -C /tmp/px . | tar -xf - -C /data && rm -rf /tmp/px'
+    tar -cf - --exclude='wapp.sqlite' -C data . | flyctl ssh console -C 'sh -c '\''mkdir -p /tmp/px && tar -xf - -C /tmp/px && if [ -d /tmp/px/audios ]; then for f in /tmp/px/audios/*; do [ -e "$f" ] || continue; name="${f##*/}"; if [ -f "/data/audios/used/$name" ]; then echo "Skipping already used file: $name"; rm -f "$f"; fi; done; fi && tar -cf - -C /tmp/px . | tar -xf - -C /data && rm -rf /tmp/px'\'''
     @echo "✅ Files uploaded."
 
 # List all files inside the Fly.io persistent volume
@@ -80,6 +80,17 @@ fly-pull-db:
     @echo "Downloading wapp.sqlite from Fly persistent volume..."
     flyctl ssh console -C 'tar -cf - -C /data wapp.sqlite' | tar -xf - -C data
     @echo "✅ Database downloaded."
+
+# Pull the entire contents of the Fly.io persistent volume to a versioned sub-directory in downloaded-from-fly/
+fly-pull-all:
+    @NEXT_NUM=1; \
+     while [ -d "downloaded-from-fly/$NEXT_NUM" ]; do \
+         NEXT_NUM=$((NEXT_NUM + 1)); \
+     done; \
+     echo "Downloading all files and databases from Fly persistent volume to downloaded-from-fly/$NEXT_NUM..."; \
+     mkdir -p "downloaded-from-fly/$NEXT_NUM"; \
+     flyctl ssh console -C 'tar -cf - -C /data .' | tar -xf - -C "downloaded-from-fly/$NEXT_NUM"
+    @echo "✅ All files and databases downloaded."
 
 fly-list-secrets:
     flyctl secrets list
