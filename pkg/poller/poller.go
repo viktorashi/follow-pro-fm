@@ -77,6 +77,7 @@ type Poller struct {
 	AudiosDir          string
 	DBMgr              *DBManager
 	BaseURL            string
+	EnvName            string
 
 	matchesToday int
 	lastCheckDay int
@@ -152,9 +153,14 @@ func (p *Poller) getNowPlaying() (SongInfo, error) {
 }
 
 func (p *Poller) Start() {
+	envStr := ""
+	if p.EnvName != "" && p.EnvName != "prod" && p.EnvName != "production" {
+		envStr = fmt.Sprintf(" [%s Environment]", strings.ToUpper(p.EnvName))
+	}
+
 	_ = p.Alerter.AlertInfo(AlertEvent{
 		Title:       "Service Started",
-		Message:     "ProFM Jaguare Poller started! Fetching Now Playing...",
+		Message:     fmt.Sprintf("ProFM Jaguare Poller started%s! Fetching Now Playing...", envStr),
 		ActionLabel: "View Dashboard",
 		ActionURL:   p.BaseURL,
 	})
