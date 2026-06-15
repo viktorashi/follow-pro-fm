@@ -41,7 +41,7 @@ test-cover-e2e-all:
 # ---- Docker ----
 
 run:
-    docker compose up --build
+    ENVIRONMENT=dev docker compose up --build
 
 # ---- Fly.io Deployment ----
 
