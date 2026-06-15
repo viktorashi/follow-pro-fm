@@ -29,6 +29,10 @@ func main() {
 	if dbPath == "" {
 		dbPath = "/data/wapp.sqlite"
 	}
+	appDBPath := os.Getenv("APP_DB_PATH")
+	if appDBPath == "" {
+		appDBPath = "/data/app.sqlite"
+	}
 	sendgridKey := os.Getenv("SENDGRID_API_KEY")
 	adminPass := os.Getenv("ADMIN_PASSWORD")
 	baseURL := os.Getenv("BASE_URL")
@@ -53,8 +57,8 @@ func main() {
 		log.Fatalf("Failed to init audio pool: %v", err)
 	}
 
-	// 3. Initialize SQLite DB for auth
-	dbMgr, err := poller.NewDBManager(dbPath)
+	// 3. Initialize SQLite DB for auth and app state
+	dbMgr, err := poller.NewDBManager(appDBPath)
 	if err != nil {
 		log.Fatalf("Failed to init DB Manager: %v", err)
 	}
@@ -142,6 +146,7 @@ func main() {
 		StateMgr:        stateMgr,
 		Alerter:         alerter,
 		AudiosDir:       audiosDir,
+		DBMgr:           dbMgr,
 		SendVoiceNote: func(phone string, audioPath string) error {
 			return poller.SendVoiceNote(wappClient, phone, audioPath)
 		},

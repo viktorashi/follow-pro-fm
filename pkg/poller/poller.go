@@ -1,6 +1,7 @@
 package poller
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -68,6 +69,7 @@ type Poller struct {
 	StateMgr        *StateManager
 	Alerter         Alerter
 	AudiosDir       string
+	DBMgr           *DBManager
 
 	matchesToday int
 	lastCheckDay int
@@ -179,6 +181,16 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 			for _, campaign := range p.ActiveCampaigns {
 				if campaign.IsActive(now) {
 					if strings.Contains(strings.ToLower(song.Artist), strings.ToLower(campaign.Artist)) {
+						if p.DBMgr != nil {
+							played, err := p.DBMgr.HasSongPlayedToday(context.Background(), song.Artist, song.Title, now)
+							if err != nil {
+								log.Printf("   ⚠️ DB Check Error: %v\n", err)
+							} else if played {
+								fmt.Printf("   [INFO] Song '%s - %s' already triggered a campaign today. Skipping duplicate.\n", song.Artist, song.Title)
+								break // break out of campaign loop
+							}
+						}
+
 						p.matchesToday++
 						msg := fmt.Sprintf("🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/%d for today)", song.Artist, p.matchesToday, MaxDailyMatches)
 						fmt.Println("   " + msg)
@@ -215,6 +227,9 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 							})
 						} else {
 							// Success!
+							if p.DBMgr != nil {
+								_ = p.DBMgr.RecordSongPlay(context.Background(), song.Artist, song.Title, now)
+							}
 							_ = MarkAudioUsed(audioFile)
 							_ = p.Alerter.AlertSuccess("Voice note sent successfully for " + song.Artist)
 							unused, used := GetAudioStats(p.AudiosDir)

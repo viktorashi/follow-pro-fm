@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -18,11 +19,19 @@ type DBManager struct {
 }
 
 func NewDBManager(dbPath string) (*DBManager, error) {
-	db, err := sql.Open("sqlite", "file:"+dbPath+"?_foreign_keys=on")
+	dsn := "file:" + dbPath
+	if strings.Contains(dbPath, "?") {
+		dsn += "&_foreign_keys=on"
+	} else {
+		dsn += "?_foreign_keys=on"
+	}
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
-
+	if _, err := db.Exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;"); err != nil {
+		return nil, fmt.Errorf("failed to set pragmas: %w", err)
+	}
 	if err := initSchema(db); err != nil {
 		return nil, err
 	}
@@ -39,6 +48,13 @@ func initSchema(db *sql.DB) error {
 			token TEXT PRIMARY KEY,
 			email TEXT NOT NULL,
 			expires_at DATETIME NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS played_songs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			artist TEXT NOT NULL,
+			title TEXT NOT NULL,
+			played_date TEXT NOT NULL,
+			UNIQUE(artist, title, played_date)
 		);`,
 	}
 
@@ -75,4 +91,25 @@ func (m *DBManager) IsTrustedEmail(ctx context.Context, email string) (bool, err
 	}
 
 	return false, nil
+}
+
+// HasSongPlayedToday checks if the given song has already been recorded as played today.
+func (m *DBManager) HasSongPlayedToday(ctx context.Context, artist, title string, date time.Time) (bool, error) {
+	dateStr := date.Format("2006-01-02")
+	var id int
+	err := m.db.QueryRowContext(ctx, "SELECT id FROM played_songs WHERE artist = ? AND title = ? AND played_date = ?", artist, title, dateStr).Scan(&id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// RecordSongPlay records that a song was played today.
+func (m *DBManager) RecordSongPlay(ctx context.Context, artist, title string, date time.Time) error {
+	dateStr := date.Format("2006-01-02")
+	_, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO played_songs (artist, title, played_date) VALUES (?, ?, ?)", artist, title, dateStr)
+	return err
 }
