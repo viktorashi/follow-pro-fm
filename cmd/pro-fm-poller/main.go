@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -148,14 +147,11 @@ func main() {
 	}
 	defer wappClient.Disconnect()
 
-	// Load campaigns from campaigns.json
-	var activeCampaigns []poller.Campaign
-	if campaignsData, err := os.ReadFile("campaigns.json"); err == nil {
-		if err := json.Unmarshal(campaignsData, &activeCampaigns); err != nil {
-			log.Printf("⚠️ Failed to parse campaigns.json: %v", err)
-		}
-	} else {
-		log.Printf("⚠️ Failed to read campaigns.json: %v", err)
+	// Load campaigns in memory
+	activeCampaigns := []poller.Campaign{
+		{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
+		{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana"},
+		{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd"},
 	}
 
 	// 10. Start Poller
