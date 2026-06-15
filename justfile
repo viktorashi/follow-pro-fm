@@ -57,7 +57,7 @@ fly-ssh:
 # Push local data to Fly volume (explicitly EXCLUDING wapp.sqlite to prevent disconnecting real session)
 push-files:
     @echo "Uploading data folder to Fly persistent volume..."
-    tar -cf - --exclude='wapp.sqlite' -C data . | flyctl ssh console -C 'mkdir -p /data && tar -xf - -C /data'
+    tar -cf - --exclude='wapp.sqlite' -C data . | flyctl ssh console -C "sh -c 'mkdir -p /data && tar -xf - -C /data'"
     @echo "✅ Files uploaded."
 
 # List all files inside the Fly.io persistent volume
