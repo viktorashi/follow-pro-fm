@@ -106,7 +106,7 @@ func (t *TelegramAlerter) send(prefix string, event AlertEvent) error {
 	}
 
 	if t.BaseURL != "" && event.ActionURL != t.BaseURL {
-		msg += fmt.Sprintf("\n\n🌐 <a href=\"%s\">Live Dashboard</a>", t.BaseURL)
+		msg += fmt.Sprintf("\n\n🌐 Live Dashboard: %s", t.BaseURL)
 	}
 
 	payload := map[string]string{
@@ -220,7 +220,7 @@ func (e *EmailAlerter) send(prefix string, event AlertEvent) error {
 
 	if e.BaseURL != "" && event.ActionURL != e.BaseURL {
 		plainTextContent += fmt.Sprintf("\n\nLive Dashboard: %s", e.BaseURL)
-		htmlContent += fmt.Sprintf("<br><br>🌐 <a href=\"%s\">Live Dashboard</a>", e.BaseURL)
+		htmlContent += fmt.Sprintf("<br><br>🌐 Live Dashboard: <a href=\"%s\">%s</a>", e.BaseURL, e.BaseURL)
 	}
 
 	m := mail.NewV3Mail()
