@@ -90,3 +90,7 @@ fly-status:
 # List all Fly.io volumes for this application
 fly-list-volumes:
     flyctl volumes list
+
+# Spin up a temporary Ubuntu Machine with a volume attached for inspection (usage: just run-temp-fly-vm <volume_id>)
+run-temp-fly-vm volume_id="vol_rkg633w5y5p0z3o4":
+    flyctl machine run ubuntu:latest --app pro-fm-poller --volume {{ volume_id }}:/data --shell
