@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v5"
@@ -217,10 +218,21 @@ func (s *TelemetryServer) streamEvents(c *echo.Context, isLogs bool) error {
 	ch := s.broadcaster.Subscribe()
 	defer s.broadcaster.Unsubscribe(ch)
 
+	// Keep-alive to prevent Fly.io proxy from closing idle connections
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-c.Request().Context().Done():
 			return nil
+		case <-ticker.C:
+			if _, err := c.Response().Write([]byte(": keepalive\n\n")); err != nil {
+				return nil
+			}
+			if f, ok := c.Response().(http.Flusher); ok {
+				f.Flush()
+			}
 		case ev := <-ch:
 			// If this client is not on the logs page, ignore "log" events to save bandwidth
 			if !isLogs && ev.Event == "log" {
