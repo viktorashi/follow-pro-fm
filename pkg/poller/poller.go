@@ -11,6 +11,7 @@ import (
 )
 
 const MaxDailyMatches = 6
+const followProFMKeyword = "follow profm"
 
 type EPGData struct {
 	Data struct {
@@ -178,7 +179,9 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 		if p.matchesToday < MaxDailyMatches {
 			for _, campaign := range p.ActiveCampaigns {
 				if campaign.IsActive(now) {
-					if strings.Contains(strings.ToLower(song.Artist), strings.ToLower(campaign.Artist)) {
+					artistMatch := strings.Contains(strings.ToLower(song.Artist), strings.ToLower(campaign.Artist))
+					titleKeywordMatch := strings.Contains(strings.ToLower(song.Title), followProFMKeyword)
+					if artistMatch || titleKeywordMatch {
 						p.matchesToday++
 						msg := fmt.Sprintf("🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/%d for today)", song.Artist, p.matchesToday, MaxDailyMatches)
 						fmt.Println("   " + msg)

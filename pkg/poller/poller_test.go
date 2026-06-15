@@ -238,6 +238,14 @@ func TestPoller_checkSong(t *testing.T) {
 			wantVoiceCalls: 0,
 		},
 		{
+			name:           "Match active campaign via FOLLOW PROFM title keyword",
+			mockArtist:     "Ed Sheeran",
+			mockTitle:      "CONCURS FOLLOW PROFM 2026 MUNCHEN - BUTTER",
+			currentSong:    &SongInfo{},
+			wantMatches:    1,
+			wantVoiceCalls: 1,
+		},
+		{
 			name:           "Same song playing again, should not trigger",
 			mockArtist:     "BTS",
 			mockTitle:      "Dynamite",
