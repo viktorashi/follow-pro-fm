@@ -195,6 +195,10 @@ func SendVoiceNote(client *whatsmeow.Client, phone string, audioPath string) err
 		return fmt.Errorf("whatsapp client is not fully connected or logged in after waiting")
 	}
 
+	// Spoof the file modification time so WhatsApp sees it as created just now
+	now := time.Now()
+	_ = os.Chtimes(audioPath, now, now)
+
 	// Read audio file
 	audioData, err := os.ReadFile(audioPath)
 	if err != nil {
