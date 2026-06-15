@@ -56,6 +56,12 @@ func initSchema(db *sql.DB) error {
 			played_datetime TEXT NOT NULL,
 			UNIQUE(artist, title, played_datetime)
 		);`,
+		`CREATE TABLE IF NOT EXISTS radio_log (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			artist TEXT NOT NULL,
+			title TEXT NOT NULL,
+			played_datetime TEXT NOT NULL
+		);`,
 		`CREATE TABLE IF NOT EXISTS app_settings (
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL
@@ -97,17 +103,32 @@ func (m *DBManager) IsTrustedEmail(ctx context.Context, email string) (bool, err
 	return false, nil
 }
 
-func (m *DBManager) HasSongPlayedTheLastHalfHour(ctx context.Context, artist, title string, date time.Time) (bool, error) {
-	dateStr := date.Format("2006-01-02 15:04")
-	var id int
-	err := m.db.QueryRowContext(ctx, "SELECT id FROM played_songs WHERE artist = ? AND title = ? AND played_datetime >= datetime(?, '-30 minutes')", artist, title, dateStr).Scan(&id)
+func (m *DBManager) LogRadioSong(ctx context.Context, artist, title string, date time.Time) error {
+	dateStr := date.Format("2006-01-02 15:04:05")
+	_, err := m.db.ExecContext(ctx, "INSERT INTO radio_log (artist, title, played_datetime) VALUES (?, ?, ?)", artist, title, dateStr)
+	return err
+}
+
+func (m *DBManager) WasSongInLastNPlays(ctx context.Context, artist, title string, n int) (bool, error) {
+	rows, err := m.db.QueryContext(ctx, "SELECT artist, title FROM radio_log ORDER BY id DESC LIMIT ?", n)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return false, nil
-		}
 		return false, err
 	}
-	return true, nil
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var rowArtist, rowTitle string
+		if err := rows.Scan(&rowArtist, &rowTitle); err != nil {
+			return false, err
+		}
+		if rowArtist == artist && rowTitle == title {
+			return true, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	return false, nil
 }
 
 // RecordSongPlay records that a song was played today.
