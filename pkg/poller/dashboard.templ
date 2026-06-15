@@ -156,6 +156,11 @@ templ StatusComponent(state AppState) {
 			  <span class="status-dot"></span>
 			</span>
 			<span class="text-2xl font-semibold text-danger">{ string(state.Status) }</span>
+		} else if state.Status == StatusSleeping {
+			<span class="status-indicator status-neutral">
+			  <span class="status-dot"></span>
+			</span>
+			<span class="text-2xl font-semibold text-muted">{ string(state.Status) }</span>
 		} else {
 			<span class="status-indicator status-neutral">
 			  <span class="status-dot"></span>

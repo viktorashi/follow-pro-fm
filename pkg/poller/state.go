@@ -17,6 +17,7 @@ const (
 	StatusAudioExhausted    AppStatus = "Audio Exhausted (Critical)"
 	StatusError             AppStatus = "Error"
 	StatusKilled            AppStatus = "Killed (Won Prize)"
+	StatusSleeping          AppStatus = "Sleeping (Out of campaign hours)"
 )
 
 type AppState struct {
