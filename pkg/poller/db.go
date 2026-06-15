@@ -110,7 +110,8 @@ func (m *DBManager) LogRadioSong(ctx context.Context, artist, title string, date
 }
 
 func (m *DBManager) WasSongInLastNPlays(ctx context.Context, artist, title string, n int) (bool, error) {
-	rows, err := m.db.QueryContext(ctx, "SELECT artist, title FROM radio_log ORDER BY id DESC LIMIT ?", n)
+	// OFFSET 1 to exclude the current song which was just logged
+	rows, err := m.db.QueryContext(ctx, "SELECT artist, title FROM radio_log ORDER BY id DESC LIMIT ? OFFSET 1", n)
 	if err != nil {
 		return false, err
 	}
