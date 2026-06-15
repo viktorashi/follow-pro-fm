@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const MaxDailyMatches = 6
+
 type EPGData struct {
 	Data struct {
 		Epg struct {
@@ -58,18 +60,21 @@ func (c Campaign) IsActive(now time.Time) bool {
 }
 
 type Poller struct {
-	ApiURL          string
+	APIURL          string
 	PollInterval    time.Duration
 	ActiveCampaigns []Campaign
 	TargetPhone     string
 	SendVoiceNote   func(phone string, audioPath string) error
+	StateMgr        *StateManager
+	Alerter         Alerter
+	AudiosDir       string
 
 	matchesToday int
 	lastCheckDay int
 }
 
 func (p *Poller) getNowPlaying() (SongInfo, error) {
-	req, err := http.NewRequest("GET", p.ApiURL, nil)
+	req, err := http.NewRequest("GET", p.APIURL, nil)
 	if err != nil {
 		return SongInfo{}, err
 	}
@@ -129,10 +134,15 @@ func (p *Poller) getNowPlaying() (SongInfo, error) {
 }
 
 func (p *Poller) Start() {
+	_ = p.Alerter.AlertInfo("ProFM Jaguare Poller started! Fetching Now Playing...")
 	fmt.Println("Fetching Now Playing from Pro FM...")
 	fmt.Println(strings.Repeat("-", 40))
 
 	var currentSong SongInfo
+
+	p.StateMgr.Update(func(s *AppState) {
+		s.Status = StatusPolling
+	})
 
 	// Use a cron-like Ticker instead of an infinite sleep loop
 	ticker := time.NewTicker(p.PollInterval)
@@ -164,27 +174,76 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 	if song != *currentSong {
 		fmt.Printf("[%s] %s - %s\n", now.Format("15:04:05"), song.Artist, song.Title)
 
-		// Only check campaigns if we haven't hit the daily limit of 6
-		if p.matchesToday < 6 {
+		// Only check campaigns if we haven't hit the daily limit of matches
+		if p.matchesToday < MaxDailyMatches {
 			for _, campaign := range p.ActiveCampaigns {
 				if campaign.IsActive(now) {
 					if strings.Contains(strings.ToLower(song.Artist), strings.ToLower(campaign.Artist)) {
 						p.matchesToday++
-						fmt.Printf("   🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/6 for today)\n", song.Artist, p.matchesToday)
+						msg := fmt.Sprintf("🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/%d for today)", song.Artist, p.matchesToday, MaxDailyMatches)
+						fmt.Println("   " + msg)
+						if alertErr := p.Alerter.AlertInfo(msg); alertErr != nil {
+							log.Printf("   ⚠️ Alerter warning: %v\n", alertErr)
+						}
+
+						p.StateMgr.Update(func(s *AppState) {
+							s.Status = StatusCampaignTriggered
+						})
+
+						audioFile, err := GetRandomAudio(p.AudiosDir)
+						if err != nil {
+							p.StateMgr.Update(func(s *AppState) {
+								s.Status = StatusAudioExhausted
+								s.LastError = "No unused audios available!"
+							})
+							_ = p.Alerter.AlertCritical("AUDIO POOL EXHAUSTED! Cannot send voice note for " + song.Artist)
+							break
+						}
+
+						p.StateMgr.Update(func(s *AppState) {
+							s.Status = StatusSendingAudio
+						})
 
 						// Trigger actual submission (WhatsApp Voice note)
-						fmt.Println("   Sending WhatsApp voice note...")
-						err := p.SendVoiceNote(p.TargetPhone, "audios/1.ogg")
+						fmt.Println("   Sending WhatsApp voice note using: " + audioFile)
+						err = p.SendVoiceNote(p.TargetPhone, audioFile)
 						if err != nil {
 							log.Printf("   ❌ Error sending voice note: %v\n", err)
+							p.StateMgr.Update(func(s *AppState) {
+								s.Status = StatusError
+								s.LastError = fmt.Sprintf("Voice note failed: %v", err)
+							})
+						} else {
+							// Success!
+							_ = MarkAudioUsed(audioFile)
+							_ = p.Alerter.AlertSuccess("Voice note sent successfully for " + song.Artist)
+							unused, used := GetAudioStats(p.AudiosDir)
+							p.StateMgr.Update(func(s *AppState) {
+								s.Status = StatusPolling
+								s.LastError = ""
+								s.LastVoiceNoteSentAt = time.Now()
+								s.UnusedAudios = unused
+								s.UsedAudios = used
+							})
 						}
 					}
 				}
 			}
 		} else {
-			fmt.Println("   [INFO] Daily limit of 6 matches reached. Ignoring further campaign matches for today.")
+			fmt.Printf("   [INFO] Daily limit of %d matches reached. Ignoring further campaign matches for today.\n", MaxDailyMatches)
 		}
 
 		*currentSong = song
+
+		p.StateMgr.Update(func(s *AppState) {
+			s.CurrentSong = song.Artist + " - " + song.Title
+		})
 	}
+
+	// Always update audio stats on each check to keep UI fresh
+	unused, used := GetAudioStats(p.AudiosDir)
+	p.StateMgr.Update(func(s *AppState) {
+		s.UnusedAudios = unused
+		s.UsedAudios = used
+	})
 }

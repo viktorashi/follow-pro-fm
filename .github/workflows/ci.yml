@@ -14,11 +14,10 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: "pe-bune/go.mod"
-          cache-dependency-path: "pe-bune/go.sum"
+          go-version-file: "go.mod"
+          cache-dependency-path: "go.sum"
 
       - name: Lint
-        working-directory: pe-bune
         run: ./scripts/golangci-lint-shim.sh run
 
       - name: Install gotestsum
@@ -27,21 +26,20 @@ jobs:
           curl -sSL https://github.com/gotestyourself/gotestsum/releases/download/v1.13.0/gotestsum_1.13.0_linux_amd64.tar.gz | tar -xz -C bin
 
       - name: Test & coverage
-        working-directory: pe-bune
         run: |
-          ../bin/gotestsum --junitfile junit.xml -- -coverprofile=coverage.out ./pkg/...
+          bin/gotestsum --junitfile junit.xml -- -coverprofile=coverage.out ./pkg/...
           go tool cover -func=coverage.out
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
-          files: pe-bune/coverage.out
+          files: coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v5
         with:
-          files: pe-bune/junit.xml
+          files: junit.xml
           token: ${{ secrets.CODECOV_TOKEN }}
           report_type: test_results

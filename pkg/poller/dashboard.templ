@@ -1,0 +1,218 @@
+package poller
+
+import (
+	"fmt"
+)
+
+templ Layout(title string) {
+	<!DOCTYPE html>
+	<html lang="en" data-theme="dark">
+	<head>
+		<meta charset="UTF-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+		<title>{ title }</title>
+		<!-- HTMX -->
+		<script src="/static/htmx.min.js"></script>
+		<script src="/static/sse.js"></script>
+		<link rel="stylesheet" href="/static/style.css"/>
+	</head>
+	<body class="flex flex-col">
+		<div class="flex-grow flex flex-col">
+			{ children... }
+		</div>
+	</body>
+	</html>
+}
+
+templ Login() {
+	@Layout("Login - ProFM Jaguare") {
+		<div class="flex flex-col items-center justify-center flex-grow p-4">
+			<div class="glass p-8 max-w-md w-full">
+				<h1 class="title-large">Jaguare Login</h1>
+				
+				<form action="/login" method="POST" class="space-y-4">
+					<div>
+						<label class="text-sm font-medium mb-1">Trusted Email</label>
+						<input type="email" name="email" required class="input"/>
+					</div>
+					<div>
+						<label class="text-sm font-medium mb-1">Password</label>
+						<input type="password" name="password" required class="input"/>
+					</div>
+					<button type="submit" class="btn btn-primary">Login</button>
+				</form>
+
+				<div class="mt-6 border-t pt-6">
+					<form hx-post="/auth/magic/request" hx-target="#magic-result" class="space-y-4">
+						<p class="text-sm text-muted text-center mb-2">Or use Magic Link</p>
+						<div>
+							<input type="email" name="email" placeholder="Enter Trusted Email" required class="input"/>
+						</div>
+						<button type="submit" class="btn btn-success">NU MAI STIU PAROLA AAA</button>
+						<div id="magic-result" class="text-sm text-success text-center mt-2"></div>
+					</form>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ Dashboard() {
+	@Layout("Dashboard - ProFM Jaguare") {
+		<div class="container" hx-ext="sse" sse-connect="/events/dashboard">
+			<header class="header flex justify-between items-center">
+				<h1 class="title m-0">🐆 ProFM Jaguare Telemetry</h1>
+				<div class="flex gap-2">
+					<a href="/logs" class="btn btn-secondary btn-sm">Logs</a>
+					<a href="/logout" class="btn btn-secondary btn-sm">Logout</a>
+				</div>
+			</header>
+
+			<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+				<!-- Left Column: Status & Stats -->
+				<div class="space-y-6 col-span-2">
+					<!-- State Machine Status -->
+					<div class="glass" id="status-card" sse-swap="status">
+						@StatusComponent(AppState{Status: StatusInitializing})
+					</div>
+
+					<!-- Current Song -->
+					<div class="glass" id="song-card" sse-swap="song">
+						@SongComponent("")
+					</div>
+
+					<!-- Audio Stats -->
+					<div class="glass flex justify-between" id="audio-card" sse-swap="audio">
+						@AudioStatsComponent(0, 0)
+					</div>
+				</div>
+
+				<!-- Right Column: QR Code & Logs -->
+				<div class="glass qr-card" id="qr-card" sse-swap="qrcode">
+					@QRComponent("")
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ StatusComponent(state AppState) {
+	<h2 class="text-sm uppercase text-muted mb-2">System Status</h2>
+	<div class="flex items-center space-x-3">
+		if state.Status == StatusConnected || state.Status == StatusPolling {
+			<span class="status-indicator status-success">
+			  <span class="status-ping"></span>
+			  <span class="status-dot"></span>
+			</span>
+			<span class="text-2xl font-semibold text-success">{ string(state.Status) }</span>
+		} else if state.Status == StatusPairingRequired {
+			<span class="status-indicator status-warning">
+			  <span class="status-ping"></span>
+			  <span class="status-dot"></span>
+			</span>
+			<span class="text-2xl font-semibold text-warning">{ string(state.Status) }</span>
+		} else if state.Status == StatusError || state.Status == StatusAudioExhausted {
+			<span class="status-indicator status-danger">
+			  <span class="status-ping"></span>
+			  <span class="status-dot"></span>
+			</span>
+			<span class="text-2xl font-semibold text-danger">{ string(state.Status) }</span>
+		} else {
+			<span class="status-indicator status-neutral">
+			  <span class="status-dot"></span>
+			</span>
+			<span class="text-2xl font-semibold text-muted">{ string(state.Status) }</span>
+		}
+	</div>
+	if state.LastError != "" {
+		<div class="error-box">
+			{ state.LastError }
+		</div>
+	}
+}
+
+templ SongComponent(song string) {
+	<h2 class="text-sm uppercase text-muted mb-2">Currently Playing</h2>
+	if song == "" {
+		<div class="text-xl text-muted italic">Waiting for broadcast...</div>
+	} else {
+		<div class="text-2xl font-bold">{ song }</div>
+	}
+}
+
+templ AudioStatsComponent(unused, used int) {
+	<div class="flex-grow">
+		<h2 class="text-sm uppercase text-muted mb-2">Unused Audios</h2>
+		<div class="text-3xl font-bold text-success">{ fmt.Sprintf("%d", unused) }</div>
+	</div>
+	<div class="flex-grow">
+		<h2 class="text-sm uppercase text-muted mb-2">Used Audios</h2>
+		<div class="text-3xl font-bold text-warning">{ fmt.Sprintf("%d", used) }</div>
+	</div>
+}
+
+templ QRComponent(b64 string) {
+	<h2 class="text-sm uppercase text-muted mb-4">WhatsApp Pairing</h2>
+	<div class="qr-container">
+		if b64 == "" {
+			<div class="text-muted text-center">
+				<svg class="svg-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+				<p>Session active.<br/>No QR code needed.</p>
+			</div>
+		} else {
+			<img src={ b64 } class="qr-image" alt="WhatsApp QR Code"/>
+			<div class="progress-bar">
+				<div id="qr-progress" class="progress-fill"></div>
+			</div>
+			<p class="qr-text">Expires in <span id="qr-countdown">40</span>s</p>
+			
+			<script>
+				(function() {
+					let timeLeft = 40;
+					const progress = document.getElementById('qr-progress');
+					const countdown = document.getElementById('qr-countdown');
+					
+					const timer = setInterval(() => {
+						timeLeft -= 0.1;
+						if (timeLeft <= 0) {
+							clearInterval(timer);
+							progress.style.width = '0%';
+							countdown.innerText = '0';
+						} else {
+							progress.style.width = (timeLeft / 40 * 100) + '%';
+							countdown.innerText = Math.ceil(timeLeft);
+						}
+					}, 100);
+				})();
+			</script>
+		}
+	</div>
+}
+
+templ LogsPage() {
+	@Layout("Live Logs - ProFM Jaguare") {
+		<div class="container h-screen flex flex-col" hx-ext="sse" sse-connect="/events/logs">
+			<header class="header mb-4">
+				<div>
+					<h1 class="title">🐆 Live Logs</h1>
+					<p class="text-muted text-sm">Streaming system output...</p>
+				</div>
+				<a href="/" class="btn btn-secondary btn-sm">Back to Dashboard</a>
+			</header>
+
+			<!-- We use an auto-scrolling container for logs -->
+			<div class="logs-container">
+				<pre id="log-container" class="logs-pre" sse-swap="log" hx-swap="beforeend"></pre>
+			</div>
+
+			<script>
+				const container = document.getElementById('log-container');
+				// Simple observer to auto-scroll when new content arrives
+				const observer = new MutationObserver(() => {
+					container.scrollTop = container.scrollHeight;
+				});
+				observer.observe(container, { childList: true });
+			</script>
+		</div>
+	}
+}

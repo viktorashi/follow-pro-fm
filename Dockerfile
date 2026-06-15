@@ -19,10 +19,11 @@ RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /app
 COPY --from=builder /pro-fm-poller .
-COPY audios/ ./audios/
 
 # /data is where the persistent volume will be mounted for wapp.sqlite
 RUN mkdir -p /data
+
+COPY static ./static
 
 ENV TZ=Europe/Bucharest
 

@@ -1,5 +1,5 @@
-//go:build e2e
-// +build e2e
+//go:build e2e && !nowapp
+// +build e2e,!nowapp
 
 package poller
 
@@ -7,21 +7,52 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
+const TARGET_PHONE = "+40770661491"
+
 func TestPoller_E2E(t *testing.T) {
-	// 1. Initialize real WhatsApp client (will prompt for QR if not paired)
+	// Dynamically compute the project root directory relative to this test file.
+	_, filename, _, _ := runtime.Caller(0)
+	rootDir := filepath.Join(filepath.Dir(filename), "../..")
+	dbPath := filepath.Join(rootDir, "data/wapp.sqlite")
+	audiosDir := filepath.Join(rootDir, "data/audios")
+	envPath := filepath.Join(rootDir, ".env")
+
+	// Load local .env variables
+	_ = godotenv.Load(envPath)
+
+	// 1. Setup Alerters from .env
+	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
+	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
+	tgAlerter := NewTelegramAlerter(telegramToken, telegramChatID)
+
+	sendgridKey := os.Getenv("SENDGRID_API_KEY")
+	emailFrom := os.Getenv("EMAIL_FROM")
+	emAlerter := NewEmailAlerter(sendgridKey, emailFrom, filepath.Join(rootDir, "data/trusted-emails.txt"))
+
+	multiAlerter := NewMultiAlerter(tgAlerter, emAlerter)
+
+	// 2. Initialize real WhatsApp client (will prompt for QR if not paired)
 	t.Log("Initializing real WhatsApp client...")
-	client, err := InitWhatsApp("../../tests/e2e.sqlite")
+	client, err := InitWhatsApp(dbPath, nil, multiAlerter, "")
 	if err != nil {
 		t.Fatalf("Failed to initialize WhatsApp: %v", err)
 	}
 	defer client.Disconnect()
 
-	// bubu phfon
-	targetPhone := "+40762631673"
+	// target phone
+	targetPhone := os.Getenv("TARGET_PHONE")
+	if targetPhone == "" {
+		targetPhone = TARGET_PHONE
+	}
 
 	// A Wednesday at 12:00 PM (Active time for campaigns)
 	activeTime := time.Date(2026, time.June, 17, 12, 0, 0, 0, time.UTC)
@@ -37,15 +68,18 @@ func TestPoller_E2E(t *testing.T) {
 
 	// Create poller with real WhatsApp send function
 	poller := &Poller{
-		ApiURL:       server.URL,
+		APIURL:       server.URL,
 		PollInterval: 1 * time.Millisecond,
 		ActiveCampaigns: []Campaign{
 			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
 		},
 		TargetPhone: targetPhone,
+		StateMgr:    NewStateManager(),
+		Alerter:     multiAlerter,
+		AudiosDir:   audiosDir,
 		SendVoiceNote: func(phone string, audioPath string) error {
 			t.Logf("🚀 Triggering real E2E voice note send to %s...", phone)
-			return SendVoiceNote(client, phone, "../../"+audioPath)
+			return SendVoiceNote(client, phone, audioPath)
 		},
 	}
 

@@ -3,7 +3,12 @@ module pro-fm-poller
 go 1.26.4
 
 require (
+	github.com/a-h/templ v0.3.1020
+	github.com/joho/godotenv v1.5.1
+	github.com/labstack/echo/v5 v5.1.1
 	github.com/mdp/qrterminal/v3 v3.2.1
+	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	go.mau.fi/whatsmeow v0.0.0-20260611094716-089932318bc2
 	google.golang.org/protobuf v1.36.11
 	modernc.org/sqlite v1.52.0
@@ -22,6 +27,7 @@ require (
 	github.com/petermattis/goid v0.0.0-20260330135022-df67b199bc81 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rs/zerolog v1.35.1 // indirect
+	github.com/sendgrid/rest v2.6.9+incompatible // indirect
 	github.com/vektah/gqlparser/v2 v2.5.27 // indirect
 	go.mau.fi/libsignal v0.2.2 // indirect
 	go.mau.fi/util v0.9.9 // indirect
@@ -32,6 +38,7 @@ require (
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/term v0.43.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect

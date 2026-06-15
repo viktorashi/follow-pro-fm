@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 )
@@ -83,7 +84,7 @@ func TestPoller_getNowPlaying(t *testing.T) {
 		{
 			name: "Valid Response",
 			handler: func(w http.ResponseWriter, r *http.Request) {
-				_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"BTS","playerExtendedSongSubtitle":"Dynamite"}}}`))
+				_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"BTS","playerExtendedSongSubtitle":"2026 - Dynamite"}}}`))
 			},
 			wantArtist: "BTS",
 			wantTitle:  "Dynamite",
@@ -105,6 +106,33 @@ func TestPoller_getNowPlaying(t *testing.T) {
 			},
 			wantArtist: "Artist",
 			wantTitle:  "LASA-MA PAPA LA MARE",
+			wantErr:    false,
+		},
+		{
+			name: "Clean up year edge case 2",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"BTS","playerExtendedSongSubtitle":"2026 - 2.0"}}}`))
+			},
+			wantArtist: "BTS",
+			wantTitle:  "2.0",
+			wantErr:    false,
+		},
+		{
+			name: "Cu apostreoafe si chestii",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"Queen","playerExtendedSongSubtitle":"1985 - '39"}}}`))
+			},
+			wantArtist: "Queen",
+			wantTitle:  "'39",
+			wantErr:    false,
+		},
+		{
+			name: "Cu double quotes",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"David Bowie","playerExtendedSongSubtitle":"1977 - \"Heroes\""}}}`))
+			},
+			wantArtist: "David Bowie",
+			wantTitle:  "\"Heroes\"",
 			wantErr:    false,
 		},
 		{
@@ -146,7 +174,7 @@ func TestPoller_getNowPlaying(t *testing.T) {
 			server := httptest.NewServer(tt.handler)
 			defer server.Close()
 
-			poller := &Poller{ApiURL: server.URL}
+			poller := &Poller{APIURL: server.URL}
 			got, err := poller.getNowPlaying()
 
 			if (err != nil) != tt.wantErr {
@@ -164,14 +192,14 @@ func TestPoller_getNowPlaying(t *testing.T) {
 
 func TestPoller_getNowPlaying_BadURL(t *testing.T) {
 	// Using an invalid port that usually refuses connection
-	poller := &Poller{ApiURL: "http://127.0.0.1:0"}
+	poller := &Poller{APIURL: "http://127.0.0.1:0"}
 	_, err := poller.getNowPlaying()
 	if err == nil {
 		t.Error("Expected error for bad connection")
 	}
 
 	// Test NewRequest error (e.g., bad URL scheme)
-	poller = &Poller{ApiURL: string([]byte{0x7f})}
+	poller = &Poller{APIURL: string([]byte{0x7f})}
 	_, err = poller.getNowPlaying()
 	t.Logf("err for \\x7f: %v", err)
 	if err == nil {
@@ -251,13 +279,18 @@ func TestPoller_checkSong(t *testing.T) {
 			defer server.Close()
 
 			voiceCalls := 0
+			audiosDir := t.TempDir()
+			_ = os.WriteFile(audiosDir+"/test.ogg", []byte("fake"), 0644)
 			poller := &Poller{
-				ApiURL:       server.URL,
+				APIURL:       server.URL,
 				PollInterval: 1 * time.Millisecond,
 				ActiveCampaigns: []Campaign{
 					{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
 				},
-				TargetPhone: "+40762631673",
+				TargetPhone: "+40770661491",
+				StateMgr:    NewStateManager(),
+				Alerter:     NewMultiAlerter(),
+				AudiosDir:   audiosDir,
 				SendVoiceNote: func(phone string, audioPath string) error {
 					voiceCalls++
 					if tt.simulateVoiceError {
@@ -288,14 +321,17 @@ func TestPoller_checkSong_DailyLimit(t *testing.T) {
 
 	voiceCalls := 0
 	poller := &Poller{
-		ApiURL:       server.URL,
+		APIURL:       server.URL,
 		PollInterval: 1 * time.Millisecond,
 		ActiveCampaigns: []Campaign{
 			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
 		},
 		matchesToday: 6,
 		lastCheckDay: activeTime.YearDay(), // Prevent matchesToday from being reset
-		TargetPhone:  "+40762631673",
+		TargetPhone:  "+40770661491",
+		StateMgr:     NewStateManager(),
+		Alerter:      NewMultiAlerter(),
+		AudiosDir:    t.TempDir(),
 		SendVoiceNote: func(phone string, audioPath string) error {
 			voiceCalls++
 			return nil
