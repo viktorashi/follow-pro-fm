@@ -212,8 +212,10 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 						msg := fmt.Sprintf("🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/%d for today)", song.Artist, p.matchesToday, MaxDailyMatches)
 						log.Println("   " + msg)
 						if alertErr := p.Alerter.AlertInfo(AlertEvent{
-							Title:   "Campaign Alert",
-							Message: msg,
+							Title:       "Campaign Alert",
+							Message:     msg,
+							ActionLabel: "View Dashboard",
+							ActionURL:   p.BaseURL,
 						}); alertErr != nil {
 							log.Printf("   ⚠️ Alerter warning: %v\n", alertErr)
 						}
@@ -230,8 +232,10 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 							})
 							log.Printf("   ❌ NO UNUSED AUDIO FOUND FOR %s!", song.Artist)
 							_ = p.Alerter.AlertCritical(AlertEvent{
-								Title:   "AUDIO POOL EXHAUSTED",
-								Message: "Cannot send voice note for " + song.Artist + "\nNo unused audio files found in " + p.AudiosDir,
+								Title:       "AUDIO POOL EXHAUSTED",
+								Message:     "Cannot send voice note for " + song.Artist + "\nNo unused audio files found in " + p.AudiosDir,
+								ActionLabel: "View Dashboard",
+								ActionURL:   p.BaseURL,
 							})
 							break
 						}
@@ -257,8 +261,10 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 							_ = MarkAudioUsed(audioFile)
 							log.Println("   ✅ Voice note sent successfully!")
 							_ = p.Alerter.AlertSuccess(AlertEvent{
-								Title:   "Voice Note Sent",
-								Message: fmt.Sprintf("Artist: %s\nSong: %s\nAudio File: %s", song.Artist, song.Title, filepath.Base(audioFile)),
+								Title:       "Voice Note Sent",
+								Message:     fmt.Sprintf("Artist: %s\nSong: %s\nAudio File: %s", song.Artist, song.Title, filepath.Base(audioFile)),
+								ActionLabel: "View Dashboard",
+								ActionURL:   p.BaseURL,
 							})
 							unused, used := GetAudioStats(p.AudiosDir)
 							p.StateMgr.Update(func(s *AppState) {

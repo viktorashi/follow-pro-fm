@@ -82,13 +82,18 @@ func main() {
 	logWriter := poller.NewSSELogWriter(os.Stdout, sseBroadcaster)
 	log.SetOutput(logWriter)
 
+	envName := os.Getenv("ENVIRONMENT")
+	if envName == "" {
+		envName = "prod"
+	}
+
 	// 5. Initialize Alerters
-	tgAlerter := poller.NewTelegramAlerter(telegramToken, telegramChatID)
+	tgAlerter := poller.NewTelegramAlerter(telegramToken, telegramChatID, envName)
 	emailFrom := os.Getenv("EMAIL_FROM")
 	if emailFrom == "" {
 		emailFrom = "notifications@yourdomain.com"
 	}
-	emAlerter := poller.NewEmailAlerter(sendgridKey, emailFrom, "/data/trusted-emails.txt")
+	emAlerter := poller.NewEmailAlerter(sendgridKey, emailFrom, "/data/trusted-emails.txt", envName)
 	alerter := poller.NewMultiAlerter(tgAlerter, emAlerter)
 
 	// 6. Initialize Auth Manager

@@ -6,7 +6,7 @@ import (
 
 func TestTelegramAlerter(t *testing.T) {
 	// With empty token, it should just return nil and not make HTTP requests
-	alerter := NewTelegramAlerter("", "")
+	alerter := NewTelegramAlerter("", "", "prod")
 
 	if err := alerter.AlertInfo(AlertEvent{Title: "Info", Message: "test info"}); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -21,7 +21,7 @@ func TestTelegramAlerter(t *testing.T) {
 
 func TestEmailAlerter(t *testing.T) {
 	// With empty api key, it should just return nil
-	alerter := NewEmailAlerter("", "from@example.com", "")
+	alerter := NewEmailAlerter("", "from@example.com", "", "prod")
 
 	if err := alerter.AlertInfo(AlertEvent{Title: "Info", Message: "test info"}); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -35,8 +35,8 @@ func TestEmailAlerter(t *testing.T) {
 }
 
 func TestMultiAlerter(t *testing.T) {
-	tg := NewTelegramAlerter("", "")
-	em := NewEmailAlerter("", "", "")
+	tg := NewTelegramAlerter("", "", "prod")
+	em := NewEmailAlerter("", "", "", "prod")
 
 	multi := NewMultiAlerter(tg, em)
 
