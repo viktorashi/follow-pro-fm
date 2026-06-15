@@ -27,7 +27,7 @@ const (
 
 func init() {
 	sqlite.RegisterConnectionHook(func(conn sqlite.ExecQuerierContext, dsn string) error {
-		_, err := conn.ExecContext(context.Background(), "PRAGMA foreign_keys = ON;", nil)
+		_, err := conn.ExecContext(context.Background(), "PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;", nil)
 		return err
 	})
 }
