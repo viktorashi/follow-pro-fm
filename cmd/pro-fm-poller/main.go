@@ -172,6 +172,17 @@ func main() {
 		SendVoiceNote: func(phone string, audioPath string) error {
 			return poller.SendVoiceNote(wappClient, phone, audioPath)
 		},
+		DisconnectWhatsApp: func() {
+			if wappClient != nil {
+				wappClient.Disconnect()
+			}
+		},
+		ConnectWhatsApp: func() error {
+			if wappClient != nil {
+				return wappClient.Connect()
+			}
+			return nil
+		},
 	}
 	p.Start()
 }

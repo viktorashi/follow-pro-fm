@@ -65,19 +65,30 @@ func (c Campaign) IsActive(now time.Time) bool {
 }
 
 type Poller struct {
-	APIURL          string
-	PollInterval    time.Duration
-	ActiveCampaigns []Campaign
-	TargetPhone     string
-	SendVoiceNote   func(phone string, audioPath string) error
-	StateMgr        *StateManager
-	Alerter         Alerter
-	AudiosDir       string
-	DBMgr           *DBManager
-	BaseURL         string
+	APIURL             string
+	PollInterval       time.Duration
+	ActiveCampaigns    []Campaign
+	TargetPhone        string
+	SendVoiceNote      func(phone string, audioPath string) error
+	DisconnectWhatsApp func()
+	ConnectWhatsApp    func() error
+	StateMgr           *StateManager
+	Alerter            Alerter
+	AudiosDir          string
+	DBMgr              *DBManager
+	BaseURL            string
 
 	matchesToday int
 	lastCheckDay int
+}
+
+func (p *Poller) hasActiveCampaign(now time.Time) bool {
+	for _, c := range p.ActiveCampaigns {
+		if c.IsActive(now) {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Poller) getNowPlaying() (SongInfo, error) {
@@ -163,10 +174,46 @@ func (p *Poller) Start() {
 	// Trigger immediately on start
 	p.checkSong(&currentSong, time.Now())
 
+	var isSleeping bool
+
 	// Cron-like polling
 	for {
 		<-ticker.C
-		p.checkSong(&currentSong, time.Now())
+		now := time.Now()
+
+		if p.StateMgr != nil && p.StateMgr.Get().KillSwitchActive {
+			continue // If killed, just sleep
+		}
+
+		if !p.hasActiveCampaign(now) {
+			if !isSleeping {
+				log.Println("[INFO] No active campaigns right now. Entering sleep mode (disconnecting WhatsApp and pausing ProFM polling).")
+				if p.DisconnectWhatsApp != nil {
+					p.DisconnectWhatsApp()
+				}
+				p.StateMgr.Update(func(s *AppState) {
+					s.Status = StatusSleeping
+					s.WhatsAppConnected = false
+				})
+				isSleeping = true
+			}
+			continue
+		}
+
+		if isSleeping {
+			log.Println("[INFO] Campaign is now active! Waking up (reconnecting WhatsApp and resuming polling).")
+			if p.ConnectWhatsApp != nil {
+				if err := p.ConnectWhatsApp(); err != nil {
+					log.Printf("[ERROR] Failed to reconnect WhatsApp: %v\n", err)
+				}
+			}
+			p.StateMgr.Update(func(s *AppState) {
+				s.Status = StatusPolling
+			})
+			isSleeping = false
+		}
+
+		p.checkSong(&currentSong, now)
 	}
 }
 
