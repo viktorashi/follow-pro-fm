@@ -82,12 +82,12 @@ func main() {
 	}
 
 	// 5. Initialize Alerters
-	tgAlerter := poller.NewTelegramAlerter(telegramToken, telegramChatID, envName)
+	tgAlerter := poller.NewTelegramAlerter(telegramToken, telegramChatID)
 	emailFrom := os.Getenv("EMAIL_FROM")
 	if emailFrom == "" {
 		emailFrom = "notifications@yourdomain.com"
 	}
-	emAlerter := poller.NewEmailAlerter(sendgridKey, emailFrom, "/data/trusted-emails.txt", envName)
+	emAlerter := poller.NewEmailAlerter(sendgridKey, emailFrom, "/data/trusted-emails.txt")
 	alerter := poller.NewMultiAlerter(tgAlerter, emAlerter)
 
 	// 6. Initialize Auth Manager
@@ -165,6 +165,7 @@ func main() {
 		AudiosDir:       audiosDir,
 		DBMgr:           dbMgr,
 		BaseURL:         baseURL,
+		EnvName:         envName,
 		SendVoiceNote: func(phone string, audioPath string) error {
 			return poller.SendVoiceNote(wappClient, phone, audioPath)
 		},

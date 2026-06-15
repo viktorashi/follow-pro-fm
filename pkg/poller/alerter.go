@@ -70,14 +70,12 @@ func (m *MultiAlerter) AlertSuccess(event AlertEvent) error {
 type TelegramAlerter struct {
 	BotToken string
 	ChatID   string
-	Env      string
 }
 
-func NewTelegramAlerter(token, chatID, env string) *TelegramAlerter {
+func NewTelegramAlerter(token, chatID string) *TelegramAlerter {
 	return &TelegramAlerter{
 		BotToken: token,
 		ChatID:   chatID,
-		Env:      env,
 	}
 }
 
@@ -88,13 +86,8 @@ func (t *TelegramAlerter) send(prefix string, event AlertEvent) error {
 
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", t.BotToken)
 
-	envPrefix := ""
-	if t.Env != "prod" && t.Env != "production" && t.Env != "" {
-		envPrefix = fmt.Sprintf("[%s] ", strings.ToUpper(t.Env))
-	}
-
 	// Format Telegram message
-	msg := fmt.Sprintf("<b>%s%s %s</b>\n\n%s", envPrefix, prefix, event.Title, event.Message)
+	msg := fmt.Sprintf("<b>%s %s</b>\n\n%s", prefix, event.Title, event.Message)
 	if event.ActionURL != "" {
 		label := event.ActionLabel
 		if label == "" {
@@ -139,10 +132,9 @@ type EmailAlerter struct {
 	Client      *sendgrid.Client
 	FromEmail   string
 	TargetsFile string // Path to file containing trusted emails
-	Env         string
 }
 
-func NewEmailAlerter(apiKey string, from string, targetsFile string, env string) *EmailAlerter {
+func NewEmailAlerter(apiKey string, from string, targetsFile string) *EmailAlerter {
 	if apiKey == "" {
 		return &EmailAlerter{} // Disabled
 	}
@@ -152,7 +144,6 @@ func NewEmailAlerter(apiKey string, from string, targetsFile string, env string)
 		Client:      client,
 		FromEmail:   from,
 		TargetsFile: targetsFile,
-		Env:         env,
 	}
 }
 
@@ -175,13 +166,8 @@ func (e *EmailAlerter) send(prefix string, event AlertEvent) error {
 		return nil // No one to email
 	}
 
-	envPrefix := ""
-	if e.Env != "prod" && e.Env != "production" && e.Env != "" {
-		envPrefix = fmt.Sprintf("[%s] ", strings.ToUpper(e.Env))
-	}
-
 	from := mail.NewEmail("ProFM Poller", e.FromEmail)
-	subject := envPrefix + prefix + " " + event.Title
+	subject := prefix + " " + event.Title
 
 	// Create a plain text version of the HTML message
 	plainTextContent := strings.ReplaceAll(event.Message, "<br>", "\n")
