@@ -69,10 +69,6 @@ func (w *SSELogWriter) Write(p []byte) (n int, err error) {
 	// 2. Process for SSE
 	w.mu.Lock()
 	hasSubs := w.hasLogsSubs
-	if !hasSubs {
-		w.mu.Unlock()
-		return n, err
-	}
 
 	// Split into lines
 	lines := bytes.Split(p, []byte("\n"))
@@ -94,8 +90,10 @@ func (w *SSELogWriter) Write(p []byte) (n int, err error) {
 			w.bufIndex = (w.bufIndex + 1) % LogBufferSize
 		}
 
-		// Broadcast
-		w.broadcaster.Broadcast("log", lineCopy)
+		// Broadcast only if we have active subscribers
+		if hasSubs {
+			w.broadcaster.Broadcast("log", lineCopy)
+		}
 	}
 	w.mu.Unlock()
 

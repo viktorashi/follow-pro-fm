@@ -171,6 +171,10 @@ func (s *TelemetryServer) streamEvents(c *echo.Context, isLogs bool) error {
 	c.Response().Header().Set(echo.HeaderContentType, "text/event-stream")
 	c.Response().Header().Set(echo.HeaderCacheControl, "no-cache")
 	c.Response().Header().Set(echo.HeaderConnection, "keep-alive")
+	c.Response().WriteHeader(http.StatusOK)
+	if f, ok := c.Response().(http.Flusher); ok {
+		f.Flush()
+	}
 	if isLogs && s.logWriter != nil {
 		s.logWriter.AddSubscriber()
 		defer s.logWriter.RemoveSubscriber()
