@@ -53,8 +53,14 @@ func initSchema(db *sql.DB) error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			artist TEXT NOT NULL,
 			title TEXT NOT NULL,
-			played_date TEXT NOT NULL,
-			UNIQUE(artist, title, played_date)
+			played_datetime TEXT NOT NULL,
+			UNIQUE(artist, title, played_datetime)
+		);`,
+		`CREATE TABLE IF NOT EXISTS radio_log (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			artist TEXT NOT NULL,
+			title TEXT NOT NULL,
+			played_datetime TEXT NOT NULL
 		);`,
 		`CREATE TABLE IF NOT EXISTS app_settings (
 			key TEXT PRIMARY KEY,
@@ -80,7 +86,7 @@ func (m *DBManager) IsTrustedEmail(ctx context.Context, email string) (bool, err
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Create the file empty if it doesn't exist
-			_ = os.WriteFile(m.trustedEmailsPath, []byte(""), 0644)
+			_ = os.WriteFile(m.trustedEmailsPath, []byte(""), 0o644)
 			return false, nil
 		}
 		return false, fmt.Errorf("failed to read trusted emails file: %w", err)
@@ -97,24 +103,67 @@ func (m *DBManager) IsTrustedEmail(ctx context.Context, email string) (bool, err
 	return false, nil
 }
 
-// HasSongPlayedToday checks if the given song has already been recorded as played today.
-func (m *DBManager) HasSongPlayedToday(ctx context.Context, artist, title string, date time.Time) (bool, error) {
-	dateStr := date.Format("2006-01-02")
-	var id int
-	err := m.db.QueryRowContext(ctx, "SELECT id FROM played_songs WHERE artist = ? AND title = ? AND played_date = ?", artist, title, dateStr).Scan(&id)
+func (m *DBManager) LogRadioSong(ctx context.Context, artist, title string, date time.Time) error {
+	dateStr := date.Format("2006-01-02 15:04:05")
+	_, err := m.db.ExecContext(ctx, "INSERT INTO radio_log (artist, title, played_datetime) VALUES (?, ?, ?)", artist, title, dateStr)
+	return err
+}
+
+func (m *DBManager) WasSongInLastNPlays(ctx context.Context, artist, title string, n int) (bool, error) {
+	// OFFSET 1 to exclude the current song which was just logged
+	rows, err := m.db.QueryContext(ctx, "SELECT artist, title FROM radio_log ORDER BY id DESC LIMIT ? OFFSET 1", n)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return false, nil
-		}
 		return false, err
 	}
-	return true, nil
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var rowArtist, rowTitle string
+		if err := rows.Scan(&rowArtist, &rowTitle); err != nil {
+			return false, err
+		}
+		if rowArtist == artist && rowTitle == title {
+			return true, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	return false, nil
+}
+
+type RadioLog struct {
+	ID             int
+	Artist         string
+	Title          string
+	PlayedDatetime string
+}
+
+func (m *DBManager) GetRadioLogs(ctx context.Context, limit int) ([]RadioLog, error) {
+	rows, err := m.db.QueryContext(ctx, "SELECT id, artist, title, played_datetime FROM radio_log ORDER BY id DESC LIMIT ?", limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var logs []RadioLog
+	for rows.Next() {
+		var l RadioLog
+		if err := rows.Scan(&l.ID, &l.Artist, &l.Title, &l.PlayedDatetime); err != nil {
+			return nil, err
+		}
+		logs = append(logs, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return logs, nil
 }
 
 // RecordSongPlay records that a song was played today.
 func (m *DBManager) RecordSongPlay(ctx context.Context, artist, title string, date time.Time) error {
-	dateStr := date.Format("2006-01-02")
-	_, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO played_songs (artist, title, played_date) VALUES (?, ?, ?)", artist, title, dateStr)
+	dateStr := date.Format("2006-01-02 15:04")
+	_, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO played_songs (artist, title, played_datetime) VALUES (?, ?, ?)", artist, title, dateStr)
 	return err
 }
 
