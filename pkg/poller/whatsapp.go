@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -88,10 +89,12 @@ func InitWhatsApp(dbPath string, stateMgr *StateManager, alerter Alerter, baseUR
 						}
 
 						if !alertSent && alerter != nil && baseURL != "" {
-							_ = alerter.AlertCritical(fmt.Sprintf(
-								"WhatsApp disconnected! Action required immediately.\n\nScan the QR by opening the Live Dashboard:\n<a href='%s'>Live Dashboard</a>",
-								baseURL,
-							))
+							_ = alerter.AlertCritical(AlertEvent{
+								Title:       "WhatsApp Disconnected",
+								Message:     "WhatsApp disconnected! Action required immediately. Scan the QR code on the dashboard.",
+								ActionLabel: "Open Live Dashboard",
+								ActionURL:   baseURL,
+							})
 							alertSent = true
 						}
 
@@ -195,12 +198,21 @@ func SendVoiceNote(client *whatsmeow.Client, phone string, audioPath string) err
 		return fmt.Errorf("whatsapp client is not fully connected or logged in after waiting")
 	}
 
-	// Spoof the file modification time so WhatsApp sees it as created just now
-	now := time.Now()
-	_ = os.Chtimes(audioPath, now, now)
+	// 1. Remux the OGG file to inject current creation_time and guarantee a unique SHA256 hash
+	// so WhatsApp doesn't deduplicate it and instead shows it as recorded right now.
+	now := time.Now().UTC().Format(time.RFC3339)
+	tmpPath := fmt.Sprintf("%s.tmp.ogg", audioPath)
+
+	cmd := exec.Command("ffmpeg", "-y", "-i", audioPath, "-c", "copy", "-metadata", "creation_time="+now, tmpPath)
+	if err := cmd.Run(); err != nil {
+		fmt.Printf("   ⚠️ Failed to inject metadata with ffmpeg, falling back to original: %v\n", err)
+		tmpPath = audioPath
+	} else {
+		defer func() { _ = os.Remove(tmpPath) }()
+	}
 
 	// Read audio file
-	audioData, err := os.ReadFile(audioPath)
+	audioData, err := os.ReadFile(tmpPath)
 	if err != nil {
 		return fmt.Errorf("failed to read audio file at %s: %w", audioPath, err)
 	}

@@ -86,6 +86,7 @@ func (s *TelemetryServer) registerRoutes() {
 	protected := s.echo.Group("", s.authMgr.RequireAuth())
 	protected.GET("/", s.handleDashboardView)
 	protected.GET("/logs", s.handleLogsView)
+	protected.GET("/radio-logs", s.handleRadioLogsView)
 	protected.GET("/data", s.handleDataView)
 	protected.Static("/raw-data", s.dataDir)
 	protected.GET("/events/dashboard", s.handleDashboardStream)
@@ -142,6 +143,17 @@ func (s *TelemetryServer) handleDashboardView(c *echo.Context) error {
 
 func (s *TelemetryServer) handleLogsView(c *echo.Context) error {
 	return Render(c, http.StatusOK, LogsPage())
+}
+
+func (s *TelemetryServer) handleRadioLogsView(c *echo.Context) error {
+	var logs []RadioLog
+	if s.dbMgr != nil {
+		l, err := s.dbMgr.GetRadioLogs(c.Request().Context(), 100)
+		if err == nil {
+			logs = l
+		}
+	}
+	return Render(c, http.StatusOK, RadioLogsPage(logs))
 }
 
 func (s *TelemetryServer) handleQRImage(c *echo.Context) error {

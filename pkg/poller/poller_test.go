@@ -63,6 +63,24 @@ func TestCampaign_IsActive(t *testing.T) {
 	}
 }
 
+func TestPoller_hasActiveCampaign(t *testing.T) {
+	p := &Poller{
+		ActiveCampaigns: []Campaign{
+			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
+		},
+	}
+
+	activeTime := time.Date(2026, time.June, 17, 12, 0, 0, 0, time.UTC) // Wed
+	if !p.hasActiveCampaign(activeTime) {
+		t.Errorf("Expected hasActiveCampaign to be true for Wed 12:00")
+	}
+
+	inactiveTime := time.Date(2026, time.June, 20, 12, 0, 0, 0, time.UTC) // Sat
+	if p.hasActiveCampaign(inactiveTime) {
+		t.Errorf("Expected hasActiveCampaign to be false for Saturday")
+	}
+}
+
 func TestCampaign_IsActive_BadDates(t *testing.T) {
 	c := Campaign{
 		StartDate: "bad-date",
@@ -246,12 +264,20 @@ func TestPoller_checkSong(t *testing.T) {
 			wantVoiceCalls: 1,
 		},
 		{
-			name:           "Same song playing again, should not trigger",
+			name:           "Same song playing again (should trigger if DBMgr is not tracking, but DBMgr will track now so it should skip)",
 			mockArtist:     "BTS",
 			mockTitle:      "Dynamite",
-			currentSong:    &SongInfo{Artist: "BTS", Title: "Dynamite"},
+			currentSong:    &SongInfo{Artist: "BTS", Title: "Dynamite"}, // Handled by currentSong pointer logic
 			wantMatches:    0,
 			wantVoiceCalls: 0,
+		},
+		{
+			name:           "Different song but same campaign artist (trigger)",
+			mockArtist:     "BTS",
+			mockTitle:      "Butter",
+			currentSong:    &SongInfo{},
+			wantMatches:    1,
+			wantVoiceCalls: 1,
 		},
 		{
 			name:           "API Error, should just return early",
@@ -287,6 +313,8 @@ func TestPoller_checkSong(t *testing.T) {
 			defer server.Close()
 
 			voiceCalls := 0
+			dbMgr, _ := NewDBManager(":memory:")
+
 			audiosDir := t.TempDir()
 			_ = os.WriteFile(audiosDir+"/test.ogg", []byte("fake"), 0644)
 			poller := &Poller{
@@ -299,6 +327,7 @@ func TestPoller_checkSong(t *testing.T) {
 				StateMgr:    NewStateManager(),
 				Alerter:     NewMultiAlerter(),
 				AudiosDir:   audiosDir,
+				DBMgr:       dbMgr,
 				SendVoiceNote: func(phone string, audioPath string) error {
 					voiceCalls++
 					if tt.simulateVoiceError {
@@ -317,6 +346,85 @@ func TestPoller_checkSong(t *testing.T) {
 				t.Errorf("voiceCalls = %v, want %v", voiceCalls, tt.wantVoiceCalls)
 			}
 		})
+	}
+}
+
+func TestPoller_checkSong_Deduplication(t *testing.T) {
+	activeTime := time.Date(2026, time.June, 17, 12, 0, 0, 0, time.UTC)
+	dbMgr, _ := NewDBManager(":memory:")
+	audiosDir := t.TempDir()
+	_ = os.WriteFile(audiosDir+"/test1.ogg", []byte("fake"), 0644)
+	_ = os.WriteFile(audiosDir+"/test2.ogg", []byte("fake"), 0644)
+
+	voiceCalls := 0
+	poller := &Poller{
+		APIURL:       "",
+		PollInterval: 1 * time.Millisecond,
+		ActiveCampaigns: []Campaign{
+			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
+		},
+		TargetPhone: "+40770661491",
+		StateMgr:    NewStateManager(),
+		Alerter:     NewMultiAlerter(),
+		AudiosDir:   audiosDir,
+		DBMgr:       dbMgr,
+		SendVoiceNote: func(phone string, audioPath string) error {
+			voiceCalls++
+			return nil
+		},
+	}
+
+	currentSong := &SongInfo{}
+	// Helper to simulate a song play
+	simulateSong := func(artist, title string) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprintf(w, `{"data":{"epg":{"playerExtendedSongTitle":"%s","playerExtendedSongSubtitle":"%s"}}}`, artist, title)
+		}))
+		defer server.Close()
+		poller.APIURL = server.URL
+		poller.checkSong(currentSong, activeTime)
+	}
+
+	// 1. Play BTS - Dynamite (should trigger, voiceCalls = 1)
+	simulateSong("BTS", "Dynamite")
+	if voiceCalls != 1 {
+		t.Errorf("Expected 1 voice call for BTS Dynamite, got %d", voiceCalls)
+	}
+
+	// 2. Play Kamrad - BE MINE (No campaign, voiceCalls = 1)
+	simulateSong("Kamrad", "BE MINE")
+	if voiceCalls != 1 {
+		t.Errorf("Expected 1 voice call, got %d", voiceCalls)
+	}
+
+	// 3. Play BTS - Dynamite again (It was 1 song ago, so it's in the last 2 plays, should SKIP, voiceCalls = 1)
+	simulateSong("BTS", "Dynamite")
+	if voiceCalls != 1 {
+		t.Errorf("Expected BTS Dynamite to be deduplicated! Voice calls should still be 1, got %d", voiceCalls)
+	}
+
+	// 4. Play Ed Sheeran - Shape of You (No campaign, voiceCalls = 1)
+	simulateSong("Ed Sheeran", "Shape of You")
+
+	// 5. Play BTS - Dynamite again.
+	// Now the history is:
+	// Ed Sheeran - Shape of You (1 play ago)
+	// BTS - Dynamite (2 plays ago)
+	// It's still in the last 2 plays! Should SKIP!
+	simulateSong("BTS", "Dynamite")
+	if voiceCalls != 1 {
+		t.Errorf("Expected BTS Dynamite to be deduplicated again (2 plays ago)! Voice calls got %d", voiceCalls)
+	}
+
+	// 6. Play another song to push BTS out of top 2
+	simulateSong("The Weeknd", "Blinding Lights")
+	simulateSong("Bruno Mars", "Leave the Door Open")
+
+	// History: Bruno Mars (1), The Weeknd (2).
+	// 7. Play BTS - Dynamite. Should trigger!
+	simulateSong("BTS", "Dynamite")
+	if voiceCalls != 2 {
+		t.Errorf("Expected BTS Dynamite to trigger again since it's out of last 2 plays! Voice calls got %d", voiceCalls)
 	}
 }
 

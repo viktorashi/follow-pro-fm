@@ -14,12 +14,6 @@ import (
 
 const apiURL = "https://api.profm.ro/api/v1/radios/article/2918?appVersion=1.0.0&platform=android"
 
-var activeCampaigns = []poller.Campaign{
-	{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
-	{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana"},
-	{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd"},
-}
-
 func main() {
 	// 1. Env Vars
 	targetPhone := os.Getenv("TARGET_PHONE")
@@ -82,13 +76,18 @@ func main() {
 	logWriter := poller.NewSSELogWriter(os.Stdout, sseBroadcaster)
 	log.SetOutput(logWriter)
 
+	envName := os.Getenv("ENVIRONMENT")
+	if envName == "" {
+		envName = "prod"
+	}
+
 	// 5. Initialize Alerters
-	tgAlerter := poller.NewTelegramAlerter(telegramToken, telegramChatID)
+	tgAlerter := poller.NewTelegramAlerter(telegramToken, telegramChatID, envName, baseURL)
 	emailFrom := os.Getenv("EMAIL_FROM")
 	if emailFrom == "" {
 		emailFrom = "notifications@yourdomain.com"
 	}
-	emAlerter := poller.NewEmailAlerter(sendgridKey, emailFrom, "/data/trusted-emails.txt")
+	emAlerter := poller.NewEmailAlerter(sendgridKey, emailFrom, "/data/trusted-emails.txt", envName, baseURL)
 	alerter := poller.NewMultiAlerter(tgAlerter, emAlerter)
 
 	// 6. Initialize Auth Manager
@@ -148,6 +147,13 @@ func main() {
 	}
 	defer wappClient.Disconnect()
 
+	// Load campaigns in memory
+	activeCampaigns := []poller.Campaign{
+		{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
+		{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana"},
+		{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd"},
+	}
+
 	// 10. Start Poller
 	p := &poller.Poller{
 		APIURL:          apiURL,
@@ -158,8 +164,20 @@ func main() {
 		Alerter:         alerter,
 		AudiosDir:       audiosDir,
 		DBMgr:           dbMgr,
+		BaseURL:         baseURL,
 		SendVoiceNote: func(phone string, audioPath string) error {
 			return poller.SendVoiceNote(wappClient, phone, audioPath)
+		},
+		DisconnectWhatsApp: func() {
+			if wappClient != nil {
+				wappClient.Disconnect()
+			}
+		},
+		ConnectWhatsApp: func() error {
+			if wappClient != nil {
+				return wappClient.Connect()
+			}
+			return nil
 		},
 	}
 	p.Start()

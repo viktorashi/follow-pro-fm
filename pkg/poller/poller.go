@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -64,18 +65,30 @@ func (c Campaign) IsActive(now time.Time) bool {
 }
 
 type Poller struct {
-	APIURL          string
-	PollInterval    time.Duration
-	ActiveCampaigns []Campaign
-	TargetPhone     string
-	SendVoiceNote   func(phone string, audioPath string) error
-	StateMgr        *StateManager
-	Alerter         Alerter
-	AudiosDir       string
-	DBMgr           *DBManager
+	APIURL             string
+	PollInterval       time.Duration
+	ActiveCampaigns    []Campaign
+	TargetPhone        string
+	SendVoiceNote      func(phone string, audioPath string) error
+	DisconnectWhatsApp func()
+	ConnectWhatsApp    func() error
+	StateMgr           *StateManager
+	Alerter            Alerter
+	AudiosDir          string
+	DBMgr              *DBManager
+	BaseURL            string
 
 	matchesToday int
 	lastCheckDay int
+}
+
+func (p *Poller) hasActiveCampaign(now time.Time) bool {
+	for _, c := range p.ActiveCampaigns {
+		if c.IsActive(now) {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Poller) getNowPlaying() (SongInfo, error) {
@@ -139,9 +152,14 @@ func (p *Poller) getNowPlaying() (SongInfo, error) {
 }
 
 func (p *Poller) Start() {
-	_ = p.Alerter.AlertInfo("ProFM Jaguare Poller started! Fetching Now Playing...")
-	fmt.Println("Fetching Now Playing from Pro FM...")
-	fmt.Println(strings.Repeat("-", 40))
+	_ = p.Alerter.AlertInfo(AlertEvent{
+		Title:       "Service Started",
+		Message:     "ProFM Jaguare Poller started! Fetching Now Playing...",
+		ActionLabel: "View Dashboard",
+		ActionURL:   p.BaseURL,
+	})
+	log.Println("Fetching Now Playing from Pro FM...")
+	log.Println(strings.Repeat("-", 40))
 
 	var currentSong SongInfo
 
@@ -156,10 +174,46 @@ func (p *Poller) Start() {
 	// Trigger immediately on start
 	p.checkSong(&currentSong, time.Now())
 
+	var isSleeping bool
+
 	// Cron-like polling
 	for {
 		<-ticker.C
-		p.checkSong(&currentSong, time.Now())
+		now := time.Now()
+
+		if p.StateMgr != nil && p.StateMgr.Get().KillSwitchActive {
+			continue // If killed, just sleep
+		}
+
+		if !p.hasActiveCampaign(now) {
+			if !isSleeping {
+				log.Println("[INFO] No active campaigns right now. Entering sleep mode (disconnecting WhatsApp and pausing ProFM polling).")
+				if p.DisconnectWhatsApp != nil {
+					p.DisconnectWhatsApp()
+				}
+				p.StateMgr.Update(func(s *AppState) {
+					s.Status = StatusSleeping
+					s.WhatsAppConnected = false
+				})
+				isSleeping = true
+			}
+			continue
+		}
+
+		if isSleeping {
+			log.Println("[INFO] Campaign is now active! Waking up (reconnecting WhatsApp and resuming polling).")
+			if p.ConnectWhatsApp != nil {
+				if err := p.ConnectWhatsApp(); err != nil {
+					log.Printf("[ERROR] Failed to reconnect WhatsApp: %v\n", err)
+				}
+			}
+			p.StateMgr.Update(func(s *AppState) {
+				s.Status = StatusPolling
+			})
+			isSleeping = false
+		}
+
+		p.checkSong(&currentSong, now)
 	}
 }
 
@@ -177,11 +231,17 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 	}
 
 	if song != *currentSong {
-		fmt.Printf("[%s] %s - %s\n", now.Format("15:04:05"), song.Artist, song.Title)
+		log.Printf("[%s] %s - %s", now.Format("15:04:05"), song.Artist, song.Title)
+
+		if p.DBMgr != nil {
+			if err := p.DBMgr.LogRadioSong(context.Background(), song.Artist, song.Title, now); err != nil {
+				log.Printf("   ⚠️ DB Log Error: %v\n", err)
+			}
+		}
 
 		// Abort immediately if the bot has been permanently killed
 		if p.StateMgr != nil && p.StateMgr.Get().KillSwitchActive {
-			fmt.Printf("   ⛔️ KILL SWITCH ACTIVE! Ignoring all campaign matches for '%s'.\n", song.Artist)
+			log.Printf("   ⛔️ KILL SWITCH ACTIVE! Ignoring all campaign matches for '%s'.", song.Artist)
 			return
 		}
 
@@ -193,18 +253,23 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 					titleKeywordMatch := strings.Contains(strings.ToLower(song.Title), followProFMKeyword)
 					if artistMatch || titleKeywordMatch {
 						if p.DBMgr != nil {
-							played, err := p.DBMgr.HasSongPlayedToday(context.Background(), song.Artist, song.Title, now)
+							played, err := p.DBMgr.WasSongInLastNPlays(context.Background(), song.Artist, song.Title, 2)
 							if err != nil {
 								log.Printf("   ⚠️ DB Check Error: %v\n", err)
 							} else if played {
-								fmt.Printf("   [INFO] Song '%s - %s' already triggered a campaign today. Skipping duplicate.\n", song.Artist, song.Title)
+								log.Printf("   [INFO] Song '%s - %s' played within the last 2 songs. Skipping duplicate.", song.Artist, song.Title)
 								break // break out of campaign loop
 							}
 						}
 						p.matchesToday++
 						msg := fmt.Sprintf("🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/%d for today)", song.Artist, p.matchesToday, MaxDailyMatches)
-						fmt.Println("   " + msg)
-						if alertErr := p.Alerter.AlertInfo(msg); alertErr != nil {
+						log.Println("   " + msg)
+						if alertErr := p.Alerter.AlertInfo(AlertEvent{
+							Title:       "Campaign Alert",
+							Message:     msg,
+							ActionLabel: "View Dashboard",
+							ActionURL:   p.BaseURL,
+						}); alertErr != nil {
 							log.Printf("   ⚠️ Alerter warning: %v\n", alertErr)
 						}
 
@@ -218,7 +283,13 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 								s.Status = StatusAudioExhausted
 								s.LastError = "No unused audios available!"
 							})
-							_ = p.Alerter.AlertCritical("AUDIO POOL EXHAUSTED! Cannot send voice note for " + song.Artist)
+							log.Printf("   ❌ NO UNUSED AUDIO FOUND FOR %s!", song.Artist)
+							_ = p.Alerter.AlertCritical(AlertEvent{
+								Title:       "AUDIO POOL EXHAUSTED",
+								Message:     "Cannot send voice note for " + song.Artist + "\nNo unused audio files found in " + p.AudiosDir,
+								ActionLabel: "View Dashboard",
+								ActionURL:   p.BaseURL,
+							})
 							break
 						}
 
@@ -227,7 +298,7 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 						})
 
 						// Trigger actual submission (WhatsApp Voice note)
-						fmt.Println("   Sending WhatsApp voice note using: " + audioFile)
+						log.Println("   Sending WhatsApp voice note using: " + audioFile)
 						err = p.SendVoiceNote(p.TargetPhone, audioFile)
 						if err != nil {
 							log.Printf("   ❌ Error sending voice note: %v\n", err)
@@ -241,7 +312,13 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 								_ = p.DBMgr.RecordSongPlay(context.Background(), song.Artist, song.Title, now)
 							}
 							_ = MarkAudioUsed(audioFile)
-							_ = p.Alerter.AlertSuccess("Voice note sent successfully for " + song.Artist)
+							log.Println("   ✅ Voice note sent successfully!")
+							_ = p.Alerter.AlertSuccess(AlertEvent{
+								Title:       "Voice Note Sent",
+								Message:     fmt.Sprintf("Artist: %s\nSong: %s\nAudio File: %s", song.Artist, song.Title, filepath.Base(audioFile)),
+								ActionLabel: "View Dashboard",
+								ActionURL:   p.BaseURL,
+							})
 							unused, used := GetAudioStats(p.AudiosDir)
 							p.StateMgr.Update(func(s *AppState) {
 								s.Status = StatusPolling
@@ -255,7 +332,7 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 				}
 			}
 		} else {
-			fmt.Printf("   [INFO] Daily limit of %d matches reached. Ignoring further campaign matches for today.\n", MaxDailyMatches)
+			log.Printf("   [INFO] Daily limit of %d matches reached. Ignoring further campaign matches for today.", MaxDailyMatches)
 		}
 
 		*currentSong = song
