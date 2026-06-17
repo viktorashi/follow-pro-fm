@@ -1,12 +1,10 @@
 ---
-name: speckit-agent-context-update
 description: Refresh the managed Spec Kit section in the coding agent context file
-compatibility: Requires spec-kit project structure with .specify/ directory
-metadata:
-  author: github-spec-kit
-  source: agent-context:commands/speckit.agent-context.update.md
 ---
 
+
+<!-- Extension: agent-context -->
+<!-- Config: .specify/extensions/agent-context/ -->
 # Update Coding Agent Context
 
 Refresh the managed Spec Kit section inside the active coding agent's context/instruction file (e.g. `CLAUDE.md`, `.github/copilot-instructions.md`, `AGENTS.md`).

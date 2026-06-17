@@ -8,13 +8,13 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "agy": [
-          "speckit.agent-context.update"
-        ],
         "codex": [
           "speckit.agent-context.update"
         ],
         "zed": [
+          "speckit.agent-context.update"
+        ],
+        "copilot": [
           "speckit.agent-context.update"
         ]
       },
