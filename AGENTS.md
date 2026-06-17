@@ -21,3 +21,8 @@ The dates are given in main as so:
 ```
 
 Also these rules, which you must follow strictly are in: `rulez/` in some PDF's or whatever else i end up adding in there.
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+<!-- SPECKIT END -->
