@@ -202,15 +202,23 @@ func (p *Poller) Start() {
 
 		if isSleeping {
 			log.Println("[INFO] Campaign is now active! Waking up (reconnecting WhatsApp and resuming polling).")
+			connectErr := error(nil)
 			if p.ConnectWhatsApp != nil {
-				if err := p.ConnectWhatsApp(); err != nil {
-					log.Printf("[ERROR] Failed to reconnect WhatsApp: %v\n", err)
+				connectErr = p.ConnectWhatsApp()
+				if connectErr != nil {
+					log.Printf("[ERROR] Failed to reconnect WhatsApp: %v\n", connectErr)
 				}
 			}
-			p.StateMgr.Update(func(s *AppState) {
-				s.Status = StatusPolling
-			})
+
 			isSleeping = false
+
+			// Only transition to Polling state if there wasn't a connection error.
+			// If there was an error, the WhatsApp event handler likely set StatusError or StatusPairingRequired.
+			if connectErr == nil {
+				p.StateMgr.Update(func(s *AppState) {
+					s.Status = StatusPolling
+				})
+			}
 		}
 
 		p.checkSong(&currentSong, now)
