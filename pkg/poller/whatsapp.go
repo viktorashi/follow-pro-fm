@@ -16,6 +16,7 @@ import (
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
+	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
 	"modernc.org/sqlite"
@@ -49,6 +50,25 @@ func InitWhatsApp(dbPath string, stateMgr *StateManager, alerter Alerter, baseUR
 
 	clientLog := waLog.Stdout("Client", "WARN", true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
+
+	// Add event handlers to ensure we're processing E2E and presence
+	client.AddEventHandler(func(evt interface{}) {
+		switch evt.(type) {
+		case *events.Connected:
+			// Tell WhatsApp servers we are online.
+			// Crucial for E2E prekey setups and for avoiding "Waiting for this message".
+			_ = client.SendPresence(context.Background(), types.PresenceAvailable)
+		case *events.OfflineSyncCompleted:
+			// You could log or wait on this specifically, but PresenceAvailable is usually enough.
+		case *events.LoggedOut:
+			if stateMgr != nil {
+				stateMgr.Update(func(s *AppState) {
+					s.Status = StatusPairingRequired
+					s.WhatsAppConnected = false
+				})
+			}
+		}
+	})
 
 	// Set a realistic device name
 	store.DeviceProps.Os = proto.String("Mac OS")
