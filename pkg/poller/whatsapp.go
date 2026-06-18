@@ -201,11 +201,8 @@ func normalizePhoneNumber(phone string) string {
 	return phone
 }
 
-// SendVoiceNote reads the ogg file, uploads it, and sends it as a PTT message (recorded voice note)
 func SendVoiceNote(client *whatsmeow.Client, phone string, audioPath string) error {
 	normalized := normalizePhoneNumber(phone)
-	targetJID := types.NewJID(normalized, types.DefaultUserServer)
-
 	// Wait up to 15 seconds for the client to be fully connected and logged in
 	for i := 0; i < 30; i++ {
 		if client.IsConnected() && client.IsLoggedIn() {
@@ -216,6 +213,16 @@ func SendVoiceNote(client *whatsmeow.Client, phone string, audioPath string) err
 
 	if !client.IsConnected() || !client.IsLoggedIn() {
 		return fmt.Errorf("whatsapp client is not fully connected or logged in after waiting")
+	}
+
+	// Resolve canonical JID (handles LID migration)
+	targetJID := types.NewJID(normalized, types.DefaultUserServer)
+	isOnWA, err := client.IsOnWhatsApp(context.Background(), []string{normalized})
+	if err == nil && len(isOnWA) > 0 && isOnWA[0].IsIn {
+		targetJID = isOnWA[0].JID
+		fmt.Printf("   ℹ️ Resolved WhatsApp JID for %s: %s\n", phone, targetJID.String())
+	} else {
+		fmt.Printf("   ⚠️ Failed to resolve canonical JID for %s: %v. Falling back to default JID.\n", phone, err)
 	}
 
 	// 1. Remux the OGG file to inject current creation_time and guarantee a unique SHA256 hash
