@@ -7,6 +7,7 @@ urls=(
   "https://app.codecov.io/gh/viktorashi/follow-pro-fm"
   "https://github.com/viktorashi/follow-pro-fm/actions/workflows/ci.yml"
   "https://app.sendgrid.com/email_logs"
+  "https://fly-metrics.net/d/fly-logs/fly-logs?orgId=1722175&var-app=pro-fm-poller"
 )
 
 for url in "${urls[@]}"; do
