@@ -97,5 +97,6 @@ func TestPoller_E2E(t *testing.T) {
 		t.Fatalf("Expected 1 match to trigger message, got %d", poller.matchesToday)
 	}
 
-	t.Log("E2E test complete! Check your phone for the voice note.")
+	t.Log("E2E test complete! Waiting 15 seconds to allow WhatsApp to sync E2E keys with recipient before disconnecting...")
+	time.Sleep(15 * time.Second)
 }
