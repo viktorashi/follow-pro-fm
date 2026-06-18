@@ -38,9 +38,9 @@ func TestPoller_E2E_NoWhatsApp(t *testing.T) {
 	// 2. Setup Alerters from .env
 	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
-	appEnv := os.Getenv("APP_ENV")
+	appEnv := os.Getenv("ENVIRONMENT")
 	if appEnv == "" {
-		appEnv = "dev"
+		appEnv = "dev" // keep tests explicitly dev unless overridden
 	}
 	tgAlerter := NewTelegramAlerter(telegramToken, telegramChatID, appEnv, "http://localhost:8080")
 
