@@ -76,6 +76,8 @@ type Poller struct {
 	StateMgr           *StateManager
 	Alerter            Alerter
 	AudiosDir          string
+	SignaturesDir      string
+	AudioBuffer        *CircularAudioBuffer
 	DBMgr              *DBManager
 	BaseURL            string
 
