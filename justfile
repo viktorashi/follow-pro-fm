@@ -20,21 +20,24 @@ setup-dev:
 lint:
     ./scripts/golangci-lint-shim.sh run
 
-test:
-    go test -count=1 ./pkg/...
+build-ffmpeg:
+    ./scripts/build_ffmpeg.sh
 
-test-cover:
-    go test -count=1 -coverprofile=coverage.out ./pkg/...
+test: build-ffmpeg
+    PATH="./bin:$$PATH" go test -count=1 ./pkg/...
+
+test-cover: build-ffmpeg
+    PATH="./bin:$$PATH" go test -count=1 -coverprofile=coverage.out ./pkg/...
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
 
-test-cover-e2e-nowapp:
-    go test -count=1 -v -coverprofile=coverage.out -tags="e2e,nowapp" ./pkg/...
+test-cover-e2e-nowapp: build-ffmpeg
+    PATH="./bin:$$PATH" go test -count=1 -v -coverprofile=coverage.out -tags="e2e,nowapp" ./pkg/...
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
 
-test-cover-e2e-all:
-    go test -count=1 -v -coverprofile=coverage.out -tags=e2e ./pkg/...
+test-cover-e2e-all: build-ffmpeg
+    PATH="./bin:$$PATH" go test -count=1 -v -coverprofile=coverage.out -tags=e2e ./pkg/...
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
 
