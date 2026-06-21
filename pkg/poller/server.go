@@ -3,6 +3,7 @@ package poller
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -92,6 +93,8 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.GET("/events/dashboard", s.handleDashboardStream)
 	protected.GET("/events/logs", s.handleLogsStream)
 	protected.POST("/api/kill-switch", s.handleKillSwitch)
+	protected.POST("/api/settings/gathering", s.handleToggleGathering)
+	protected.POST("/unreviewed/crop", s.handleUnreviewedCrop)
 }
 
 func (s *TelemetryServer) Start(addr string) error {
@@ -351,4 +354,30 @@ func (s *TelemetryServer) handleDataView(c *echo.Context) error {
 	t := DataViewer(files)
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextHTML)
 	return t.Render(c.Request().Context(), c.Response())
+}
+
+func (s *TelemetryServer) handleToggleGathering(c *echo.Context) error {
+	s.stateMgr.Update(func(state *AppState) {
+		state.GatheringSignatures = !state.GatheringSignatures
+	})
+	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
+}
+
+func (s *TelemetryServer) handleUnreviewedCrop(c *echo.Context) error {
+	filename := c.FormValue("filename")
+	var startBytes, endBytes int
+	_, _ = fmt.Sscanf(c.FormValue("start_bytes"), "%d", &startBytes)
+	_, _ = fmt.Sscanf(c.FormValue("end_bytes"), "%d", &endBytes)
+
+	unreviewedDir := filepath.Join(s.dataDir, "signatures", "unreviewed")
+	canonicalDir := filepath.Join(s.dataDir, "signatures", "canonical")
+
+	err := CropAndMarkCanonical(unreviewedDir, canonicalDir, filename, startBytes, endBytes)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	_ = os.Remove(filepath.Join(unreviewedDir, filename))
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
 }

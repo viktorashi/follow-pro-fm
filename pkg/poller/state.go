@@ -21,6 +21,7 @@ const (
 )
 
 type AppState struct {
+	GatheringSignatures bool
 	Status              AppStatus
 	WhatsAppConnected   bool
 	KillSwitchActive    bool

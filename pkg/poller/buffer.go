@@ -125,3 +125,19 @@ func (cab *CircularAudioBuffer) Trigger(futureDuration time.Duration, callback f
 		cab.recordBuf.Write(cab.buffer[:cab.writeIdx])
 	}
 }
+
+// ReadCurrentBuffer returns a copy of the current buffer contents in chronological order.
+func (cab *CircularAudioBuffer) ReadCurrentBuffer() []byte {
+	cab.mu.Lock()
+	defer cab.mu.Unlock()
+
+	out := make([]byte, len(cab.buffer))
+	if cab.totalWritten < int64(len(cab.buffer)) {
+		copy(out, cab.buffer[:cab.writeIdx])
+		return out[:cab.writeIdx]
+	}
+
+	copy(out, cab.buffer[cab.writeIdx:])
+	copy(out[len(cab.buffer)-cab.writeIdx:], cab.buffer[:cab.writeIdx])
+	return out
+}
