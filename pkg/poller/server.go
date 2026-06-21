@@ -357,6 +357,7 @@ func (s *TelemetryServer) handleDataView(c *echo.Context) error {
 	return t.Render(c.Request().Context(), c.Response())
 }
 
+// TODO: Implement UI for the RNG selection schedule
 func (s *TelemetryServer) handleGetSchedule(c *echo.Context) error {
 	schedules, err := s.dbMgr.GetAllSchedules(context.Background())
 	if err != nil {
@@ -370,6 +371,7 @@ type setScheduleReq struct {
 	TargetMatches string `json:"target_matches"`
 }
 
+// TODO: Implement UI for the RNG selection schedule
 func (s *TelemetryServer) handleSetSchedule(c *echo.Context) error {
 	var req setScheduleReq
 	if err := c.Bind(&req); err != nil {
