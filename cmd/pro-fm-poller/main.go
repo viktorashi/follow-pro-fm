@@ -154,6 +154,16 @@ func main() {
 		{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd"},
 	}
 
+	// Initialize Circular Audio Buffer for R3
+	streamURL := os.Getenv("PROFM_STREAM_URL")
+	if streamURL == "" {
+		streamURL = "http://edge76.rcs-rds.ro:84/profm/profm.mp3"
+	}
+	// 3 minutes at 128kbps is ~2.88MB, we use 8MB buffer
+	audioBuffer := poller.NewCircularAudioBuffer(streamURL, 8*1024*1024)
+	audioBuffer.Start()
+	defer audioBuffer.Stop()
+
 	// 10. Start Poller
 	p := &poller.Poller{
 		APIURL:          apiURL,
@@ -163,6 +173,8 @@ func main() {
 		StateMgr:        stateMgr,
 		Alerter:         alerter,
 		AudiosDir:       audiosDir,
+		SignaturesDir:   filepath.Join(filepath.Dir(audiosDir), "signatures"),
+		AudioBuffer:     audioBuffer,
 		DBMgr:           dbMgr,
 		BaseURL:         baseURL,
 		SendVoiceNote: func(phone string, audioPath string) error {
