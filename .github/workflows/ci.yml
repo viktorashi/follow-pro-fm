@@ -11,11 +11,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
           cache-dependency-path: "go.sum"
+
+      - name: Build minimal ffmpeg
+        run: |
+          ./scripts/build_ffmpeg.sh
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
 
       - name: Lint
         run: ./scripts/golangci-lint-shim.sh run
