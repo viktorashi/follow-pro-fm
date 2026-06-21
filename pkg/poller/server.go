@@ -24,6 +24,7 @@ type TelemetryServer struct {
 	logWriter   *SSELogWriter
 	dbMgr       *DBManager
 	dataDir     string
+	wappClient  WhatsAppClient
 }
 
 func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster, logWriter *SSELogWriter, dbMgr *DBManager, dataDir string) *TelemetryServer {
@@ -92,6 +93,10 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.GET("/events/dashboard", s.handleDashboardStream)
 	protected.GET("/events/logs", s.handleLogsStream)
 	protected.POST("/api/kill-switch", s.handleKillSwitch)
+
+	if os.Getenv("MOCK_WHATSAPP") == "true" {
+		s.echo.POST("/api/test/mock-scan", s.handleMockScan)
+	}
 }
 
 func (s *TelemetryServer) Start(addr string) error {
@@ -351,4 +356,20 @@ func (s *TelemetryServer) handleDataView(c *echo.Context) error {
 	t := DataViewer(files)
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextHTML)
 	return t.Render(c.Request().Context(), c.Response())
+}
+
+func (s *TelemetryServer) SetWhatsAppClient(client WhatsAppClient) {
+	s.wappClient = client
+}
+
+func (s *TelemetryServer) handleMockScan(c *echo.Context) error {
+	if s.wappClient == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "WhatsApp client not set"})
+	}
+	mock, ok := s.wappClient.(*MockWhatsAppClient)
+	if !ok {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "WhatsApp client is not a mock"})
+	}
+	mock.SimulatePairing()
+	return c.JSON(http.StatusOK, map[string]string{"status": "paired"})
 }

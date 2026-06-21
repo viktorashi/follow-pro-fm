@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -41,6 +42,10 @@ type Campaign struct {
 
 // IsActive checks if the current time falls within the campaign date period
 func (c Campaign) IsActive(now time.Time) bool {
+	if os.Getenv("BYPASS_CAMPAIGN_TIME_CHECKS") == "true" {
+		return true
+	}
+
 	// Global Rule 1: Monday to Friday only
 	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
 		return false
