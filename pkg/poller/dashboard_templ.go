@@ -702,7 +702,7 @@ func DataViewer(files []FileInfo) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "</tbody></table></div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "</tbody></table></div><div class=\"glass p-6 mt-6\"><h2 class=\"title-medium mb-4\">Upload Voice Note</h2><form hx-post=\"/api/upload\" hx-encoding=\"multipart/form-data\" hx-swap=\"none\" onsubmit=\"setTimeout(() => this.reset(), 1000); alert('Upload started!')\"><div class=\"flex flex-col gap-4\"><div><label class=\"block text-sm mb-1\">Target Phone Number</label> <input type=\"text\" name=\"phone\" placeholder=\"+40 734 788 254 (or leave empty for canonical)\" class=\"input-field w-full p-2 bg-black/20 rounded border border-white/10\" required></div><div class=\"border-2 border-dashed border-white/20 rounded-lg p-8 text-center hover:border-accent/50 transition-colors cursor-pointer\" onclick=\"document.getElementById('audio-upload').click()\"><p class=\"text-sm opacity-70\">Drag & Drop .ogg files here or click to browse</p><input type=\"file\" id=\"audio-upload\" name=\"file\" accept=\".ogg\" class=\"hidden\" onchange=\"document.getElementById('file-name').innerText = this.files[0].name\" required><p id=\"file-name\" class=\"mt-2 text-accent text-sm font-mono\"></p></div><button type=\"submit\" class=\"btn btn-primary p-2 bg-accent text-white rounded font-bold\">Upload Voice Note</button></div></form></div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -761,7 +761,7 @@ func RadioLogsPage(logs []RadioLog) templ.Component {
 				var templ_7745c5c3_Var34 string
 				templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", l.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 345, Col: 67}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 364, Col: 67}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 				if templ_7745c5c3_Err != nil {
@@ -774,7 +774,7 @@ func RadioLogsPage(logs []RadioLog) templ.Component {
 				var templ_7745c5c3_Var35 string
 				templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(l.PlayedDatetime)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 346, Col: 64}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 365, Col: 64}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 				if templ_7745c5c3_Err != nil {
@@ -787,7 +787,7 @@ func RadioLogsPage(logs []RadioLog) templ.Component {
 				var templ_7745c5c3_Var36 string
 				templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(l.Artist)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 347, Col: 48}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 366, Col: 48}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 				if templ_7745c5c3_Err != nil {
@@ -800,7 +800,7 @@ func RadioLogsPage(logs []RadioLog) templ.Component {
 				var templ_7745c5c3_Var37 string
 				templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(l.Title)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 348, Col: 33}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 367, Col: 33}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 				if templ_7745c5c3_Err != nil {
@@ -817,7 +817,7 @@ func RadioLogsPage(logs []RadioLog) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, "</tbody></table></div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, "</tbody></table></div><div class=\"glass p-6 mt-6\"><h2 class=\"title-medium mb-4\">Upload Voice Note</h2><form hx-post=\"/api/upload\" hx-encoding=\"multipart/form-data\" hx-swap=\"none\" onsubmit=\"setTimeout(() => this.reset(), 1000); alert('Upload started!')\"><div class=\"flex flex-col gap-4\"><div><label class=\"block text-sm mb-1\">Target Phone Number</label> <input type=\"text\" name=\"phone\" placeholder=\"+40 734 788 254 (or leave empty for canonical)\" class=\"input-field w-full p-2 bg-black/20 rounded border border-white/10\" required></div><div class=\"border-2 border-dashed border-white/20 rounded-lg p-8 text-center hover:border-accent/50 transition-colors cursor-pointer\" onclick=\"document.getElementById('audio-upload').click()\"><p class=\"text-sm opacity-70\">Drag & Drop .ogg files here or click to browse</p><input type=\"file\" id=\"audio-upload\" name=\"file\" accept=\".ogg\" class=\"hidden\" onchange=\"document.getElementById('file-name').innerText = this.files[0].name\" required><p id=\"file-name\" class=\"mt-2 text-accent text-sm font-mono\"></p></div><button type=\"submit\" class=\"btn btn-primary p-2 bg-accent text-white rounded font-bold\">Upload Voice Note</button></div></form></div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

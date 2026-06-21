@@ -2,7 +2,9 @@ package poller
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
@@ -92,7 +94,8 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.GET("/events/dashboard", s.handleDashboardStream)
 	protected.GET("/events/logs", s.handleLogsStream)
 	protected.POST("/api/kill-switch", s.handleKillSwitch)
-	protected.POST("/api/upload", s.handleUpload)
+	protected.GET("/api/schedule", s.handleGetSchedule)
+	protected.POST("/api/schedule", s.handleSetSchedule)
 }
 
 func (s *TelemetryServer) Start(addr string) error {
@@ -354,46 +357,34 @@ func (s *TelemetryServer) handleDataView(c *echo.Context) error {
 	return t.Render(c.Request().Context(), c.Response())
 }
 
-func (s *TelemetryServer) handleUpload(c *echo.Context) error {
-	phone := c.FormValue("phone")
-	if phone == "" {
-		return c.String(http.StatusBadRequest, "Phone number is required")
-	}
-
-	file, err := c.FormFile("file")
+func (s *TelemetryServer) handleGetSchedule(c echo.Context) error {
+	schedules, err := s.dbMgr.GetAllSchedules(context.Background())
 	if err != nil {
-		return c.String(http.StatusBadRequest, "Missing file")
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
+	return c.JSON(http.StatusOK, schedules)
+}
 
-	src, err := file.Open()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = src.Close() }()
+type setScheduleReq struct {
+	Date          string `json:"date"`
+	TargetMatches string `json:"target_matches"`
+}
 
-	// Determine directory based on phone number logic (R2)
-	var targetDir string
-	if phone == "+40 734 788 254" || phone == "40734788254" {
-		targetDir = filepath.Join(s.dataDir, "audios")
-	} else {
-		targetDir = filepath.Join(s.dataDir, phone, "used")
-	}
-
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
+func (s *TelemetryServer) handleSetSchedule(c echo.Context) error {
+	var req setScheduleReq
+	if err := c.Bind(&req); err != nil {
 		return err
 	}
 
-	dstPath := filepath.Join(targetDir, file.Filename)
-	dst, err := os.Create(dstPath)
-	if err != nil {
-		return err
+	// Validate target_matches is valid JSON array of ints
+	var temp []int
+	if err := json.Unmarshal([]byte(req.TargetMatches), &temp); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid target_matches format"})
 	}
-	defer func() { _ = dst.Close() }()
 
-	// Need io import, so let's read/write directly since it's a small file
-	buf := new(bytes.Buffer)
-	_, _ = buf.ReadFrom(src)
-	_, _ = dst.Write(buf.Bytes())
-
-	return c.String(http.StatusOK, "File uploaded successfully")
+	err := s.dbMgr.SetDailySchedule(context.Background(), req.Date, req.TargetMatches)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
