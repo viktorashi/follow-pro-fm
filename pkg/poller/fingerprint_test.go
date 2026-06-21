@@ -49,7 +49,7 @@ func TestCropAndMarkCanonical(t *testing.T) {
 		t.Fatalf("Expected 1 canonical signature, got %d", len(sigs))
 	}
 
-	if !bytes.Equal(sigs[0], []byte("3456")) {
-		t.Errorf("Expected cropped signature to be '3456', got '%s'", sigs[0])
+	if !bytes.Equal(sigs[filename], []byte("3456")) {
+		t.Errorf("Expected cropped signature to be '3456', got '%s'", sigs[filename])
 	}
 }

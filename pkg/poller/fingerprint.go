@@ -19,8 +19,8 @@ func MatchSignature(stream []byte, signature []byte) bool {
 }
 
 // GetCanonicalSignatures loads all canonical signature bytes from the given directory.
-func GetCanonicalSignatures(canonicalDir string) ([][]byte, error) {
-	var sigs [][]byte
+func GetCanonicalSignatures(canonicalDir string) (map[string][]byte, error) {
+	sigs := make(map[string][]byte)
 
 	files, err := os.ReadDir(canonicalDir)
 	if err != nil {
@@ -34,7 +34,7 @@ func GetCanonicalSignatures(canonicalDir string) ([][]byte, error) {
 		if !f.IsDir() {
 			data, err := os.ReadFile(filepath.Join(canonicalDir, f.Name()))
 			if err == nil && len(data) > 0 {
-				sigs = append(sigs, data)
+				sigs[f.Name()] = data
 			}
 		}
 	}
