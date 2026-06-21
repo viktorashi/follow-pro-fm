@@ -329,7 +329,12 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 								_ = p.DBMgr.RecordSongPlay(context.Background(), song.Artist, song.Title, now)
 							}
 							_ = MarkAudioUsed(audioFile)
-							msg := fmt.Sprintf("S-a trimis vocalu pe Wapp pentru\n Artist: %s\nPiesa: %s\n Fisieru audio trimis: %s", song.Artist, song.Title, audioFile)
+							msg := dedent.Dedent(fmt.Sprintf(`
+								S-a trimis vocalu pe Wapp la nr: %s
+								Artist: %s
+								Piesa: %s
+								Fisieru audio trimis: %s
+								`, p.TargetPhone, song.Artist, song.Title, audioFile))
 							log.Println("✅", msg)
 							_ = p.Alerter.AlertSuccess(AlertEvent{
 								Title:       "Voice Note Sent",
