@@ -2,7 +2,9 @@ package poller
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
@@ -92,6 +94,8 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.GET("/events/dashboard", s.handleDashboardStream)
 	protected.GET("/events/logs", s.handleLogsStream)
 	protected.POST("/api/kill-switch", s.handleKillSwitch)
+	protected.GET("/api/schedule", s.handleGetSchedule)
+	protected.POST("/api/schedule", s.handleSetSchedule)
 }
 
 func (s *TelemetryServer) Start(addr string) error {
@@ -351,4 +355,36 @@ func (s *TelemetryServer) handleDataView(c *echo.Context) error {
 	t := DataViewer(files)
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextHTML)
 	return t.Render(c.Request().Context(), c.Response())
+}
+
+func (s *TelemetryServer) handleGetSchedule(c *echo.Context) error {
+	schedules, err := s.dbMgr.GetAllSchedules(context.Background())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, schedules)
+}
+
+type setScheduleReq struct {
+	Date          string `json:"date"`
+	TargetMatches string `json:"target_matches"`
+}
+
+func (s *TelemetryServer) handleSetSchedule(c *echo.Context) error {
+	var req setScheduleReq
+	if err := c.Bind(&req); err != nil {
+		return err
+	}
+
+	// Validate target_matches is valid JSON array of ints
+	var temp []int
+	if err := json.Unmarshal([]byte(req.TargetMatches), &temp); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid target_matches format"})
+	}
+
+	err := s.dbMgr.SetDailySchedule(context.Background(), req.Date, req.TargetMatches)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }

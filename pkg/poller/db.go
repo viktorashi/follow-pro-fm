@@ -66,6 +66,10 @@ func initSchema(db *sql.DB) error {
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS daily_schedule (
+			date TEXT PRIMARY KEY,
+			target_matches TEXT NOT NULL
+		);`,
 	}
 
 	for _, q := range queries {
@@ -188,4 +192,39 @@ func (m *DBManager) IsKillSwitchActive(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	return valStr == "true", nil
+}
+
+// GetDailySchedule returns the target matches JSON string for a given date (YYYY-MM-DD)
+func (m *DBManager) GetDailySchedule(ctx context.Context, dateStr string) (string, error) {
+	var targetMatches string
+	err := m.db.QueryRowContext(ctx, "SELECT target_matches FROM daily_schedule WHERE date = ?", dateStr).Scan(&targetMatches)
+	if err != nil {
+		return "", err
+	}
+	return targetMatches, nil
+}
+
+// SetDailySchedule sets the target matches JSON string for a given date
+func (m *DBManager) SetDailySchedule(ctx context.Context, dateStr, targetMatches string) error {
+	_, err := m.db.ExecContext(ctx, "INSERT OR REPLACE INTO daily_schedule (date, target_matches) VALUES (?, ?)", dateStr, targetMatches)
+	return err
+}
+
+// GetAllSchedules returns all schedules
+func (m *DBManager) GetAllSchedules(ctx context.Context) (map[string]string, error) {
+	rows, err := m.db.QueryContext(ctx, "SELECT date, target_matches FROM daily_schedule")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	schedules := make(map[string]string)
+	for rows.Next() {
+		var d, t string
+		if err := rows.Scan(&d, &t); err != nil {
+			return nil, err
+		}
+		schedules[d] = t
+	}
+	return schedules, nil
 }

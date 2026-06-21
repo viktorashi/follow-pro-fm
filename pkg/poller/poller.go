@@ -271,6 +271,14 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 							}
 						}
 						p.matchesToday++
+
+						// R5: Daily RNG Selection
+						if !IsMatchSelectedToday(p.DBMgr, now, p.matchesToday) {
+							_ = p.Alerter.AlertInfo(AlertEvent{Title: "RNG Skip", Message: fmt.Sprintf("🎲 RNG Skipping response to match #%d for %s", p.matchesToday, song.Artist)})
+							// Break out of the loop and return early
+							break
+						}
+
 						msg := dedent.Dedent(fmt.Sprintf(`
 												🎉 [VEZI BAA ca se aude piesa]
 												Artistu: %s

@@ -154,6 +154,11 @@ func main() {
 		{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd"},
 	}
 
+	// Initialize RNG Schedule
+	if err := poller.InitRNGSchedule(dbMgr, activeCampaigns); err != nil {
+		log.Fatalf("Failed to initialize RNG schedule: %v", err)
+	}
+
 	// 10. Start Poller
 	p := &poller.Poller{
 		APIURL:          apiURL,
