@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/lithammer/dedent"
 )
 
 const (
@@ -270,7 +272,15 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 							}
 						}
 						p.matchesToday++
-						msg := fmt.Sprintf("🎉 [CAMPAIGN ALERT] %s is playing! (Match %d/%d for today)", song.Artist, p.matchesToday, MaxDailyMatches)
+						msg := dedent.Dedent(fmt.Sprintf(`
+												🎉 [VEZI BAA]
+												Artistu: %s
+
+												Piesa: %s
+
+												(Match-ul %d/%d de azi)
+													`,
+							song.Artist, song.Title, p.matchesToday, MaxDailyMatches))
 						log.Println("   " + msg)
 						if alertErr := p.Alerter.AlertInfo(AlertEvent{
 							Title:       "Campaign Alert",
