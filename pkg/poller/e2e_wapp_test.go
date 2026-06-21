@@ -33,10 +33,7 @@ func TestPoller_E2E(t *testing.T) {
 	// 1. Setup Alerters from .env
 	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
-	appEnv := os.Getenv("ENVIRONMENT")
-	if appEnv == "" {
-		appEnv = "e2e Testing"
-	}
+	appEnv := "E2E-Testing"
 	tgAlerter := NewTelegramAlerter(telegramToken, telegramChatID, appEnv, "http://localhost:8080")
 
 	sendgridKey := os.Getenv("SENDGRID_API_KEY")
