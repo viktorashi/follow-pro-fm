@@ -12,10 +12,16 @@ import (
 	"pro-fm-poller/pkg/poller"
 )
 
-const apiURL = "https://api.profm.ro/api/v1/radios/article/2918?appVersion=1.0.0&platform=android"
-
 func main() {
 	// 1. Env Vars
+	profmAPIURL := os.Getenv("PROFM_API_URL")
+	if profmAPIURL == "" {
+		profmAPIURL = "https://api.profm.ro/api/v1/radios/article/2918?appVersion=1.0.0&platform=android"
+	}
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 	targetPhone := os.Getenv("TARGET_PHONE")
 	if targetPhone == "" {
 		targetPhone = "+40770661491"
@@ -35,7 +41,7 @@ func main() {
 		if appName := os.Getenv("FLY_APP_NAME"); appName != "" {
 			baseURL = fmt.Sprintf("https://%s.fly.dev", appName)
 		} else {
-			baseURL = "http://localhost:8080"
+			baseURL = "http://localhost:" + port
 		}
 	}
 
@@ -134,7 +140,7 @@ func main() {
 	telemetryServer := poller.NewTelemetryServer(authMgr, stateMgr, sseBroadcaster, logWriter, dbMgr, filepath.Dir(dbPath))
 	go func() {
 		fmt.Println("🚀 Telemetry UI available at", baseURL)
-		if err := telemetryServer.Start("0.0.0.0:8080"); err != nil {
+		if err := telemetryServer.Start("0.0.0.0:" + port); err != nil {
 			log.Fatalf("Failed to start telemetry server: %v", err)
 		}
 	}()
@@ -145,6 +151,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize WhatsApp: %v", err)
 	}
+	telemetryServer.SetWhatsAppClient(wappClient)
 	defer wappClient.Disconnect()
 
 	// Load campaigns in memory
@@ -156,7 +163,7 @@ func main() {
 
 	// 10. Start Poller
 	p := &poller.Poller{
-		APIURL:          apiURL,
+		APIURL:          profmAPIURL,
 		PollInterval:    2 * time.Second,
 		ActiveCampaigns: activeCampaigns,
 		TargetPhone:     targetPhone,
