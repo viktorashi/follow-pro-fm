@@ -35,7 +35,7 @@ func TestPoller_E2E(t *testing.T) {
 	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
 	appEnv := os.Getenv("ENVIRONMENT")
 	if appEnv == "" {
-		appEnv = "dev" // keep tests explicitly dev unless overridden
+		appEnv = "e2e Testing"
 	}
 	tgAlerter := NewTelegramAlerter(telegramToken, telegramChatID, appEnv, "http://localhost:8080")
 
