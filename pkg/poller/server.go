@@ -25,6 +25,7 @@ type TelemetryServer struct {
 	dbMgr       *DBManager
 	dataDir     string
 	wappClients []WhatsAppClient
+	onAddPhone  func(phone string) error
 }
 
 func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster, logWriter *SSELogWriter, dbMgr *DBManager, dataDir string) *TelemetryServer {
@@ -93,6 +94,7 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.GET("/events/dashboard", s.handleDashboardStream)
 	protected.GET("/events/logs", s.handleLogsStream)
 	protected.POST("/api/kill-switch", s.handleKillSwitch)
+	protected.POST("/api/sender/add", s.handleAddSenderPhone)
 
 	if os.Getenv("MOCK_WHATSAPP") == "true" {
 		s.echo.POST("/api/test/mock-scan", s.handleMockScan)
@@ -367,6 +369,32 @@ func (s *TelemetryServer) handleDataView(c *echo.Context) error {
 
 func (s *TelemetryServer) SetWhatsAppClients(clients []WhatsAppClient) {
 	s.wappClients = clients
+}
+
+func (s *TelemetryServer) SetOnAddPhone(fn func(phone string) error) {
+	s.onAddPhone = fn
+}
+
+func (s *TelemetryServer) handleAddSenderPhone(c *echo.Context) error {
+	phone := c.FormValue("phone")
+	phone = strings.TrimSpace(phone)
+	if phone == "" {
+		return c.String(http.StatusBadRequest, "Phone number is required")
+	}
+	if !strings.HasPrefix(phone, "+") {
+		phone = "+" + phone
+	}
+
+	if s.onAddPhone != nil {
+		err := s.onAddPhone(phone)
+		if err != nil {
+			return c.String(http.StatusInternalServerError, "Error adding phone: "+err.Error())
+		}
+	} else {
+		return c.String(http.StatusInternalServerError, "Add phone callback not set")
+	}
+
+	return c.String(http.StatusOK, "Phone added successfully. Connecting...")
 }
 
 func (s *TelemetryServer) handleMockScan(c *echo.Context) error {
