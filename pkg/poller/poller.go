@@ -75,7 +75,7 @@ type Poller struct {
 	PollInterval       time.Duration
 	ActiveCampaigns    []Campaign
 	TargetPhone        string
-	SendVoiceNote      func(phone string, audioPath string) error
+	SendVoiceNote      func(senderPhone string, targetPhone string, audioPath string) error
 	DisconnectWhatsApp func()
 	ConnectWhatsApp    func() error
 	StateMgr           *StateManager
@@ -199,7 +199,6 @@ func (p *Poller) Start() {
 				}
 				p.StateMgr.Update(func(s *AppState) {
 					s.Status = StatusSleeping
-					s.WhatsAppConnected = false
 				})
 				isSleeping = true
 			}
@@ -299,8 +298,20 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 							s.Status = StatusCampaignTriggered
 						})
 
-						audioFile, err := GetRandomAudio(p.AudiosDir)
-						if err != nil {
+						var audioFile string
+						var chosenSender string
+						for _, conn := range p.StateMgr.Get().Connections {
+							// Try to find a connected sender that has audios
+							dir := GetAudioDirForPhone(conn.Phone, p.AudiosDir)
+							f, err := GetRandomAudio(dir)
+							if err == nil {
+								chosenSender = conn.Phone
+								audioFile = f
+								break
+							}
+						}
+
+						if audioFile == "" {
 							p.StateMgr.Update(func(s *AppState) {
 								s.Status = StatusAudioExhausted
 								s.LastError = "No unused audios available!"
@@ -321,7 +332,7 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 
 						// Trigger actual submission (WhatsApp Voice note)
 						log.Println("   Sending WhatsApp voice note using: " + audioFile)
-						err = p.SendVoiceNote(p.TargetPhone, audioFile)
+						err = p.SendVoiceNote(chosenSender, p.TargetPhone, audioFile)
 						if err != nil {
 							log.Printf("   ❌ Error sending voice note: %v\n", err)
 							p.StateMgr.Update(func(s *AppState) {
@@ -347,7 +358,7 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 								ActionLabel: "View Dashboard",
 								ActionURL:   p.BaseURL,
 							})
-							unused, used := GetAudioStats(p.AudiosDir)
+							unused, used := GetTotalAudioStats(p.StateMgr.Get().Connections, p.AudiosDir)
 							p.StateMgr.Update(func(s *AppState) {
 								s.Status = StatusPolling
 								s.LastError = ""
@@ -371,7 +382,7 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 	}
 
 	// Always update audio stats on each check to keep UI fresh
-	unused, used := GetAudioStats(p.AudiosDir)
+	unused, used := GetTotalAudioStats(p.StateMgr.Get().Connections, p.AudiosDir)
 	p.StateMgr.Update(func(s *AppState) {
 		s.UnusedAudios = unused
 		s.UsedAudios = used

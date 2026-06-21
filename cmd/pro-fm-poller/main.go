@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"pro-fm-poller/pkg/poller"
@@ -105,7 +106,9 @@ func main() {
 		var lastState poller.AppState
 		for state := range sub {
 			// Broadcast Status
-			if state.Status != lastState.Status || state.LastError != lastState.LastError || state.WhatsAppConnected != lastState.WhatsAppConnected {
+			connsStr := fmt.Sprintf("%v", state.Connections)
+			lastConnsStr := fmt.Sprintf("%v", lastState.Connections)
+			if state.Status != lastState.Status || state.LastError != lastState.LastError || connsStr != lastConnsStr {
 				var statusBuf bytes.Buffer
 				_ = poller.StatusComponent(state).Render(context.Background(), &statusBuf)
 				sseBroadcaster.Broadcast("status", statusBuf.Bytes())
@@ -126,9 +129,9 @@ func main() {
 			}
 
 			// Broadcast QR Code
-			if state.QRCodeData != lastState.QRCodeData || state.Status != lastState.Status {
+			if connsStr != lastConnsStr || state.Status != lastState.Status {
 				var qrBuf bytes.Buffer
-				_ = poller.QRComponent(state.QRCodeData).Render(context.Background(), &qrBuf)
+				_ = poller.QRComponent(state.Connections).Render(context.Background(), &qrBuf)
 				sseBroadcaster.Broadcast("qrcode", qrBuf.Bytes())
 			}
 
@@ -145,14 +148,54 @@ func main() {
 		}
 	}()
 
-	// 9. Initialize WhatsApp Client
-	fmt.Println("Initializing WhatsApp client...")
-	wappClient, err := poller.InitWhatsApp(dbPath, stateMgr, alerter, baseURL)
-	if err != nil {
-		log.Fatalf("Failed to initialize WhatsApp: %v", err)
+	// 9. Initialize WhatsApp Clients
+	fmt.Println("Initializing WhatsApp clients...")
+	senderPhonesStr := os.Getenv("SENDER_PHONES")
+	if senderPhonesStr == "" {
+		senderPhonesStr = "+40734788254"
 	}
-	telemetryServer.SetWhatsAppClient(wappClient)
-	defer wappClient.Disconnect()
+	phones := strings.Split(senderPhonesStr, ",")
+	wappClients := make(map[string]poller.WhatsAppClient)
+	for _, p := range phones {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		normalized := strings.ReplaceAll(p, " ", "")
+		normalized = strings.ReplaceAll(normalized, "+", "")
+		dbForPhone := filepath.Join(filepath.Dir(dbPath), "wapp_"+normalized+".sqlite")
+		if normalized == "40734788254" {
+			dbForPhone = dbPath
+		}
+
+		stateMgr.Update(func(s *poller.AppState) {
+			found := false
+			for i := range s.Connections {
+				if s.Connections[i].Phone == p {
+					found = true
+					break
+				}
+			}
+			if !found {
+				s.Connections = append(s.Connections, poller.WAConnectionState{
+					Phone:  p,
+					Status: poller.StatusInitializing,
+				})
+			}
+		})
+
+		c, err := poller.InitWhatsApp(p, dbForPhone, stateMgr, alerter, baseURL)
+		if err != nil {
+			log.Fatalf("Failed to initialize WhatsApp for %s: %v", p, err)
+		}
+		wappClients[p] = c
+		defer c.Disconnect()
+	}
+	var wappClientsSlice []poller.WhatsAppClient
+	for _, c := range wappClients {
+		wappClientsSlice = append(wappClientsSlice, c)
+	}
+	telemetryServer.SetWhatsAppClients(wappClientsSlice)
 
 	// Load campaigns in memory
 	activeCampaigns := []poller.Campaign{
@@ -172,17 +215,27 @@ func main() {
 		AudiosDir:       audiosDir,
 		DBMgr:           dbMgr,
 		BaseURL:         baseURL,
-		SendVoiceNote: func(phone string, audioPath string) error {
-			return poller.SendVoiceNote(wappClient, phone, audioPath)
+		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
+			c, ok := wappClients[senderPhone]
+			if !ok {
+				return fmt.Errorf("client for sender phone %s not found", senderPhone)
+			}
+			if c.IsConnected() && c.IsLoggedIn() {
+				return poller.SendVoiceNote(c, targetPhone, audioPath)
+			}
+			return fmt.Errorf("sender phone %s is not connected or logged in", senderPhone)
 		},
 		DisconnectWhatsApp: func() {
-			if wappClient != nil {
-				wappClient.Disconnect()
+			for _, c := range wappClients {
+				c.Disconnect()
 			}
 		},
 		ConnectWhatsApp: func() error {
-			if wappClient != nil {
-				return wappClient.Connect()
+			for _, c := range wappClients {
+				err := c.Connect()
+				if err != nil {
+					return err
+				}
 			}
 			return nil
 		},

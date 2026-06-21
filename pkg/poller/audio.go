@@ -87,3 +87,27 @@ func MarkAudioUsed(audioPath string) error {
 
 	return nil
 }
+
+func GetAudioDirForPhone(phone string, rootDir string) string {
+	normalized := strings.ReplaceAll(phone, " ", "")
+	normalized = strings.ReplaceAll(normalized, "+", "")
+	if normalized == "40734788254" {
+		return rootDir
+	}
+	// ensure the directory exists
+	dir := filepath.Join(rootDir, normalized)
+	_ = InitAudioPool(dir)
+	return dir
+}
+
+func GetTotalAudioStats(conns []WAConnectionState, rootDir string) (int, int) {
+	totalUnused := 0
+	totalUsed := 0
+	for _, conn := range conns {
+		dir := GetAudioDirForPhone(conn.Phone, rootDir)
+		u, us := GetAudioStats(dir)
+		totalUnused += u
+		totalUsed += us
+	}
+	return totalUnused, totalUsed
+}

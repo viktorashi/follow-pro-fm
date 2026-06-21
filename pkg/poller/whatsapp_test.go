@@ -29,7 +29,7 @@ func TestSendVoiceNote_Success(t *testing.T) {
 	t.Setenv("MOCK_SENT_MESSAGES_PATH", messagesJsonPath)
 
 	stateMgr := NewStateManager()
-	client, err := InitWhatsApp(dbPath, stateMgr, nil, "")
+	client, err := InitWhatsApp("+40734788254", dbPath, stateMgr, nil, "")
 	if err != nil {
 		t.Fatalf("failed to init WhatsApp: %v", err)
 	}

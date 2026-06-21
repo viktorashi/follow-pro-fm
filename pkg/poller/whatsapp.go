@@ -53,9 +53,10 @@ type WhatsAppClient interface {
 }
 
 // InitWhatsApp initializes the WhatsApp client and handles connection/pairing
-func InitWhatsApp(dbPath string, stateMgr *StateManager, alerter Alerter, baseURL string) (WhatsAppClient, error) {
+func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter Alerter, baseURL string) (WhatsAppClient, error) {
 	if os.Getenv("MOCK_WHATSAPP") == "true" {
 		client := &MockWhatsAppClient{
+			phone:    phone,
 			dbPath:   dbPath,
 			stateMgr: stateMgr,
 			alerter:  alerter,
@@ -91,7 +92,7 @@ func InitWhatsApp(dbPath string, stateMgr *StateManager, alerter Alerter, baseUR
 			// You could log or wait on this specifically, but PresenceAvailable is usually enough.
 		case *events.LoggedOut:
 			if stateMgr != nil {
-				stateMgr.Update(func(s *AppState) {
+				stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
 					s.Status = StatusPairingRequired
 					s.WhatsAppConnected = false
 				})
@@ -112,7 +113,7 @@ func InitWhatsApp(dbPath string, stateMgr *StateManager, alerter Alerter, baseUR
 				err = client.Connect()
 				if err != nil {
 					if stateMgr != nil {
-						stateMgr.Update(func(s *AppState) {
+						stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
 							s.Status = StatusError
 							s.WhatsAppConnected = false
 						})
@@ -131,7 +132,7 @@ func InitWhatsApp(dbPath string, stateMgr *StateManager, alerter Alerter, baseUR
 						if stateMgr != nil {
 							png, _ := qrcode.Encode(evt.Code, qrcode.Medium, 256)
 							b64 := base64.StdEncoding.EncodeToString(png)
-							stateMgr.Update(func(s *AppState) {
+							stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
 								s.Status = StatusPairingRequired
 								s.QRCodeData = "data:image/png;base64," + b64
 							})
@@ -157,7 +158,7 @@ func InitWhatsApp(dbPath string, stateMgr *StateManager, alerter Alerter, baseUR
 							fmt.Println("✅ Successfully paired!")
 							paired = true
 							if stateMgr != nil {
-								stateMgr.Update(func(s *AppState) {
+								stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
 									s.Status = StatusConnected
 									s.QRCodeData = ""
 									s.WhatsAppConnected = true
@@ -192,7 +193,7 @@ func InitWhatsApp(dbPath string, stateMgr *StateManager, alerter Alerter, baseUR
 				err := client.Connect()
 				if err != nil {
 					if stateMgr != nil {
-						stateMgr.Update(func(s *AppState) {
+						stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
 							s.Status = StatusError
 							s.WhatsAppConnected = false
 						})
@@ -203,7 +204,7 @@ func InitWhatsApp(dbPath string, stateMgr *StateManager, alerter Alerter, baseUR
 				}
 
 				if stateMgr != nil {
-					stateMgr.Update(func(s *AppState) {
+					stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
 						s.Status = StatusConnected
 						s.WhatsAppConnected = true
 					})
@@ -367,6 +368,7 @@ type MockSentMessage struct {
 }
 
 type MockWhatsAppClient struct {
+	phone         string
 	dbPath        string
 	stateMgr      *StateManager
 	alerter       Alerter
@@ -398,7 +400,7 @@ func (m *MockWhatsAppClient) Connect() error {
 
 		if loggedIn {
 			if m.stateMgr != nil {
-				m.stateMgr.Update(func(s *AppState) {
+				m.stateMgr.UpdateConnection(m.phone, func(s *WAConnectionState) {
 					s.Status = StatusConnected
 					s.WhatsAppConnected = true
 					s.QRCodeData = ""
@@ -411,7 +413,7 @@ func (m *MockWhatsAppClient) Connect() error {
 			if m.stateMgr != nil {
 				png, _ := qrcode.Encode("mock-qr-code", qrcode.Medium, 256)
 				b64 := base64.StdEncoding.EncodeToString(png)
-				m.stateMgr.Update(func(s *AppState) {
+				m.stateMgr.UpdateConnection(m.phone, func(s *WAConnectionState) {
 					s.Status = StatusPairingRequired
 					s.QRCodeData = "data:image/png;base64," + b64
 					s.WhatsAppConnected = false
@@ -529,7 +531,7 @@ func (m *MockWhatsAppClient) SimulatePairing() {
 	_ = os.WriteFile(m.dbPath, []byte("paired"), 0644)
 
 	if m.stateMgr != nil {
-		m.stateMgr.Update(func(s *AppState) {
+		m.stateMgr.UpdateConnection(m.phone, func(s *WAConnectionState) {
 			s.Status = StatusConnected
 			s.WhatsAppConnected = true
 			s.QRCodeData = ""
