@@ -62,6 +62,10 @@ templ Login() {
 templ Dashboard() {
 	@Layout("Dashboard - ProFM Jaguare") {
 		<script>
+			function toggleGathering() {
+				fetch('/api/settings/gathering', {method: 'POST'})
+					.then(() => window.location.reload());
+			}
 			function toggleKillSwitch(active) {
 				const pw = prompt(active ? "⚠️ DANGER! Enter Admin Password to permanently disable the bot:" : "Enter Admin Password to re-enable the bot:");
 				if (!pw) return;
