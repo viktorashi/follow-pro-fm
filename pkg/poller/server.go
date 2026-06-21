@@ -24,7 +24,7 @@ type TelemetryServer struct {
 	logWriter   *SSELogWriter
 	dbMgr       *DBManager
 	dataDir     string
-	wappClient  WhatsAppClient
+	wappClients []WhatsAppClient
 }
 
 func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster, logWriter *SSELogWriter, dbMgr *DBManager, dataDir string) *TelemetryServer {
@@ -163,8 +163,15 @@ func (s *TelemetryServer) handleRadioLogsView(c *echo.Context) error {
 
 func (s *TelemetryServer) handleQRImage(c *echo.Context) error {
 	state := s.stateMgr.Get()
-	b64 := state.QRCodeData
-	if b64 == "" || state.Status != StatusPairingRequired {
+	var b64 string
+	for _, conn := range state.Connections {
+		if conn.QRCodeData != "" && conn.Status == StatusPairingRequired {
+			b64 = conn.QRCodeData
+			break
+		}
+	}
+
+	if b64 == "" {
 		// Return 404 or a placeholder if no QR is needed
 		return c.String(http.StatusNotFound, "No QR Code active")
 	}
@@ -232,7 +239,7 @@ func (s *TelemetryServer) streamEvents(c *echo.Context, isLogs bool) error {
 		_, _ = c.Response().Write((&SSEEvent{Event: "audio", Data: audioBuf.Bytes()}).Marshal())
 
 		var qrBuf bytes.Buffer
-		_ = QRComponent(state.QRCodeData).Render(c.Request().Context(), &qrBuf)
+		_ = QRComponent(state.Connections).Render(c.Request().Context(), &qrBuf)
 		_, _ = c.Response().Write((&SSEEvent{Event: "qrcode", Data: qrBuf.Bytes()}).Marshal())
 
 		if f, ok := c.Response().(http.Flusher); ok {
@@ -358,18 +365,18 @@ func (s *TelemetryServer) handleDataView(c *echo.Context) error {
 	return t.Render(c.Request().Context(), c.Response())
 }
 
-func (s *TelemetryServer) SetWhatsAppClient(client WhatsAppClient) {
-	s.wappClient = client
+func (s *TelemetryServer) SetWhatsAppClients(clients []WhatsAppClient) {
+	s.wappClients = clients
 }
 
 func (s *TelemetryServer) handleMockScan(c *echo.Context) error {
-	if s.wappClient == nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "WhatsApp client not set"})
+	if len(s.wappClients) == 0 {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "WhatsApp clients not set"})
 	}
-	mock, ok := s.wappClient.(*MockWhatsAppClient)
-	if !ok {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "WhatsApp client is not a mock"})
+	for _, client := range s.wappClients {
+		if mock, ok := client.(*MockWhatsAppClient); ok {
+			mock.SimulatePairing()
+		}
 	}
-	mock.SimulatePairing()
 	return c.JSON(http.StatusOK, map[string]string{"status": "paired"})
 }

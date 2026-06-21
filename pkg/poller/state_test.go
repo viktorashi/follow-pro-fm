@@ -10,7 +10,7 @@ func TestStateManager(t *testing.T) {
 
 	// Initial state
 	state := sm.Get()
-	if state.WhatsAppConnected {
+	if len(state.Connections) > 0 && state.Connections[0].WhatsAppConnected {
 		t.Error("expected initial state to be disconnected")
 	}
 
@@ -20,20 +20,20 @@ func TestStateManager(t *testing.T) {
 
 	// Update state
 	sm.Update(func(s *AppState) {
-		s.WhatsAppConnected = true
+		s.Connections = []WAConnectionState{{Phone: "+40", WhatsAppConnected: true}}
 		s.CurrentSong = "Test Song"
 	})
 
 	// Verify Get reflects update
 	newState := sm.Get()
-	if !newState.WhatsAppConnected || newState.CurrentSong != "Test Song" {
+	if len(newState.Connections) == 0 || !newState.Connections[0].WhatsAppConnected || newState.CurrentSong != "Test Song" {
 		t.Errorf("Get() returned unexpected state: %+v", newState)
 	}
 
 	// Verify subscribers received the first update
 	select {
 	case s := <-ch1:
-		if !s.WhatsAppConnected || s.CurrentSong != "Test Song" {
+		if len(s.Connections) == 0 || !s.Connections[0].WhatsAppConnected || s.CurrentSong != "Test Song" {
 			t.Errorf("ch1 received unexpected state: %+v", s)
 		}
 	case <-time.After(1 * time.Second):
@@ -42,7 +42,7 @@ func TestStateManager(t *testing.T) {
 
 	select {
 	case s := <-ch2:
-		if !s.WhatsAppConnected || s.CurrentSong != "Test Song" {
+		if len(s.Connections) == 0 || !s.Connections[0].WhatsAppConnected || s.CurrentSong != "Test Song" {
 			t.Errorf("ch2 received unexpected state: %+v", s)
 		}
 	case <-time.After(1 * time.Second):
@@ -58,7 +58,7 @@ func TestStateManager(t *testing.T) {
 
 	select {
 	case s := <-ch2:
-		if !s.WhatsAppConnected || s.CurrentSong != "Another Song" {
+		if len(s.Connections) == 0 || !s.Connections[0].WhatsAppConnected || s.CurrentSong != "Another Song" {
 			t.Errorf("ch2 received unexpected state: %+v", s)
 		}
 	case <-time.After(1 * time.Second):

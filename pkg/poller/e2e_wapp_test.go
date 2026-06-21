@@ -44,7 +44,7 @@ func TestPoller_E2E(t *testing.T) {
 
 	// 2. Initialize real WhatsApp client (will prompt for QR if not paired)
 	t.Log("Initializing real WhatsApp client...")
-	client, err := InitWhatsApp(dbPath, nil, multiAlerter, "")
+	client, err := InitWhatsApp("+40734788254", dbPath, nil, multiAlerter, "")
 	if err != nil {
 		t.Fatalf("Failed to initialize WhatsApp: %v", err)
 	}

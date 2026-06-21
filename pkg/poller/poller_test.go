@@ -324,11 +324,11 @@ func TestPoller_checkSong(t *testing.T) {
 					{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
 				},
 				TargetPhone: "+40770661491",
-				StateMgr:    NewStateManager(),
+				StateMgr:    createMockStateMgr(),
 				Alerter:     NewMultiAlerter(),
 				AudiosDir:   audiosDir,
 				DBMgr:       dbMgr,
-				SendVoiceNote: func(phone string, audioPath string) error {
+				SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
 					voiceCalls++
 					if tt.simulateVoiceError {
 						return fmt.Errorf("simulated network error sending audio")
@@ -364,11 +364,11 @@ func TestPoller_checkSong_Deduplication(t *testing.T) {
 			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
 		},
 		TargetPhone: "+40770661491",
-		StateMgr:    NewStateManager(),
+		StateMgr:    createMockStateMgr(),
 		Alerter:     NewMultiAlerter(),
 		AudiosDir:   audiosDir,
 		DBMgr:       dbMgr,
-		SendVoiceNote: func(phone string, audioPath string) error {
+		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
 			voiceCalls++
 			return nil
 		},
@@ -445,10 +445,10 @@ func TestPoller_checkSong_DailyLimit(t *testing.T) {
 		matchesToday: 6,
 		lastCheckDay: activeTime.YearDay(), // Prevent matchesToday from being reset
 		TargetPhone:  "+40770661491",
-		StateMgr:     NewStateManager(),
+		StateMgr:     createMockStateMgr(),
 		Alerter:      NewMultiAlerter(),
 		AudiosDir:    t.TempDir(),
-		SendVoiceNote: func(phone string, audioPath string) error {
+		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
 			voiceCalls++
 			return nil
 		},
@@ -500,4 +500,12 @@ func TestNormalizePhoneNumber(t *testing.T) {
 			}
 		})
 	}
+}
+
+func createMockStateMgr() *StateManager {
+	sm := NewStateManager()
+	sm.Update(func(s *AppState) {
+		s.Connections = []WAConnectionState{{Phone: "+40734788254", WhatsAppConnected: true, Status: StatusConnected}}
+	})
+	return sm
 }

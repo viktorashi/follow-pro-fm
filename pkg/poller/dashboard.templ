@@ -123,8 +123,8 @@ templ Dashboard() {
 				</div>
 
 				<!-- Right Column: QR Code & Logs -->
-				<div class="glass qr-card" id="qr-card" sse-swap="qrcode">
-					@QRComponent("")
+				<div class="space-y-6" id="qr-card" sse-swap="qrcode">
+					@QRComponent(AppState{Status: StatusInitializing}.Connections)
 				</div>
 			</div>
 		</div>
@@ -195,16 +195,18 @@ templ AudioStatsComponent(unused, used int) {
 	</div>
 }
 
-templ QRComponent(b64 string) {
-	<h2 class="text-sm uppercase text-muted mb-4">WhatsApp Pairing</h2>
-	<div class="qr-container">
-		if b64 == "" {
-			<div class="text-muted text-center">
-				<svg class="svg-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-				<p>Session active.<br/>No QR code needed.</p>
-			</div>
-		} else {
-			<img src={ b64 } class="qr-image" alt="WhatsApp QR Code"/>
+templ QRComponent(conns []WAConnectionState) {
+	for _, conn := range conns {
+		<div class="glass qr-card mb-4">
+			<h2 class="text-sm uppercase text-muted mb-4">WhatsApp Pairing ({ conn.Phone })</h2>
+			<div class="qr-container">
+				if conn.QRCodeData == "" {
+					<div class="text-muted text-center">
+						<svg class="svg-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+						<p>Session active.<br/>No QR code needed.</p>
+					</div>
+				} else {
+					<img src={ conn.QRCodeData } class="qr-image" alt="WhatsApp QR Code"/>
 			<div class="progress-bar">
 				<div id="qr-progress" class="progress-fill"></div>
 			</div>
@@ -223,14 +225,29 @@ templ QRComponent(b64 string) {
 							progress.style.width = '0%';
 							countdown.innerText = '0';
 						} else {
-							progress.style.width = (timeLeft / 40 * 100) + '%';
-							countdown.innerText = Math.ceil(timeLeft);
-						}
-					}, 100);
-				})();
-			</script>
-		}
-	</div>
+					<script>
+						(function() {
+							let timeLeft = 40;
+							const progress = document.getElementById('qr-progress');
+							const countdown = document.getElementById('qr-countdown');
+							
+							const timer = setInterval(() => {
+								timeLeft -= 0.1;
+								if (timeLeft <= 0) {
+									clearInterval(timer);
+									progress.style.width = '0%';
+									countdown.innerText = '0';
+								} else {
+									progress.style.width = (timeLeft / 40 * 100) + '%';
+									countdown.innerText = Math.ceil(timeLeft);
+								}
+							}, 100);
+						})();
+					</script>
+				}
+			</div>
+		</div>
+	}
 }
 
 templ LogsPage() {
