@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"pro-fm-poller/pkg/poller"
@@ -150,17 +151,26 @@ func main() {
 
 	// 9. Initialize WhatsApp Clients
 	fmt.Println("Initializing WhatsApp clients...")
-	senderPhonesStr := os.Getenv("SENDER_PHONES")
-	if senderPhonesStr == "" {
-		senderPhonesStr = "+40734788254"
-	}
-	phones := strings.Split(senderPhonesStr, ",")
+
 	wappClients := make(map[string]poller.WhatsAppClient)
-	for _, p := range phones {
+	var wappMutex sync.RWMutex
+
+	addSenderPhone := func(p string) error {
 		p = strings.TrimSpace(p)
 		if p == "" {
-			continue
+			return nil
 		}
+		if !strings.HasPrefix(p, "+") {
+			p = "+" + p
+		}
+
+		wappMutex.RLock()
+		if _, exists := wappClients[p]; exists {
+			wappMutex.RUnlock()
+			return nil // Already added
+		}
+		wappMutex.RUnlock()
+
 		normalized := strings.ReplaceAll(p, " ", "")
 		normalized = strings.ReplaceAll(normalized, "+", "")
 		dbForPhone := filepath.Join(filepath.Dir(dbPath), "wapp_"+normalized+".sqlite")
@@ -186,16 +196,48 @@ func main() {
 
 		c, err := poller.InitWhatsApp(p, dbForPhone, stateMgr, alerter, baseURL)
 		if err != nil {
-			log.Fatalf("Failed to initialize WhatsApp for %s: %v", p, err)
+			return fmt.Errorf("failed to initialize WhatsApp for %s: %v", p, err)
 		}
+
+		wappMutex.Lock()
 		wappClients[p] = c
-		defer c.Disconnect()
+
+		var wappClientsSlice []poller.WhatsAppClient
+		for _, client := range wappClients {
+			wappClientsSlice = append(wappClientsSlice, client)
+		}
+		telemetryServer.SetWhatsAppClients(wappClientsSlice)
+		wappMutex.Unlock()
+
+		return nil
 	}
-	var wappClientsSlice []poller.WhatsAppClient
-	for _, c := range wappClients {
-		wappClientsSlice = append(wappClientsSlice, c)
+
+	telemetryServer.SetOnAddPhone(addSenderPhone)
+
+	// Scan existing db files
+	matches, _ := filepath.Glob(filepath.Join(filepath.Dir(dbPath), "wapp_*.sqlite"))
+	for _, m := range matches {
+		name := filepath.Base(m)
+		phone := strings.TrimPrefix(name, "wapp_")
+		phone = strings.TrimSuffix(phone, ".sqlite")
+		if phone != "" {
+			if err := addSenderPhone("+" + phone); err != nil {
+				log.Printf("Error adding phone %s: %v", phone, err)
+			}
+		}
 	}
-	telemetryServer.SetWhatsAppClients(wappClientsSlice)
+
+	// Default phone if none found and it's the legacy dbPath
+	wappMutex.RLock()
+	clientsCount := len(wappClients)
+	wappMutex.RUnlock()
+	if clientsCount == 0 {
+		if _, err := os.Stat(dbPath); err == nil {
+			if err := addSenderPhone("+40734788254"); err != nil {
+				log.Printf("Error adding default phone: %v", err)
+			}
+		}
+	}
 
 	// Load campaigns in memory
 	activeCampaigns := []poller.Campaign{
@@ -216,7 +258,10 @@ func main() {
 		DBMgr:           dbMgr,
 		BaseURL:         baseURL,
 		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
+			wappMutex.RLock()
 			c, ok := wappClients[senderPhone]
+			wappMutex.RUnlock()
+
 			if !ok {
 				return fmt.Errorf("client for sender phone %s not found", senderPhone)
 			}
@@ -226,11 +271,15 @@ func main() {
 			return fmt.Errorf("sender phone %s is not connected or logged in", senderPhone)
 		},
 		DisconnectWhatsApp: func() {
+			wappMutex.RLock()
+			defer wappMutex.RUnlock()
 			for _, c := range wappClients {
 				c.Disconnect()
 			}
 		},
 		ConnectWhatsApp: func() error {
+			wappMutex.RLock()
+			defer wappMutex.RUnlock()
 			for _, c := range wappClients {
 				err := c.Connect()
 				if err != nil {
