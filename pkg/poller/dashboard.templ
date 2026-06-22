@@ -59,9 +59,89 @@ templ Login() {
 	}
 }
 
-templ Dashboard() {
+templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules []ScheduleEntry) {
 	@Layout("Dashboard - ProFM Jaguare") {
 		<script>
+			function toggleGathering() {
+				fetch('/api/settings/gathering', {method: 'POST'})
+					.then(() => window.location.reload());
+			}
+			function cropUnreviewed(event, form) {
+				event.preventDefault();
+				const data = new FormData(form);
+				fetch('/unreviewed/crop', {
+					method: 'POST',
+					body: data
+				}).then(async res => {
+					if (!res.ok) {
+						const payload = await res.json().catch(() => ({}));
+						throw new Error(payload.error || 'Crop failed');
+					}
+					window.location.reload();
+				}).catch(err => {
+					alert(err.message);
+				});
+				return false;
+			}
+			function uploadAudio(event, form) {
+				event.preventDefault();
+				const data = new FormData(form);
+				const result = document.getElementById('upload-audio-result');
+				result.textContent = 'Uploading...';
+				result.className = 'mt-4 text-sm text-muted';
+				fetch('/api/audio/upload', {
+					method: 'POST',
+					body: data
+				}).then(async res => {
+					const text = await res.text();
+					result.textContent = text;
+					result.className = res.ok ? 'mt-4 text-sm text-success' : 'mt-4 text-sm text-warning';
+					if (!res.ok) {
+						throw new Error(text || 'Upload failed');
+					}
+					form.reset();
+				}).catch(() => {});
+				return false;
+			}
+			function saveSchedule(event, form) {
+				event.preventDefault();
+				const raw = form.target_matches.value.trim();
+				const result = document.getElementById('schedule-result');
+				const values = raw === '' ? [] : raw.split(',').map(part => part.trim()).filter(Boolean);
+				const matches = [];
+				for (const value of values) {
+					const parsed = Number.parseInt(value, 10);
+					if (!Number.isInteger(parsed)) {
+						result.textContent = 'Target matches must be a comma-separated list of integers.';
+						result.className = 'mt-4 text-sm text-warning';
+						return false;
+					}
+					matches.push(parsed);
+				}
+
+				result.textContent = 'Saving...';
+				result.className = 'mt-4 text-sm text-muted';
+				fetch('/api/schedule', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						date: form.date.value,
+						target_matches: matches
+					})
+				}).then(async res => {
+					const payload = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						throw new Error(payload.error || 'Save failed');
+					}
+					result.textContent = 'Schedule saved.';
+					result.className = 'mt-4 text-sm text-success';
+					window.location.reload();
+				}).catch(err => {
+					result.textContent = err.message;
+					result.className = 'mt-4 text-sm text-warning';
+				});
+				return false;
+			}
 			function toggleKillSwitch(active) {
 				const pw = prompt(active ? "⚠️ DANGER! Enter Admin Password to permanently disable the bot:" : "Enter Admin Password to re-enable the bot:");
 				if (!pw) return;
@@ -93,6 +173,7 @@ templ Dashboard() {
 						{ time.Now().Format("15:04:05") }
 					</div>
 					<div class="flex gap-2">
+						<button onclick="toggleGathering()" class="btn btn-secondary btn-sm">Toggle Gathering</button>
 						<button onclick="toggleKillSwitch(true)" class="btn btn-danger btn-sm">🏆 I WON (KILL BOT)</button>
 						<button onclick="toggleKillSwitch(false)" class="btn btn-secondary btn-sm">UNDO KILL</button>
 						<a href="/data" class="btn btn-secondary btn-sm">Files</a>
@@ -108,24 +189,71 @@ templ Dashboard() {
 				<div class="space-y-6 col-span-2">
 					<!-- State Machine Status -->
 					<div class="glass" id="status-card" sse-swap="status">
-						@StatusComponent(AppState{Status: StatusInitializing})
+						@StatusComponent(state)
 					</div>
 
 					<!-- Current Song -->
 					<div class="glass" id="song-card" sse-swap="song">
-						@SongComponent("")
+						@SongComponent(state.CurrentSong)
 					</div>
 
 					<!-- Audio Stats -->
 					<div class="glass flex justify-between" id="audio-card" sse-swap="audio">
-						@AudioStatsComponent(0, 0)
+						@AudioStatsComponent(state.UnusedAudios, state.UsedAudios)
+					</div>
+
+					<div class="glass p-6">
+						<div class="flex justify-between items-center mb-4">
+							<div>
+								<h2 class="text-sm uppercase text-muted mb-1">Signature Review</h2>
+								if state.GatheringSignatures {
+									<div class="text-sm text-success">Gathering enabled</div>
+								} else {
+									<div class="text-sm text-warning">Gathering disabled</div>
+								}
+							</div>
+							<a href="/api/unreviewed" class="btn btn-secondary btn-sm" target="_blank">List JSON</a>
+						</div>
+						if len(chunks) == 0 {
+							<div class="text-sm text-muted">No unreviewed chunks waiting for manual review.</div>
+						} else {
+							<div class="space-y-4">
+								for _, chunk := range chunks {
+									<div class="border border-white/10 rounded p-4">
+										<div class="flex justify-between items-center gap-4 mb-3">
+											<div>
+												<div class="font-semibold break-all">{ chunk.Name }</div>
+												<div class="text-xs text-muted">{ fmt.Sprintf("%d bytes", chunk.Size) } · { chunk.ModTime }</div>
+											</div>
+											<a href={ templ.URL(chunk.PlayURL) } target="_blank" class="btn btn-secondary btn-sm">Open</a>
+										</div>
+										<audio controls preload="none" class="w-full mb-3">
+											<source src={ chunk.PlayURL } type={ audioMimeType(chunk.Name) } />
+											Your browser does not support the audio element.
+										</audio>
+										<form onsubmit="return cropUnreviewed(event, this)" class="flex gap-2 items-end">
+											<input type="hidden" name="filename" value={ chunk.Name }/>
+											<div>
+												<label class="text-xs text-muted mb-1">Start byte</label>
+												<input type="number" name="start_bytes" min="0" value="0" class="input" required/>
+											</div>
+											<div>
+												<label class="text-xs text-muted mb-1">End byte</label>
+												<input type="number" name="end_bytes" min="1" value={ fmt.Sprintf("%d", chunk.Size) } class="input" required/>
+											</div>
+											<button type="submit" class="btn btn-primary btn-sm">Crop to Canonical</button>
+										</form>
+									</div>
+								}
+							</div>
+						}
 					</div>
 				</div>
 
 				<!-- Right Column: QR Code & Logs -->
 				<div class="space-y-6">
 					<div id="qr-card" sse-swap="qrcode">
-						@QRComponent(AppState{Status: StatusInitializing}.Connections)
+						@QRComponent(state.Connections)
 					</div>
 
 					<div class="glass p-6">
@@ -135,6 +263,65 @@ templ Dashboard() {
 							<button type="submit" class="btn btn-secondary">Add</button>
 						</form>
 						<div id="add-sender-result" class="mt-4 text-sm text-warning"></div>
+					</div>
+
+					<div class="glass p-6">
+						<h2 class="text-sm uppercase text-muted mb-4">Upload Voice Note</h2>
+						<form onsubmit="return uploadAudio(event, this)" enctype="multipart/form-data" class="space-y-4">
+							<div>
+								<label class="text-xs text-muted mb-1">Phone pool</label>
+								<select name="phone" class="input" required>
+									for _, phone := range phones {
+										<option value={ phone }>
+											{ phone }
+											if phone == CanonicalSenderPhone {
+												{ " (canonical)" }
+											}
+										</option>
+									}
+								</select>
+							</div>
+							<div>
+								<label class="text-xs text-muted mb-1">.ogg voice note</label>
+								<input type="file" name="audio" accept=".ogg,audio/ogg" class="input" required />
+							</div>
+							<button type="submit" class="btn btn-primary">Upload</button>
+						</form>
+						<div id="upload-audio-result" class="mt-4 text-sm text-muted">Uploads land in the active pool, never in <code>used/</code>.</div>
+					</div>
+
+					<div class="glass p-6">
+						<div class="flex justify-between items-center mb-4">
+							<div>
+								<h2 class="text-sm uppercase text-muted mb-1">Daily RNG Schedule</h2>
+								<div class="text-xs text-muted">Edit the stored daily match indices used by the RNG gate.</div>
+							</div>
+							<a href="/api/schedule" class="btn btn-secondary btn-sm" target="_blank">JSON</a>
+						</div>
+						<form onsubmit="return saveSchedule(event, this)" class="space-y-4">
+							<div>
+								<label class="text-xs text-muted mb-1">Date</label>
+								<input type="date" name="date" class="input" required />
+							</div>
+							<div>
+								<label class="text-xs text-muted mb-1">Target matches</label>
+								<input type="text" name="target_matches" placeholder="1,3,5" class="input" required />
+							</div>
+							<button type="submit" class="btn btn-primary">Save Schedule</button>
+						</form>
+						<div id="schedule-result" class="mt-4 text-sm text-muted">Use comma-separated match indices such as <code>1, 3, 5</code>.</div>
+						if len(schedules) == 0 {
+							<div class="mt-4 text-sm text-muted">No schedules stored yet.</div>
+						} else {
+							<div class="mt-4 space-y-2 max-h-72 overflow-y-auto">
+								for _, schedule := range schedules {
+									<div class="border border-white/10 rounded p-3">
+										<div class="text-sm font-semibold">{ schedule.Date }</div>
+										<div class="text-xs text-muted">Target matches: { formatScheduleTargets(schedule.TargetMatches) }</div>
+									</div>
+								}
+							</div>
+						}
 					</div>
 				</div>
 			</div>
@@ -207,54 +394,44 @@ templ AudioStatsComponent(unused, used int) {
 }
 
 templ QRComponent(conns []WAConnectionState) {
+	if len(conns) == 0 {
+		<div class="glass qr-card">
+			<h2 class="text-sm uppercase text-muted mb-4">WhatsApp Pairing</h2>
+			<div class="text-muted text-center">No sender phones configured yet.</div>
+		</div>
+	}
 	for _, conn := range conns {
 		<div class="glass qr-card mb-4">
 			<h2 class="text-sm uppercase text-muted mb-4">WhatsApp Pairing ({ conn.Phone })</h2>
+			<div class="text-xs mb-4">
+				if conn.Status == StatusConnected {
+					<span class="text-success">Connected</span>
+				} else if conn.Status == StatusPairingRequired {
+					<span class="text-warning">Pairing required</span>
+				} else if conn.Status == StatusError {
+					<span class="text-danger">Connection error</span>
+				} else {
+					<span class="text-muted">{ string(conn.Status) }</span>
+				}
+			</div>
 			<div class="qr-container">
 				if conn.QRCodeData == "" {
 					<div class="text-muted text-center">
 						<svg class="svg-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-						<p>Session active.<br/>No QR code needed.</p>
+						if conn.Status == StatusConnected {
+							<p>Session active.<br/>No QR code needed.</p>
+						} else if conn.Status == StatusError {
+							<p>Connection failed.<br/>Waiting for a retry.</p>
+						} else {
+							<p>Waiting for the client state to settle.</p>
+						}
 					</div>
 				} else {
 					<img src={ conn.QRCodeData } class="qr-image" alt="WhatsApp QR Code"/>
-			<div class="progress-bar">
-				<div id="qr-progress" class="progress-fill"></div>
-			</div>
-			<p class="qr-text">Expires in <span id="qr-countdown">40</span>s</p>
-			
-			<script>
-				(function() {
-					let timeLeft = 40;
-					const progress = document.getElementById('qr-progress');
-					const countdown = document.getElementById('qr-countdown');
-					
-					const timer = setInterval(() => {
-						timeLeft -= 0.1;
-						if (timeLeft <= 0) {
-							clearInterval(timer);
-							progress.style.width = '0%';
-							countdown.innerText = '0';
-						} else {
-					<script>
-						(function() {
-							let timeLeft = 40;
-							const progress = document.getElementById('qr-progress');
-							const countdown = document.getElementById('qr-countdown');
-							
-							const timer = setInterval(() => {
-								timeLeft -= 0.1;
-								if (timeLeft <= 0) {
-									clearInterval(timer);
-									progress.style.width = '0%';
-									countdown.innerText = '0';
-								} else {
-									progress.style.width = (timeLeft / 40 * 100) + '%';
-									countdown.innerText = Math.ceil(timeLeft);
-								}
-							}, 100);
-						})();
-					</script>
+					<div class="progress-bar">
+						<div class="progress-fill" style="width: 100%;"></div>
+					</div>
+					<p class="qr-text">Scan promptly. The QR refreshes automatically when WhatsApp rotates it.</p>
 				}
 			</div>
 		</div>
@@ -325,7 +502,7 @@ templ DataViewer(files []FileInfo) {
 									<td class="p-3">
 										if strings.HasSuffix(f.Name, ".ogg") || strings.HasSuffix(f.Name, ".mp3") || strings.HasSuffix(f.Name, ".wav") {
 											<audio controls preload="none" style="height: 32px; width: 250px;">
-												<source src={ "/raw-data/" + f.Path } type="audio/ogg" />
+												<source src={ "/raw-data/" + f.Path } type={ audioMimeType(f.Name) } />
 												Your browser does not support the audio element.
 											</audio>
 										}

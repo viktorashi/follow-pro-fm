@@ -65,6 +65,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to init DB Manager: %v", err)
 	}
+	if err := poller.ReconcileAudioUsage(audiosDir, dbMgr); err != nil {
+		log.Fatalf("Failed to reconcile historical audio usage: %v", err)
+	}
 
 	// 4. Initialize State Manager and SSE Broadcaster
 	stateMgr := poller.NewStateManager()
@@ -141,7 +144,7 @@ func main() {
 	}()
 
 	// 8. Start Web Dashboard (Telemetry Server)
-	telemetryServer := poller.NewTelemetryServer(authMgr, stateMgr, sseBroadcaster, logWriter, dbMgr, filepath.Dir(dbPath))
+	telemetryServer := poller.NewTelemetryServer(authMgr, stateMgr, sseBroadcaster, logWriter, dbMgr, filepath.Dir(dbPath), audiosDir)
 	go func() {
 		fmt.Println("🚀 Telemetry UI available at", baseURL)
 		if err := telemetryServer.Start("0.0.0.0:" + port); err != nil {
@@ -171,10 +174,9 @@ func main() {
 		}
 		wappMutex.RUnlock()
 
-		normalized := strings.ReplaceAll(p, " ", "")
-		normalized = strings.ReplaceAll(normalized, "+", "")
+		normalized := poller.NormalizePhone(p)
 		dbForPhone := filepath.Join(filepath.Dir(dbPath), "wapp_"+normalized+".sqlite")
-		if normalized == "40734788254" {
+		if normalized == poller.CanonicalSenderPhoneNormalized {
 			dbForPhone = dbPath
 		}
 
@@ -227,15 +229,13 @@ func main() {
 		}
 	}
 
-	// Default phone if none found and it's the legacy dbPath
+	// Default phone if none found so a fresh environment can still pair or mock-pair.
 	wappMutex.RLock()
 	clientsCount := len(wappClients)
 	wappMutex.RUnlock()
 	if clientsCount == 0 {
-		if _, err := os.Stat(dbPath); err == nil {
-			if err := addSenderPhone("+40734788254"); err != nil {
-				log.Printf("Error adding default phone: %v", err)
-			}
+		if err := addSenderPhone(poller.CanonicalSenderPhone); err != nil {
+			log.Printf("Error adding default phone: %v", err)
 		}
 	}
 
@@ -246,6 +246,20 @@ func main() {
 		{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd"},
 	}
 
+	if err := poller.InitRNGSchedule(dbMgr, activeCampaigns); err != nil {
+		log.Fatalf("Failed to initialize RNG schedule: %v", err)
+	}
+
+	// Initialize Circular Audio Buffer for R3
+	streamURL := os.Getenv("PROFM_STREAM_URL")
+	if streamURL == "" {
+		streamURL = "http://edge76.rcs-rds.ro:84/profm/profm.mp3"
+	}
+	// 3 minutes at 128kbps is ~2.88MB, we use 8MB buffer
+	audioBuffer := poller.NewCircularAudioBuffer(streamURL, 8*1024*1024)
+	audioBuffer.Start()
+	defer audioBuffer.Stop()
+
 	// 10. Start Poller
 	p := &poller.Poller{
 		APIURL:          profmAPIURL,
@@ -255,6 +269,8 @@ func main() {
 		StateMgr:        stateMgr,
 		Alerter:         alerter,
 		AudiosDir:       audiosDir,
+		SignaturesDir:   filepath.Join(filepath.Dir(audiosDir), "signatures"),
+		AudioBuffer:     audioBuffer,
 		DBMgr:           dbMgr,
 		BaseURL:         baseURL,
 		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {

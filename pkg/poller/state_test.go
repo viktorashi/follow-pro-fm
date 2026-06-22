@@ -75,3 +75,52 @@ func TestStateManager(t *testing.T) {
 		t.Error("Channel should have been closed immediately")
 	}
 }
+
+func TestStateManagerDerivesAggregateConnectionStatus(t *testing.T) {
+	sm := NewStateManager()
+
+	sm.Update(func(s *AppState) {
+		s.Connections = []WAConnectionState{
+			{Phone: "+401", Status: StatusPairingRequired},
+			{Phone: "+402", Status: StatusConnected, WhatsAppConnected: true},
+		}
+	})
+
+	state := sm.Get()
+	if state.Status != StatusPairingRequired {
+		t.Fatalf("status = %q, want %q", state.Status, StatusPairingRequired)
+	}
+	if !state.WhatsAppConnected {
+		t.Fatal("expected aggregate WhatsAppConnected to be true when one sender is connected")
+	}
+
+	sm.UpdateConnection("+401", func(conn *WAConnectionState) {
+		conn.Status = StatusConnected
+		conn.WhatsAppConnected = true
+		conn.QRCodeData = ""
+	})
+
+	state = sm.Get()
+	if state.Status != StatusConnected {
+		t.Fatalf("status = %q, want %q", state.Status, StatusConnected)
+	}
+	if !state.WhatsAppConnected {
+		t.Fatal("expected aggregate WhatsAppConnected to stay true")
+	}
+}
+
+func TestStateManagerKeepsRuntimeStatusWhenConnectionsChange(t *testing.T) {
+	sm := NewStateManager()
+
+	sm.Update(func(s *AppState) {
+		s.Status = StatusPolling
+		s.Connections = []WAConnectionState{
+			{Phone: "+401", Status: StatusPairingRequired},
+		}
+	})
+
+	state := sm.Get()
+	if state.Status != StatusPolling {
+		t.Fatalf("status = %q, want %q", state.Status, StatusPolling)
+	}
+}
