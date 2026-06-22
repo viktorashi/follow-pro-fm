@@ -95,11 +95,14 @@ func TestPoller_E2E(t *testing.T) {
 		StateMgr:    NewStateManager(),
 		Alerter:     multiAlerter,
 		AudiosDir:   audiosDir,
-		SendVoiceNote: func(phone string, audioPath string) error {
-			t.Logf("🚀 Triggering real E2E voice note send to %s...", phone)
-			return SendVoiceNote(client, phone, audioPath)
+		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
+			t.Logf("🚀 Triggering real E2E voice note send from %s to %s...", senderPhone, targetPhone)
+			return SendVoiceNote(client, targetPhone, audioPath)
 		},
 	}
+	poller.StateMgr.Update(func(s *AppState) {
+		s.Connections = []WAConnectionState{{Phone: "+40734788254", WhatsAppConnected: true, Status: StatusConnected}}
+	})
 
 	currentSong := &SongInfo{}
 

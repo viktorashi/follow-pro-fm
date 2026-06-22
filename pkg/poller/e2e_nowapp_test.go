@@ -76,11 +76,14 @@ func TestPoller_E2E_NoWhatsApp(t *testing.T) {
 		StateMgr:    NewStateManager(),
 		Alerter:     multiAlerter,
 		AudiosDir:   audiosDir,
-		SendVoiceNote: func(phone string, audioPath string) error {
-			t.Logf("🚀 Simulating voice note send to %s (audio: %s)", phone, audioPath)
+		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
+			t.Logf("🚀 Simulating voice note send from %s to %s (audio: %s)", senderPhone, targetPhone, audioPath)
 			return nil
 		},
 	}
+	poller.StateMgr.Update(func(s *AppState) {
+		s.Connections = []WAConnectionState{{Phone: "+40734788254", WhatsAppConnected: true, Status: StatusConnected}}
+	})
 
 	currentSong := &SongInfo{}
 
