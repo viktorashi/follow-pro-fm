@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	MaxDailyMatches    = 6
-	followProFMKeyword = "follow profm"
+	MaxDailyMatches      = 6
+	followProFMKeyword   = "follow profm"
+	dashcamAfterDuration = 4 * time.Minute
 )
 
 var bucharestLocation = loadBucharestLocation()
@@ -358,7 +359,8 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 						p.doTriggerVoiceNote(campaignArtist, song.Artist, song.Title, now, matchIndex, currentRadioLogID)
 
 						if p.StateMgr != nil && p.StateMgr.Get().GatheringSignatures && p.AudioBuffer != nil {
-							p.AudioBuffer.Trigger(10*time.Second, func(data []byte) {
+							// Metadata-only detections extend the preserved pre-roll by 4 minutes.
+							p.AudioBuffer.Trigger(dashcamAfterDuration, func(data []byte) {
 								filename := fmt.Sprintf("%s - %s - %d.mp3", song.Artist, song.Title, time.Now().Unix())
 								saved, matchedName, err := SaveUnreviewedChunkIfDistinct(
 									data,

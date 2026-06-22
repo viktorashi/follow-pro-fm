@@ -134,4 +134,34 @@ func TestNormalizeScheduleJSON(t *testing.T) {
 	if _, err := NormalizeScheduleJSON(`{"bad":true}`); err == nil {
 		t.Fatal("NormalizeScheduleJSON() error = nil, want invalid JSON array error")
 	}
+
+	if _, err := NormalizeScheduleJSON("[1,1]"); err == nil {
+		t.Fatal("NormalizeScheduleJSON() error = nil, want duplicate match index error")
+	}
+
+	if _, err := NormalizeScheduleJSON("[0,7]"); err == nil {
+		t.Fatal("NormalizeScheduleJSON() error = nil, want out-of-range match index error")
+	}
+}
+
+func TestIsScheduleDateAllowed(t *testing.T) {
+	campaigns := []Campaign{
+		{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
+	}
+
+	allowed, err := isScheduleDateAllowed("2026-06-23", campaigns, bucharestLocation)
+	if err != nil {
+		t.Fatalf("isScheduleDateAllowed() error = %v", err)
+	}
+	if !allowed {
+		t.Fatal("isScheduleDateAllowed() = false, want true for in-range campaign weekday")
+	}
+
+	allowed, err = isScheduleDateAllowed("2026-06-27", campaigns, bucharestLocation)
+	if err != nil {
+		t.Fatalf("isScheduleDateAllowed() error = %v", err)
+	}
+	if allowed {
+		t.Fatal("isScheduleDateAllowed() = true, want false for Saturday outside allowed weekdays")
+	}
 }

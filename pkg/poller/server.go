@@ -32,6 +32,7 @@ type TelemetryServer struct {
 	dbMgr       *DBManager
 	dataDir     string
 	audiosDir   string
+	campaigns   []Campaign
 	wappClients []WhatsAppClient
 	onAddPhone  func(phone string) error
 }
@@ -41,7 +42,7 @@ type ScheduleEntry struct {
 	TargetMatches []int
 }
 
-func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster, logWriter *SSELogWriter, dbMgr *DBManager, dataDir string, audiosDir string) *TelemetryServer {
+func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster, logWriter *SSELogWriter, dbMgr *DBManager, dataDir string, audiosDir string, campaigns []Campaign) *TelemetryServer {
 	e := echo.New()
 
 	if logWriter == nil {
@@ -71,6 +72,7 @@ func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaste
 		dbMgr:       dbMgr,
 		dataDir:     dataDir,
 		audiosDir:   audiosDir,
+		campaigns:   append([]Campaign(nil), campaigns...),
 	}
 
 	ts.registerRoutes()
@@ -605,10 +607,19 @@ func (s *TelemetryServer) handleSetSchedule(c *echo.Context) error {
 	if _, err := time.Parse("2006-01-02", req.Date); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "date must be in YYYY-MM-DD format"})
 	}
+	if len(s.campaigns) > 0 {
+		allowed, err := isScheduleDateAllowed(req.Date, s.campaigns, bucharestLocation)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+		if !allowed {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "date must be a campaign weekday within the configured campaign windows"})
+		}
+	}
 
 	scheduleJSON, err := normalizeSchedulePayload(req.TargetMatches)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "target_matches must be a JSON array of ints"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 
 	if err := s.dbMgr.SetDailySchedule(c.Request().Context(), req.Date, scheduleJSON); err != nil {
@@ -745,7 +756,7 @@ func audioMimeType(name string) string {
 
 func normalizeSchedulePayload(raw json.RawMessage) (string, error) {
 	if len(raw) == 0 {
-		return "", fmt.Errorf("empty target_matches")
+		return "", fmt.Errorf("target_matches must be a JSON array of unique ints within 1..6")
 	}
 
 	var direct []int
@@ -755,7 +766,7 @@ func normalizeSchedulePayload(raw json.RawMessage) (string, error) {
 
 	var encoded string
 	if err := json.Unmarshal(raw, &encoded); err != nil {
-		return "", err
+		return "", fmt.Errorf("target_matches must be a JSON array of unique ints within 1..6")
 	}
 
 	return NormalizeScheduleJSON(encoded)

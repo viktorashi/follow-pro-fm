@@ -61,6 +61,51 @@ func TestHandleSetScheduleAcceptsJSONStringPayload(t *testing.T) {
 	}
 }
 
+func TestHandleSetScheduleRejectsOutOfRangeMatchIndices(t *testing.T) {
+	dbMgr, err := NewDBManager(":memory:")
+	if err != nil {
+		t.Fatalf("NewDBManager() error = %v", err)
+	}
+
+	server := &TelemetryServer{dbMgr: dbMgr}
+	ctx, rec := newJSONContext(http.MethodPost, "/api/schedule", []byte(`{"date":"2026-06-23","target_matches":[0,7]}`))
+
+	if err := server.handleSetSchedule(ctx); err != nil {
+		t.Fatalf("handleSetSchedule() error = %v", err)
+	}
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "1..6") {
+		t.Fatalf("body = %q, want range validation error", body)
+	}
+}
+
+func TestHandleSetScheduleRejectsDateOutsideCampaignWindows(t *testing.T) {
+	dbMgr, err := NewDBManager(":memory:")
+	if err != nil {
+		t.Fatalf("NewDBManager() error = %v", err)
+	}
+
+	server := &TelemetryServer{
+		dbMgr: dbMgr,
+		campaigns: []Campaign{
+			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
+		},
+	}
+	ctx, rec := newJSONContext(http.MethodPost, "/api/schedule", []byte(`{"date":"2026-06-27","target_matches":[1,3]}`))
+
+	if err := server.handleSetSchedule(ctx); err != nil {
+		t.Fatalf("handleSetSchedule() error = %v", err)
+	}
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "campaign weekday") {
+		t.Fatalf("body = %q, want campaign window validation error", body)
+	}
+}
+
 func newJSONContext(method string, target string, body []byte) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, target, bytes.NewReader(body))
