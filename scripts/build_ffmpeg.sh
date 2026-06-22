@@ -51,10 +51,12 @@ echo "Configuring ffmpeg..."
   --enable-ffprobe \
   --enable-protocol=file \
   --enable-protocol=pipe \
+  --enable-demuxer=mp3 \
   --enable-demuxer=ogg \
   --enable-muxer=ogg \
   --enable-muxer=pcm_s16le \
   --enable-encoder=pcm_s16le \
+  --enable-decoder=mp3float \
   --enable-parser=opus \
   --enable-decoder=opus \
   --enable-filter=aresample \

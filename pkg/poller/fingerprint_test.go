@@ -8,12 +8,20 @@ import (
 )
 
 func TestMatchSignature(t *testing.T) {
+	if _, err := ffmpegBinaryPath(); err != nil {
+		t.Skip("ffmpeg not installed, skipping audio fingerprint validation")
+	}
+
 	canonical := mustReadTestFile(t, "testdata", "fingerprint", "canonical_intro.mp3")
 	streamMatch := mustReadTestFile(t, "testdata", "fingerprint", "stream_match.mp3")
+	streamQuietMatch := mustReadTestFile(t, "testdata", "fingerprint", "stream_match_quiet.mp3")
 	streamNoMatch := mustReadTestFile(t, "testdata", "fingerprint", "stream_no_match.mp3")
 
 	if !MatchSignature(streamMatch, canonical) {
 		t.Errorf("Expected match, but got none")
+	}
+	if !MatchSignature(streamQuietMatch, canonical) {
+		t.Errorf("Expected quieter shifted match, but got none")
 	}
 
 	if MatchSignature(streamNoMatch, canonical) {
