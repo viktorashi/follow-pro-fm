@@ -1,6 +1,7 @@
 package poller
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -93,16 +94,8 @@ func TestSendVoiceNote_Success(t *testing.T) {
 	if len(record.Waveform) != 64 {
 		t.Errorf("expected 64-byte waveform, got %d bytes", len(record.Waveform))
 	}
-
-	// Peak value check (excluding completely zero waveforms, which this ogg shouldn't be)
-	peak := byte(0)
-	for _, val := range record.Waveform {
-		if val > peak {
-			peak = val
-		}
-	}
-	if peak != 255 {
-		t.Errorf("expected peak of 255 in sent waveform, got %d", peak)
+	if !bytes.Equal(record.Waveform, expectedWaveformSample()) {
+		t.Errorf("unexpected waveform sent: got %v", record.Waveform)
 	}
 }
 

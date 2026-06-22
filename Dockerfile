@@ -27,8 +27,7 @@ RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /app
 COPY --from=builder /pro-fm-poller .
-COPY --from=builder /src/bin/ffmpeg /usr/local/bin/ffmpeg
-COPY --from=builder /src/bin/ffprobe /usr/local/bin/ffprobe
+COPY --from=builder /src/bin/ffmpeg /src/bin/ffprobe /usr/local/bin/
 
 # /data is where the persistent volume will be mounted for wapp.sqlite
 RUN mkdir -p /data

@@ -290,12 +290,18 @@ func SendVoiceNote(client WhatsAppClient, phone string, audioPath string) error 
 	tmpPath := fmt.Sprintf("%s.tmp.ogg", audioPath)
 
 	// 5. Run ffmpeg to inject this timestamp into the OGG metadata creation_time
-	cmd := exec.Command("ffmpeg", "-y", "-i", audioPath, "-c", "copy", "-metadata", "creation_time="+now, tmpPath)
-	if err := cmd.Run(); err != nil {
-		fmt.Printf("   ⚠️ Failed to inject metadata with ffmpeg, falling back to original: %v\n", err)
+	ffmpegPath, ffmpegErr := ffmpegBinaryPath()
+	if ffmpegErr != nil {
+		fmt.Printf("   ⚠️ Failed to locate ffmpeg for metadata injection, falling back to original: %v\n", ffmpegErr)
 		tmpPath = audioPath
 	} else {
-		defer func() { _ = os.Remove(tmpPath) }()
+		cmd := exec.Command(ffmpegPath, "-y", "-i", audioPath, "-c", "copy", "-metadata", "creation_time="+now, tmpPath)
+		if err := cmd.Run(); err != nil {
+			fmt.Printf("   ⚠️ Failed to inject metadata with ffmpeg, falling back to original: %v\n", err)
+			tmpPath = audioPath
+		} else {
+			defer func() { _ = os.Remove(tmpPath) }()
+		}
 	}
 
 	// 6. Read the newly modified file
@@ -548,7 +554,12 @@ func (m *MockWhatsAppClient) SimulatePairing() {
 // representing the audio waveform for WhatsApp.
 func ExtractWaveform(audioPath string) ([]byte, error) {
 	zeroSlice := make([]byte, 64)
-	cmd := exec.Command("ffmpeg", "-i", audioPath, "-f", "s16le", "-ac", "1", "-ar", "8000", "-")
+	ffmpegPath, err := ffmpegBinaryPath()
+	if err != nil {
+		return zeroSlice, fmt.Errorf("ffmpeg not found: %w", err)
+	}
+
+	cmd := exec.Command(ffmpegPath, "-i", audioPath, "-f", "s16le", "-ac", "1", "-ar", "8000", "-")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
