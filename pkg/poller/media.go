@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -143,4 +145,28 @@ func getHeuristicDuration(path string) (time.Duration, error) {
 	// Assume ~2.5KB/s as a fallback generic heuristic (e.g., highly compressed voice notes)
 	seconds := float64(stat.Size()) / 2500.0
 	return time.Duration(seconds * float64(time.Second)), nil
+}
+
+func ffmpegBinaryPath() (string, error) {
+	return resolveMediaBinary("FFMPEG_BIN", "ffmpeg")
+}
+
+func ffprobeBinaryPath() (string, error) {
+	return resolveMediaBinary("FFPROBE_BIN", "ffprobe")
+}
+
+func resolveMediaBinary(envVar string, binName string) (string, error) {
+	if explicit := os.Getenv(envVar); explicit != "" {
+		return explicit, nil
+	}
+
+	if _, sourceFile, _, ok := runtime.Caller(0); ok {
+		repoRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
+		candidate := filepath.Join(repoRoot, "bin", binName)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate, nil
+		}
+	}
+
+	return exec.LookPath(binName)
 }
