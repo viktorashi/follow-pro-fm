@@ -29,7 +29,7 @@ func InitRNGSchedule(dbMgr *DBManager, campaigns []Campaign) error {
 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for _, campaign := range campaigns {
-		dates, err := campaignWeekdays(campaign, time.Local)
+		dates, err := campaignWeekdays(campaign, bucharestLocation)
 		if err != nil {
 			return err
 		}
@@ -95,6 +95,9 @@ func ParseSchedule(scheduleJSON string) ([]int, error) {
 func MarshalSchedule(targetMatches []int) (string, error) {
 	normalized := append([]int(nil), targetMatches...)
 	sort.Ints(normalized)
+	if err := validateScheduleMatches(normalized); err != nil {
+		return "", err
+	}
 	encoded, err := json.Marshal(normalized)
 	if err != nil {
 		return "", err
@@ -108,6 +111,20 @@ func NormalizeScheduleJSON(scheduleJSON string) (string, error) {
 		return "", err
 	}
 	return MarshalSchedule(targetMatches)
+}
+
+func validateScheduleMatches(targetMatches []int) error {
+	seen := make(map[int]struct{}, len(targetMatches))
+	for _, matchIndex := range targetMatches {
+		if matchIndex < 1 || matchIndex > MaxDailyMatches {
+			return errors.New("target_matches must contain unique integers within 1..6")
+		}
+		if _, ok := seen[matchIndex]; ok {
+			return errors.New("target_matches must contain unique integers within 1..6")
+		}
+		seen[matchIndex] = struct{}{}
+	}
+	return nil
 }
 
 func generateSchedule(rng *rand.Rand) []int {
@@ -151,6 +168,36 @@ func campaignWeekdays(campaign Campaign, loc *time.Location) ([]time.Time, error
 		dates = append(dates, day)
 	}
 	return dates, nil
+}
+
+func isScheduleDateAllowed(date string, campaigns []Campaign, loc *time.Location) (bool, error) {
+	if loc == nil {
+		loc = bucharestLocation
+	}
+
+	day, err := time.ParseInLocation("2006-01-02", date, loc)
+	if err != nil {
+		return false, err
+	}
+	if day.Weekday() == time.Saturday || day.Weekday() == time.Sunday {
+		return false, nil
+	}
+
+	for _, campaign := range campaigns {
+		start, err := time.ParseInLocation("02-01-2006", campaign.StartDate, loc)
+		if err != nil {
+			return false, err
+		}
+		end, err := time.ParseInLocation("02-01-2006", campaign.EndDate, loc)
+		if err != nil {
+			return false, err
+		}
+		if !day.Before(start) && !day.After(end) {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func shouldBypassRNGSchedule() bool {

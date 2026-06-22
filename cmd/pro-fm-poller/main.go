@@ -143,8 +143,15 @@ func main() {
 		}
 	}()
 
+	// Load campaigns in memory
+	activeCampaigns := []poller.Campaign{
+		{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
+		{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana"},
+		{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd"},
+	}
+
 	// 8. Start Web Dashboard (Telemetry Server)
-	telemetryServer := poller.NewTelemetryServer(authMgr, stateMgr, sseBroadcaster, logWriter, dbMgr, filepath.Dir(dbPath), audiosDir)
+	telemetryServer := poller.NewTelemetryServer(authMgr, stateMgr, sseBroadcaster, logWriter, dbMgr, filepath.Dir(dbPath), audiosDir, activeCampaigns)
 	go func() {
 		fmt.Println("🚀 Telemetry UI available at", baseURL)
 		if err := telemetryServer.Start("0.0.0.0:" + port); err != nil {
@@ -239,13 +246,6 @@ func main() {
 		}
 	}
 
-	// Load campaigns in memory
-	activeCampaigns := []poller.Campaign{
-		{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
-		{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana"},
-		{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd"},
-	}
-
 	if err := poller.InitRNGSchedule(dbMgr, activeCampaigns); err != nil {
 		log.Fatalf("Failed to initialize RNG schedule: %v", err)
 	}
@@ -255,9 +255,8 @@ func main() {
 	if streamURL == "" {
 		streamURL = "http://edge76.rcs-rds.ro:84/profm/profm.mp3"
 	}
-	// 3 minutes at 128kbps is ~2.88MB, we use 8MB buffer
-	audioBuffer := poller.NewCircularAudioBuffer(streamURL, 8*1024*1024)
-	audioBuffer.Start()
+	// Keep roughly 3 minutes of MP3 pre-roll in memory for dashcam captures.
+	audioBuffer := poller.NewCircularAudioBuffer(streamURL, 3*60*128000/8)
 	defer audioBuffer.Stop()
 
 	// 10. Start Poller
