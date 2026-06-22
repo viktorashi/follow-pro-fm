@@ -7,9 +7,11 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/lithammer/dedent"
 )
@@ -18,6 +20,18 @@ const (
 	MaxDailyMatches    = 6
 	followProFMKeyword = "follow profm"
 )
+
+var bucharestLocation = loadBucharestLocation()
+
+func loadBucharestLocation() *time.Location {
+	loc, err := time.LoadLocation("Europe/Bucharest")
+	if err != nil {
+		// Fallback keeps the campaign aligned to Romanian standard time if tzdata
+		// is unexpectedly unavailable.
+		return time.FixedZone("Europe/Bucharest", 2*60*60)
+	}
+	return loc
+}
 
 type EPGData struct {
 	Data struct {
@@ -42,9 +56,7 @@ type Campaign struct {
 
 // IsActive checks if the current time falls within the campaign date period
 func (c Campaign) IsActive(now time.Time) bool {
-	if os.Getenv("BYPASS_CAMPAIGN_TIME_CHECKS") == "true" {
-		return true
-	}
+	now = now.In(bucharestLocation)
 
 	// Global Rule 1: Monday to Friday only
 	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
@@ -57,8 +69,8 @@ func (c Campaign) IsActive(now time.Time) bool {
 	}
 
 	layout := "02-01-2006"
-	start, err1 := time.ParseInLocation(layout, c.StartDate, now.Location())
-	end, err2 := time.ParseInLocation(layout, c.EndDate, now.Location())
+	start, err1 := time.ParseInLocation(layout, c.StartDate, bucharestLocation)
+	end, err2 := time.ParseInLocation(layout, c.EndDate, bucharestLocation)
 
 	if err1 != nil || err2 != nil {
 		return false
@@ -81,11 +93,81 @@ type Poller struct {
 	StateMgr           *StateManager
 	Alerter            Alerter
 	AudiosDir          string
+	SignaturesDir      string
+	AudioBuffer        *CircularAudioBuffer
 	DBMgr              *DBManager
 	BaseURL            string
 
 	matchesToday int
 	lastCheckDay int
+
+	ignoredTriggerMu sync.Mutex
+	ignoredTrigger   fingerprintTrigger
+	sendMu           sync.Mutex
+}
+
+type fingerprintTrigger struct {
+	signatureName string
+	artist        string
+	title         string
+}
+
+func normalizeTriggerValue(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	return strings.Join(strings.Fields(value), " ")
+}
+
+func triggerValuesMatch(left, right string) bool {
+	left = normalizeTriggerValue(left)
+	right = normalizeTriggerValue(right)
+	if left == "" || right == "" {
+		return false
+	}
+	return strings.Contains(left, right) || strings.Contains(right, left)
+}
+
+func parseFingerprintTrigger(signatureName string) fingerprintTrigger {
+	base := strings.TrimSuffix(filepath.Base(signatureName), filepath.Ext(signatureName))
+	parts := strings.SplitN(base, " - ", 2)
+	trigger := fingerprintTrigger{signatureName: signatureName, artist: base, title: "Unknown"}
+	if len(parts) == 2 {
+		trigger.artist = parts[0]
+		trigger.title = parts[1]
+	}
+	return trigger
+}
+
+func (p *Poller) consumeIgnoredMetadataTrigger(song SongInfo) bool {
+	p.ignoredTriggerMu.Lock()
+	defer p.ignoredTriggerMu.Unlock()
+
+	if p.ignoredTrigger.signatureName == "" {
+		return false
+	}
+
+	ignored := triggerValuesMatch(p.ignoredTrigger.artist, song.Artist) || triggerValuesMatch(p.ignoredTrigger.title, song.Title)
+	if ignored {
+		p.ignoredTrigger = fingerprintTrigger{}
+	}
+	return ignored
+}
+
+func (p *Poller) matchingCampaignArtist(now time.Time, song SongInfo) (string, bool) {
+	titleLower := strings.ToLower(song.Title)
+	artistLower := strings.ToLower(song.Artist)
+
+	for _, campaign := range p.ActiveCampaigns {
+		if !campaign.IsActive(now) {
+			continue
+		}
+
+		campaignArtistLower := strings.ToLower(campaign.Artist)
+		if strings.Contains(artistLower, campaignArtistLower) || strings.Contains(titleLower, followProFMKeyword) {
+			return campaign.Artist, true
+		}
+	}
+
+	return "", false
 }
 
 func (p *Poller) hasActiveCampaign(now time.Time) bool {
@@ -169,6 +251,11 @@ func (p *Poller) Start() {
 
 	var currentSong SongInfo
 
+	if p.AudioBuffer != nil {
+		p.AudioBuffer.Start()
+		go p.fingerprintLoop()
+	}
+
 	p.StateMgr.Update(func(s *AppState) {
 		s.Status = StatusPolling
 	})
@@ -199,6 +286,7 @@ func (p *Poller) Start() {
 				}
 				p.StateMgr.Update(func(s *AppState) {
 					s.Status = StatusSleeping
+					s.WhatsAppConnected = false
 				})
 				isSleeping = true
 			}
@@ -231,11 +319,7 @@ func (p *Poller) Start() {
 }
 
 func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
-	// Reset daily matches counter on a new day
-	if now.YearDay() != p.lastCheckDay {
-		p.matchesToday = 0
-		p.lastCheckDay = now.YearDay()
-	}
+	p.resetDailyMatchesIfNeeded(now)
 
 	song, err := p.getNowPlaying()
 	if err != nil {
@@ -246,9 +330,13 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 	if song != *currentSong {
 		log.Printf("[%s] %s - %s", now.Format("15:04:05"), song.Artist, song.Title)
 
+		currentRadioLogID := int64(0)
 		if p.DBMgr != nil {
-			if err := p.DBMgr.LogRadioSong(context.Background(), song.Artist, song.Title, now); err != nil {
+			radioLogID, err := p.DBMgr.LogRadioSong(context.Background(), song.Artist, song.Title, now)
+			if err != nil {
 				log.Printf("   ⚠️ DB Log Error: %v\n", err)
+			} else {
+				currentRadioLogID = radioLogID
 			}
 		}
 
@@ -260,111 +348,31 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 
 		// Only check campaigns if we haven't hit the daily limit of matches
 		if p.matchesToday < MaxDailyMatches {
-			for _, campaign := range p.ActiveCampaigns {
-				if campaign.IsActive(now) {
-					artistMatch := strings.Contains(strings.ToLower(song.Artist), strings.ToLower(campaign.Artist))
-					titleKeywordMatch := strings.Contains(strings.ToLower(song.Title), followProFMKeyword)
-					if artistMatch || titleKeywordMatch {
-						if p.DBMgr != nil {
-							played, err := p.DBMgr.WasSongInLastNPlays(context.Background(), song.Artist, song.Title, 2)
-							if err != nil {
-								log.Printf("   ⚠️ DB Check Error: %v\n", err)
-							} else if played {
-								log.Printf("   [INFO] Song '%s - %s' played within the last 2 songs. Skipping duplicate.", song.Artist, song.Title)
-								break // break out of campaign loop
-							}
-						}
-						p.matchesToday++
-						msg := dedent.Dedent(fmt.Sprintf(`
-												🎉 [VEZI BAA ca se aude piesa]
-												Artistu: %s
+			campaignArtist, matchesCampaign := p.matchingCampaignArtist(now, song)
+			if matchesCampaign {
+				if p.consumeIgnoredMetadataTrigger(song) {
+					log.Printf("   [INFO] Ignoring metadata trigger for '%s - %s' because it was already triggered by fingerprint.", song.Artist, song.Title)
+				} else if !p.wasSongPlayedRecently(song.Artist, song.Title) && p.canSendCampaignArtist(campaignArtist, currentRadioLogID) {
+					matchIndex, selected := p.claimScheduledMatch(now, song.Artist, song.Title)
+					if selected {
+						p.doTriggerVoiceNote(campaignArtist, song.Artist, song.Title, now, matchIndex, currentRadioLogID)
 
-												Piesa: %s
-
-												(Match-ul %d/%d de azi)
-													`,
-							song.Artist, song.Title, p.matchesToday, MaxDailyMatches))
-						log.Println("   " + msg)
-						if alertErr := p.Alerter.AlertInfo(AlertEvent{
-							Title:       "Campaign Alert",
-							Message:     msg,
-							ActionLabel: "View Dashboard",
-							ActionURL:   p.BaseURL,
-						}); alertErr != nil {
-							log.Printf("   ⚠️ Alerter warning: %v\n", alertErr)
-						}
-
-						p.StateMgr.Update(func(s *AppState) {
-							s.Status = StatusCampaignTriggered
-						})
-
-						var audioFile string
-						var chosenSender string
-						for _, conn := range p.StateMgr.Get().Connections {
-							// Try to find a connected sender that has audios
-							dir := GetAudioDirForPhone(conn.Phone, p.AudiosDir)
-							f, err := GetRandomAudio(dir)
-							if err == nil {
-								chosenSender = conn.Phone
-								audioFile = f
-								break
-							}
-						}
-
-						if audioFile == "" {
-							p.StateMgr.Update(func(s *AppState) {
-								s.Status = StatusAudioExhausted
-								s.LastError = "No unused audios available!"
-							})
-							log.Printf("   ❌ NO UNUSED AUDIO FOUND FOR %s!", song.Artist)
-							_ = p.Alerter.AlertCritical(AlertEvent{
-								Title:       "AUDIO POOL EXHAUSTED",
-								Message:     "Cannot send voice note for " + song.Artist + "\nNo unused audio files found in " + p.AudiosDir,
-								ActionLabel: "View Dashboard",
-								ActionURL:   p.BaseURL,
-							})
-							break
-						}
-
-						p.StateMgr.Update(func(s *AppState) {
-							s.Status = StatusSendingAudio
-						})
-
-						// Trigger actual submission (WhatsApp Voice note)
-						log.Println("   Sending WhatsApp voice note using: " + audioFile)
-						err = p.SendVoiceNote(chosenSender, p.TargetPhone, audioFile)
-						if err != nil {
-							log.Printf("   ❌ Error sending voice note: %v\n", err)
-							p.StateMgr.Update(func(s *AppState) {
-								s.Status = StatusError
-								s.LastError = fmt.Sprintf("Voice note failed: %v", err)
-							})
-						} else {
-							// Success!
-							if p.DBMgr != nil {
-								_ = p.DBMgr.RecordSongPlay(context.Background(), song.Artist, song.Title, now)
-							}
-							_ = MarkAudioUsed(audioFile)
-							msg := dedent.Dedent(fmt.Sprintf(`
-								S-a trimis vocalu pe Wapp la nr: %s
-								Artist: %s
-								Piesa: %s
-								Fisieru audio trimis: %s
-								`, p.TargetPhone, song.Artist, song.Title, audioFile))
-							log.Println("✅", msg)
-							_ = p.Alerter.AlertSuccess(AlertEvent{
-								Title:       "Voice Note Sent",
-								Message:     msg,
-								ActionLabel: "View Dashboard",
-								ActionURL:   p.BaseURL,
-							})
-							unused, used := GetTotalAudioStats(p.StateMgr.Get().Connections, p.AudiosDir)
-							p.StateMgr.Update(func(s *AppState) {
-								s.Status = StatusPolling
-								s.LastError = ""
-								s.LastVoiceNoteSentAt = time.Now()
-								s.UnusedAudios = unused
-								s.UsedAudios = used
+						if p.StateMgr != nil && p.StateMgr.Get().GatheringSignatures && p.AudioBuffer != nil {
+							p.AudioBuffer.Trigger(10*time.Second, func(data []byte) {
+								filename := fmt.Sprintf("%s - %s - %d.mp3", song.Artist, song.Title, time.Now().Unix())
+								saved, matchedName, err := SaveUnreviewedChunkIfDistinct(
+									data,
+									filepath.Join(p.SignaturesDir, "unreviewed"),
+									filepath.Join(p.SignaturesDir, "canonical"),
+									filename,
+								)
+								if err != nil {
+									log.Printf("   ⚠️ Failed to save unreviewed chunk %q: %v", filename, err)
+									return
+								}
+								if !saved {
+									log.Printf("   [SIGNATURE REVIEW] Skipped saving %q because it matches canonical signature %q", filename, matchedName)
+								}
 							})
 						}
 					}
@@ -387,4 +395,263 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 		s.UnusedAudios = unused
 		s.UsedAudios = used
 	})
+}
+
+func (p *Poller) resetDailyMatchesIfNeeded(now time.Time) {
+	if now.YearDay() != p.lastCheckDay {
+		p.matchesToday = 0
+		p.lastCheckDay = now.YearDay()
+	}
+}
+
+func (p *Poller) wasSongPlayedRecently(artist, title string) bool {
+	if p.DBMgr == nil {
+		return false
+	}
+
+	played, err := p.DBMgr.WasSongInLastNPlays(context.Background(), artist, title, 2)
+	if err != nil {
+		log.Printf("   ⚠️ DB Check Error: %v\n", err)
+		return false
+	}
+	if played {
+		log.Printf("   [INFO] Song '%s - %s' played within the last 2 songs. Skipping duplicate.", artist, title)
+	}
+	return played
+}
+
+func (p *Poller) claimScheduledMatch(now time.Time, artist, title string) (int, bool) {
+	p.resetDailyMatchesIfNeeded(now)
+	if p.matchesToday >= MaxDailyMatches {
+		log.Printf("   [INFO] Daily limit of %d matches reached. Ignoring further campaign matches for today.", MaxDailyMatches)
+		return 0, false
+	}
+
+	p.matchesToday++
+	matchIndex := p.matchesToday
+
+	selected, err := IsMatchSelectedToday(p.DBMgr, now, matchIndex)
+	if err != nil {
+		log.Printf("   ⚠️ Failed to evaluate RNG schedule for %s (%s - %s): %v", now.Format("2006-01-02"), artist, title, err)
+		return matchIndex, false
+	}
+	if !selected {
+		log.Printf("   [RNG] Match #%d for '%s - %s' is not scheduled today. Skipping send.", matchIndex, artist, title)
+		return matchIndex, false
+	}
+
+	return matchIndex, true
+}
+
+func (p *Poller) canSendCampaignArtist(campaignArtist string, currentRadioLogID int64) bool {
+	if p.DBMgr == nil {
+		return true
+	}
+
+	if currentRadioLogID == 0 {
+		latestRadioLogID, err := p.DBMgr.GetLatestRadioLogID(context.Background())
+		if err != nil {
+			log.Printf("   ⚠️ Failed to load latest radio log id for %q: %v", campaignArtist, err)
+			return false
+		}
+		currentRadioLogID = latestRadioLogID + 1
+	}
+
+	allowed, err := p.DBMgr.CanSendCampaignArtist(context.Background(), campaignArtist, currentRadioLogID)
+	if err != nil {
+		log.Printf("   ⚠️ Failed to enforce campaign resend gate for %q: %v", campaignArtist, err)
+		return false
+	}
+	if !allowed {
+		log.Printf("   [INFO] Skipping resend for campaign artist %q until a different artist is logged in between.", campaignArtist)
+	}
+	return allowed
+}
+
+func (p *Poller) doTriggerVoiceNote(campaignArtist, artist, title string, now time.Time, matchIndex int, currentRadioLogID int64) {
+	p.sendMu.Lock()
+	defer p.sendMu.Unlock()
+
+	if !p.canSendCampaignArtist(campaignArtist, currentRadioLogID) {
+		return
+	}
+
+	msg := dedent.Dedent(fmt.Sprintf(`
+							🎉 [VEZI BAA ca se aude piesa]
+							Artistu: %s
+
+							Piesa: %s
+
+							(Match-ul %d/%d de azi)
+								`,
+		artist, title, matchIndex, MaxDailyMatches))
+	log.Println("   " + msg)
+	if alertErr := p.Alerter.AlertInfo(AlertEvent{
+		Title:       "Campaign Alert",
+		Message:     msg,
+		ActionLabel: "View Dashboard",
+		ActionURL:   p.BaseURL,
+	}); alertErr != nil {
+		log.Printf("   ⚠️ Alerter warning: %v\n", alertErr)
+	}
+
+	p.StateMgr.Update(func(s *AppState) {
+		s.Status = StatusCampaignTriggered
+	})
+
+	var audioFile string
+	var audioHash string
+	var chosenSender string
+	for _, conn := range p.StateMgr.Get().Connections {
+		// Try to find a connected sender that has audios
+		dir := GetAudioDirForPhone(conn.Phone, p.AudiosDir)
+		f, hash, err := GetRandomAvailableAudio(dir, func(contentHash string) (bool, error) {
+			if p.DBMgr == nil {
+				return false, nil
+			}
+			return p.DBMgr.IsAudioHashUsed(context.Background(), contentHash)
+		})
+		if err == nil {
+			chosenSender = conn.Phone
+			audioFile = f
+			audioHash = hash
+			break
+		}
+	}
+
+	if audioFile == "" {
+		p.StateMgr.Update(func(s *AppState) {
+			s.Status = StatusAudioExhausted
+			s.LastError = "No unused audios available!"
+		})
+		log.Printf("   ❌ NO UNUSED AUDIO FOUND FOR %s!", artist)
+		_ = p.Alerter.AlertCritical(AlertEvent{
+			Title:       "AUDIO POOL EXHAUSTED",
+			Message:     "Cannot send voice note for " + artist + "\nNo unused audio files found in " + p.AudiosDir,
+			ActionLabel: "View Dashboard",
+			ActionURL:   p.BaseURL,
+		})
+		return
+	}
+
+	p.StateMgr.Update(func(s *AppState) {
+		s.Status = StatusSendingAudio
+	})
+
+	log.Println("   Sending WhatsApp voice note using: " + audioFile)
+	err := p.SendVoiceNote(chosenSender, p.TargetPhone, audioFile)
+	if err != nil {
+		log.Printf("   ❌ Error sending voice note: %v\n", err)
+		p.StateMgr.Update(func(s *AppState) {
+			s.Status = StatusError
+			s.LastError = fmt.Sprintf("Voice note failed: %v", err)
+		})
+	} else {
+		if p.DBMgr != nil {
+			if err := p.DBMgr.RecordSuccessfulSend(context.Background(), campaignArtist, artist, title, audioHash, currentRadioLogID, now); err != nil {
+				log.Printf("   ❌ Voice note sent but persistence update failed: %v\n", err)
+				p.StateMgr.Update(func(s *AppState) {
+					s.Status = StatusError
+					s.LastError = fmt.Sprintf("Voice note sent but persistence failed: %v", err)
+				})
+				return
+			}
+		}
+		if err := MarkAudioUsedByHash(p.AudiosDir, audioFile, audioHash); err != nil {
+			log.Printf("   ⚠️ Voice note sent but audio file rotation failed: %v\n", err)
+		}
+		msg := dedent.Dedent(fmt.Sprintf(`
+			S-a trimis vocalu pe Wapp la nr: %s
+			Artist: %s
+			Piesa: %s
+			Fisieru audio trimis: %s
+			`, p.TargetPhone, artist, title, audioFile))
+		log.Println("✅", msg)
+		_ = p.Alerter.AlertSuccess(AlertEvent{
+			Title:       "Voice Note Sent",
+			Message:     msg,
+			ActionLabel: "View Dashboard",
+			ActionURL:   p.BaseURL,
+		})
+		unused, used := GetTotalAudioStats(p.StateMgr.Get().Connections, p.AudiosDir)
+		p.StateMgr.Update(func(s *AppState) {
+			s.Status = StatusPolling
+			s.LastError = ""
+			s.LastVoiceNoteSentAt = time.Now()
+			s.UnusedAudios = unused
+			s.UsedAudios = used
+		})
+	}
+}
+
+func (p *Poller) fingerprintLoop() {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	canonicalDir := filepath.Join(p.SignaturesDir, "canonical")
+
+	for {
+		<-ticker.C
+		now := time.Now()
+		if p.StateMgr != nil && p.StateMgr.Get().KillSwitchActive {
+			continue
+		}
+		if !p.hasActiveCampaign(now) {
+			continue
+		}
+		p.resetDailyMatchesIfNeeded(now)
+		if p.matchesToday >= MaxDailyMatches {
+			continue
+		}
+		sigs, err := GetCanonicalSignatures(canonicalDir)
+		if err != nil || len(sigs) == 0 {
+			continue
+		}
+		buf := p.AudioBuffer.ReadCurrentBuffer()
+		if len(buf) == 0 {
+			continue
+		}
+		for name, sig := range sigs {
+			if MatchSignature(buf, sig) {
+				trigger := parseFingerprintTrigger(name)
+				campaignArtist, matchesCampaign := p.matchingCampaignArtist(now, SongInfo{Artist: trigger.artist, Title: trigger.title})
+				if !matchesCampaign {
+					continue
+				}
+
+				p.ignoredTriggerMu.Lock()
+				if p.ignoredTrigger.signatureName != name {
+					p.ignoredTrigger = trigger
+					p.ignoredTriggerMu.Unlock()
+
+					log.Printf("   [FINGERPRINT MATCH] Matched signature: %s", name)
+					if p.wasSongPlayedRecently(trigger.artist, trigger.title) {
+						continue
+					}
+
+					currentRadioLogID := int64(0)
+					if p.DBMgr != nil {
+						latestRadioLogID, err := p.DBMgr.GetLatestRadioLogID(context.Background())
+						if err != nil {
+							log.Printf("   ⚠️ Failed to load latest radio log id for fingerprint match %q: %v", name, err)
+							continue
+						}
+						currentRadioLogID = latestRadioLogID + 1
+					}
+
+					if !p.canSendCampaignArtist(campaignArtist, currentRadioLogID) {
+						continue
+					}
+
+					matchIndex, selected := p.claimScheduledMatch(now, trigger.artist, trigger.title)
+					if !selected {
+						continue
+					}
+
+					p.doTriggerVoiceNote(campaignArtist, trigger.artist, trigger.title, now, matchIndex, currentRadioLogID)
+				} else {
+					p.ignoredTriggerMu.Unlock()
+				}
+			}
+		}
+	}
 }
