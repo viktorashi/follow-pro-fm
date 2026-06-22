@@ -28,7 +28,9 @@ type WAConnectionState struct {
 }
 
 type AppState struct {
+	GatheringSignatures bool
 	Status              AppStatus
+	WhatsAppConnected   bool
 	Connections         []WAConnectionState
 	KillSwitchActive    bool
 	CurrentSong         string
@@ -36,6 +38,40 @@ type AppState struct {
 	UsedAudios          int
 	LastError           string
 	LastVoiceNoteSentAt time.Time
+}
+
+func (s *AppState) reconcileConnectionState() {
+	anyConnected := false
+	anyPairingRequired := false
+	anyError := false
+
+	for _, conn := range s.Connections {
+		if conn.WhatsAppConnected {
+			anyConnected = true
+		}
+		switch conn.Status {
+		case StatusPairingRequired:
+			anyPairingRequired = true
+		case StatusError:
+			anyError = true
+		}
+	}
+
+	s.WhatsAppConnected = anyConnected
+
+	switch s.Status {
+	case StatusInitializing, StatusConnected, StatusPairingRequired, StatusError:
+		switch {
+		case anyPairingRequired:
+			s.Status = StatusPairingRequired
+		case anyConnected:
+			s.Status = StatusConnected
+		case anyError:
+			s.Status = StatusError
+		case len(s.Connections) > 0:
+			s.Status = StatusInitializing
+		}
+	}
 }
 
 // StateManager holds the central state and broadcasts updates to SSE clients.
@@ -48,7 +84,8 @@ type StateManager struct {
 func NewStateManager() *StateManager {
 	return &StateManager{
 		state: AppState{
-			Status: StatusInitializing,
+			GatheringSignatures: true,
+			Status:              StatusInitializing,
 		},
 		subscribers: make(map[chan AppState]struct{}),
 	}
@@ -60,6 +97,7 @@ func (sm *StateManager) Update(fn func(state *AppState)) {
 	defer sm.mu.Unlock()
 
 	fn(&sm.state)
+	sm.state.reconcileConnectionState()
 
 	// Broadcast
 	for ch := range sm.subscribers {
@@ -82,6 +120,7 @@ func (sm *StateManager) UpdateConnection(phone string, fn func(conn *WAConnectio
 			break
 		}
 	}
+	sm.state.reconcileConnectionState()
 
 	// Broadcast
 	for ch := range sm.subscribers {
