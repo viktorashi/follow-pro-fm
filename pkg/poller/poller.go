@@ -20,6 +20,7 @@ const (
 	MaxDailyMatches      = 6
 	followProFMKeyword   = "follow profm"
 	dashcamAfterDuration = 4 * time.Minute
+	fingerprintTailBytes = 768 * 1024
 )
 
 var bucharestLocation = loadBucharestLocation()
@@ -612,48 +613,57 @@ func (p *Poller) fingerprintLoop() {
 		if len(buf) == 0 {
 			continue
 		}
-		for name, sig := range sigs {
-			if MatchSignature(buf, sig) {
-				trigger := parseFingerprintTrigger(name)
-				campaignArtist, matchesCampaign := p.matchingCampaignArtist(now, SongInfo{Artist: trigger.artist, Title: trigger.title})
-				if !matchesCampaign {
+		if len(buf) > fingerprintTailBytes {
+			buf = buf[len(buf)-fingerprintTailBytes:]
+		}
+
+		matched, name, err := findMatchingCanonicalSignature(buf, defaultFingerprintFormat, canonicalDir)
+		if err != nil {
+			log.Printf("   ⚠️ Fingerprint matching failed: %v", err)
+			continue
+		}
+		if !matched {
+			continue
+		}
+
+		trigger := parseFingerprintTrigger(name)
+		campaignArtist, matchesCampaign := p.matchingCampaignArtist(now, SongInfo{Artist: trigger.artist, Title: trigger.title})
+		if !matchesCampaign {
+			continue
+		}
+
+		p.ignoredTriggerMu.Lock()
+		if p.ignoredTrigger.signatureName != name {
+			p.ignoredTrigger = trigger
+			p.ignoredTriggerMu.Unlock()
+
+			log.Printf("   [FINGERPRINT MATCH] Matched signature: %s", name)
+			if p.wasSongPlayedRecently(trigger.artist, trigger.title) {
+				continue
+			}
+
+			currentRadioLogID := int64(0)
+			if p.DBMgr != nil {
+				latestRadioLogID, err := p.DBMgr.GetLatestRadioLogID(context.Background())
+				if err != nil {
+					log.Printf("   ⚠️ Failed to load latest radio log id for fingerprint match %q: %v", name, err)
 					continue
 				}
-
-				p.ignoredTriggerMu.Lock()
-				if p.ignoredTrigger.signatureName != name {
-					p.ignoredTrigger = trigger
-					p.ignoredTriggerMu.Unlock()
-
-					log.Printf("   [FINGERPRINT MATCH] Matched signature: %s", name)
-					if p.wasSongPlayedRecently(trigger.artist, trigger.title) {
-						continue
-					}
-
-					currentRadioLogID := int64(0)
-					if p.DBMgr != nil {
-						latestRadioLogID, err := p.DBMgr.GetLatestRadioLogID(context.Background())
-						if err != nil {
-							log.Printf("   ⚠️ Failed to load latest radio log id for fingerprint match %q: %v", name, err)
-							continue
-						}
-						currentRadioLogID = latestRadioLogID + 1
-					}
-
-					if !p.canSendCampaignArtist(campaignArtist, currentRadioLogID) {
-						continue
-					}
-
-					matchIndex, selected := p.claimScheduledMatch(now, trigger.artist, trigger.title)
-					if !selected {
-						continue
-					}
-
-					p.doTriggerVoiceNote(campaignArtist, trigger.artist, trigger.title, now, matchIndex, currentRadioLogID)
-				} else {
-					p.ignoredTriggerMu.Unlock()
-				}
+				currentRadioLogID = latestRadioLogID + 1
 			}
+
+			if !p.canSendCampaignArtist(campaignArtist, currentRadioLogID) {
+				continue
+			}
+
+			matchIndex, selected := p.claimScheduledMatch(now, trigger.artist, trigger.title)
+			if !selected {
+				continue
+			}
+
+			p.doTriggerVoiceNote(campaignArtist, trigger.artist, trigger.title, now, matchIndex, currentRadioLogID)
+		} else {
+			p.ignoredTriggerMu.Unlock()
 		}
 	}
 }
