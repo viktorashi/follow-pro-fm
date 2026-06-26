@@ -323,8 +323,8 @@ func (s *TelemetryServer) streamEvents(c *echo.Context, isLogs bool) error {
 
 // Render is a helper to render Templ components in Echo
 func Render(c *echo.Context, statusCode int, t templ.Component) error {
-	c.Response().WriteHeader(statusCode)
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextHTML)
+	c.Response().WriteHeader(statusCode)
 	return t.Render(c.Request().Context(), c.Response())
 }
 func (s *TelemetryServer) handleKillSwitch(c *echo.Context) error {
