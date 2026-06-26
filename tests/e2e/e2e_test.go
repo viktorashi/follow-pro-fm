@@ -27,6 +27,7 @@ type TestEnv struct {
 	AudiosDir             string
 	WappDBPath            string
 	AppDBPath             string
+	TrustedEmail          string
 	MockSentMsgPath       string
 	Port                  string
 	MockServer            *httptest.Server
@@ -88,10 +89,14 @@ func setupTestEnv(t *testing.T) *TestEnv {
 		AudiosDir:       audiosDir,
 		WappDBPath:      filepath.Join(tempDir, "wapp.sqlite"),
 		AppDBPath:       filepath.Join(tempDir, "app.sqlite"),
+		TrustedEmail:    "smoke@example.com",
 		MockSentMsgPath: filepath.Join(tempDir, "mock_sent_messages.json"),
 		Port:            port,
 		MockArtist:      "Unknown Artist",
 		MockTitle:       "Unknown Song",
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(env.AppDBPath), "trusted-emails.txt"), []byte(env.TrustedEmail+"\n"), 0644); err != nil {
+		t.Fatalf("failed to seed trusted emails file: %v", err)
 	}
 
 	// Start Mock API server
@@ -209,7 +214,13 @@ func TestE2E(t *testing.T) {
 			time.Sleep(1 * time.Second)
 
 			// Hit mock scan endpoint
-			resp, err := http.Post(fmt.Sprintf("http://localhost:%s/api/test/mock-scan", env.Port), "application/json", nil)
+			req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:%s/api/test/mock-scan", env.Port), nil)
+			if err != nil {
+				t.Fatalf("failed to build mock-scan request: %v", err)
+			}
+			req.AddCookie(&http.Cookie{Name: "session_token", Value: env.TrustedEmail, Path: "/"})
+
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Fatalf("failed to hit mock-scan endpoint: %v", err)
 			}
