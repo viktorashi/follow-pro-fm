@@ -26,6 +26,9 @@ build-ffmpeg:
 test: build-ffmpeg
     PATH="./bin:$PATH" go test -count=1 ./pkg/...
 
+smoke-live-mock: build
+    ./scripts/smoke_live_mock.sh
+
 test-cover: build-ffmpeg
     PATH="./bin:$PATH" go test -count=1 -coverprofile=coverage.out ./pkg/...
     go tool cover -func=coverage.out
