@@ -593,6 +593,39 @@ func TestPoller_consumeIgnoredMetadataTrigger(t *testing.T) {
 	}
 }
 
+func TestPoller_prepareStartStateHonorsKillSwitch(t *testing.T) {
+	stateMgr := createMockStateMgr()
+	stateMgr.Update(func(s *AppState) {
+		s.KillSwitchActive = true
+		s.Status = StatusKilled
+	})
+
+	poller := &Poller{StateMgr: stateMgr}
+
+	if shouldPoll := poller.prepareStartState(); shouldPoll {
+		t.Fatal("prepareStartState() should skip immediate polling when kill switch is active")
+	}
+
+	state := stateMgr.Get()
+	if state.Status != StatusKilled {
+		t.Fatalf("status = %q, want %q", state.Status, StatusKilled)
+	}
+}
+
+func TestPoller_prepareStartStateSetsPollingWhenActive(t *testing.T) {
+	stateMgr := createMockStateMgr()
+	poller := &Poller{StateMgr: stateMgr}
+
+	if shouldPoll := poller.prepareStartState(); !shouldPoll {
+		t.Fatal("prepareStartState() should allow immediate polling when kill switch is inactive")
+	}
+
+	state := stateMgr.Get()
+	if state.Status != StatusPolling {
+		t.Fatalf("status = %q, want %q", state.Status, StatusPolling)
+	}
+}
+
 func TestNormalizePhoneNumber(t *testing.T) {
 	tests := []struct {
 		name  string
