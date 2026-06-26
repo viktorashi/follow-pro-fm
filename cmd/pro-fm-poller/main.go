@@ -7,12 +7,40 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"pro-fm-poller/pkg/poller"
 )
+
+func bootstrapSenderPhones(dbPath string) []string {
+	phones := []string{poller.CanonicalSenderPhone}
+	seen := map[string]struct{}{
+		poller.CanonicalSenderPhone: {},
+	}
+
+	matches, _ := filepath.Glob(filepath.Join(filepath.Dir(dbPath), "wapp_*.sqlite"))
+	sort.Strings(matches)
+	for _, match := range matches {
+		name := filepath.Base(match)
+		phone := strings.TrimPrefix(name, "wapp_")
+		phone = strings.TrimSuffix(phone, ".sqlite")
+		if phone == "" {
+			continue
+		}
+
+		normalized := "+" + phone
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		phones = append(phones, normalized)
+	}
+
+	return phones
+}
 
 func main() {
 	// 1. Env Vars
@@ -223,26 +251,9 @@ func main() {
 
 	telemetryServer.SetOnAddPhone(addSenderPhone)
 
-	// Scan existing db files
-	matches, _ := filepath.Glob(filepath.Join(filepath.Dir(dbPath), "wapp_*.sqlite"))
-	for _, m := range matches {
-		name := filepath.Base(m)
-		phone := strings.TrimPrefix(name, "wapp_")
-		phone = strings.TrimSuffix(phone, ".sqlite")
-		if phone != "" {
-			if err := addSenderPhone("+" + phone); err != nil {
-				log.Printf("Error adding phone %s: %v", phone, err)
-			}
-		}
-	}
-
-	// Default phone if none found so a fresh environment can still pair or mock-pair.
-	wappMutex.RLock()
-	clientsCount := len(wappClients)
-	wappMutex.RUnlock()
-	if clientsCount == 0 {
-		if err := addSenderPhone(poller.CanonicalSenderPhone); err != nil {
-			log.Printf("Error adding default phone: %v", err)
+	for _, phone := range bootstrapSenderPhones(dbPath) {
+		if err := addSenderPhone(phone); err != nil {
+			log.Printf("Error adding phone %s: %v", phone, err)
 		}
 	}
 
