@@ -1,12 +1,14 @@
 package poller
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v5"
 )
@@ -130,4 +132,87 @@ func TestMockScanPairsAuthenticatedMockClients(t *testing.T) {
 	if len(state.Connections) != 1 || state.Connections[0].Status != StatusConnected || !state.Connections[0].WhatsAppConnected {
 		t.Fatalf("state = %+v, want connected sender after scan", state.Connections)
 	}
+}
+
+func TestHandleKillSwitchDeactivateRestoresSleepingOutsideCampaignHours(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD", "admin-pass")
+
+	stateMgr := NewStateManager()
+	stateMgr.Update(func(s *AppState) {
+		s.KillSwitchActive = true
+		s.Status = StatusKilled
+		s.Connections = []WAConnectionState{{Phone: "+40111222333", Status: StatusConnected, WhatsAppConnected: true}}
+	})
+
+	server := &TelemetryServer{
+		stateMgr: stateMgr,
+		campaigns: []Campaign{
+			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
+		},
+		timeNow: func() time.Time {
+			return bucharestTime(2026, time.June, 20, 12, 0, 0)
+		},
+	}
+
+	ctx, rec := newAuthJSONContext(http.MethodPost, "/api/kill-switch", []byte(`{"password":"admin-pass","active":false}`))
+	if err := server.handleKillSwitch(ctx); err != nil {
+		t.Fatalf("handleKillSwitch() error = %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	state := stateMgr.Get()
+	if state.KillSwitchActive {
+		t.Fatal("expected kill switch to be disabled")
+	}
+	if state.Status != StatusSleeping {
+		t.Fatalf("status = %q, want %q", state.Status, StatusSleeping)
+	}
+}
+
+func TestHandleKillSwitchDeactivateRestoresPairingRequiredWhenCampaignActive(t *testing.T) {
+	t.Setenv("ADMIN_PASSWORD", "admin-pass")
+
+	stateMgr := NewStateManager()
+	stateMgr.Update(func(s *AppState) {
+		s.KillSwitchActive = true
+		s.Status = StatusKilled
+		s.Connections = []WAConnectionState{{Phone: "+40111222333", Status: StatusPairingRequired}}
+	})
+
+	server := &TelemetryServer{
+		stateMgr: stateMgr,
+		campaigns: []Campaign{
+			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
+		},
+		timeNow: func() time.Time {
+			return bucharestTime(2026, time.June, 17, 12, 0, 0)
+		},
+	}
+
+	ctx, rec := newAuthJSONContext(http.MethodPost, "/api/kill-switch", []byte(`{"password":"admin-pass","active":false}`))
+	if err := server.handleKillSwitch(ctx); err != nil {
+		t.Fatalf("handleKillSwitch() error = %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	state := stateMgr.Get()
+	if state.KillSwitchActive {
+		t.Fatal("expected kill switch to be disabled")
+	}
+	if state.Status != StatusPairingRequired {
+		t.Fatalf("status = %q, want %q", state.Status, StatusPairingRequired)
+	}
+}
+
+func newAuthJSONContext(method string, target string, body []byte) (*echo.Context, *httptest.ResponseRecorder) {
+	e := echo.New()
+	req := httptest.NewRequest(method, target, bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	return ctx, rec
 }

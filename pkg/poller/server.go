@@ -35,6 +35,7 @@ type TelemetryServer struct {
 	campaigns   []Campaign
 	wappClients []WhatsAppClient
 	onAddPhone  func(phone string) error
+	timeNow     func() time.Time
 }
 
 type ScheduleEntry struct {
@@ -73,6 +74,7 @@ func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaste
 		dataDir:     dataDir,
 		audiosDir:   audiosDir,
 		campaigns:   append([]Campaign(nil), campaigns...),
+		timeNow:     time.Now,
 	}
 
 	ts.registerRoutes()
@@ -353,11 +355,55 @@ func (s *TelemetryServer) handleKillSwitch(c *echo.Context) error {
 		if payload.Active {
 			state.Status = StatusKilled
 		} else {
-			state.Status = StatusPolling
+			state.Status = s.statusAfterKillSwitchDisabled(*state, s.timeNow())
 		}
 	})
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
+}
+
+func (s *TelemetryServer) statusAfterKillSwitchDisabled(state AppState, now time.Time) AppStatus {
+	if len(s.campaigns) > 0 && !isAnyCampaignActive(s.campaigns, now) {
+		return StatusSleeping
+	}
+
+	anyConnected := false
+	anyPairingRequired := false
+	anyError := false
+
+	for _, conn := range state.Connections {
+		if conn.WhatsAppConnected {
+			anyConnected = true
+		}
+		switch conn.Status {
+		case StatusPairingRequired:
+			anyPairingRequired = true
+		case StatusError:
+			anyError = true
+		}
+	}
+
+	switch {
+	case anyPairingRequired:
+		return StatusPairingRequired
+	case anyConnected:
+		return StatusPolling
+	case anyError:
+		return StatusError
+	case len(state.Connections) > 0:
+		return StatusInitializing
+	default:
+		return StatusInitializing
+	}
+}
+
+func isAnyCampaignActive(campaigns []Campaign, now time.Time) bool {
+	for _, campaign := range campaigns {
+		if campaign.IsActive(now) {
+			return true
+		}
+	}
+	return false
 }
 
 type FileInfo struct {
