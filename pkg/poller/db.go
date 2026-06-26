@@ -307,23 +307,39 @@ func (m *DBManager) RecordSongPlay(ctx context.Context, artist, title string, da
 
 // SetKillSwitch updates the kill switch state in the database
 func (m *DBManager) SetKillSwitch(ctx context.Context, active bool) error {
-	valStr := "false"
-	if active {
-		valStr = "true"
-	}
-	_, err := m.db.ExecContext(ctx, "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('kill_switch', ?)", valStr)
-	return err
+	return m.setBoolSetting(ctx, "kill_switch", active)
 }
 
 // IsKillSwitchActive reads the kill switch state from the database
 func (m *DBManager) IsKillSwitchActive(ctx context.Context) (bool, error) {
+	return m.getBoolSetting(ctx, "kill_switch", false)
+}
+
+func (m *DBManager) SetGatheringSignatures(ctx context.Context, active bool) error {
+	return m.setBoolSetting(ctx, "gathering_signatures", active)
+}
+
+func (m *DBManager) IsGatheringSignaturesEnabled(ctx context.Context) (bool, error) {
+	return m.getBoolSetting(ctx, "gathering_signatures", true)
+}
+
+func (m *DBManager) setBoolSetting(ctx context.Context, key string, active bool) error {
+	valStr := "false"
+	if active {
+		valStr = "true"
+	}
+	_, err := m.db.ExecContext(ctx, "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)", key, valStr)
+	return err
+}
+
+func (m *DBManager) getBoolSetting(ctx context.Context, key string, defaultValue bool) (bool, error) {
 	var valStr string
-	err := m.db.QueryRowContext(ctx, "SELECT value FROM app_settings WHERE key = 'kill_switch'").Scan(&valStr)
+	err := m.db.QueryRowContext(ctx, "SELECT value FROM app_settings WHERE key = ?", key).Scan(&valStr)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return false, nil
+			return defaultValue, nil
 		}
-		return false, err
+		return defaultValue, err
 	}
 	return valStr == "true", nil
 }

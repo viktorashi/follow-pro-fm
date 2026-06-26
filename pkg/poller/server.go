@@ -568,8 +568,17 @@ func (s *TelemetryServer) handleMockScan(c *echo.Context) error {
 }
 
 func (s *TelemetryServer) handleToggleGathering(c *echo.Context) error {
+	nextValue := false
+	if s.stateMgr != nil {
+		nextValue = !s.stateMgr.Get().GatheringSignatures
+	}
+	if s.dbMgr != nil {
+		if err := s.dbMgr.SetGatheringSignatures(c.Request().Context(), nextValue); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to save gathering setting"})
+		}
+	}
 	s.stateMgr.Update(func(state *AppState) {
-		state.GatheringSignatures = !state.GatheringSignatures
+		state.GatheringSignatures = nextValue
 	})
 	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
 }

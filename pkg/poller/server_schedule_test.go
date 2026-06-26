@@ -106,6 +106,35 @@ func TestHandleSetScheduleRejectsDateOutsideCampaignWindows(t *testing.T) {
 	}
 }
 
+func TestHandleToggleGatheringPersistsSetting(t *testing.T) {
+	dbMgr, err := NewDBManager(":memory:")
+	if err != nil {
+		t.Fatalf("NewDBManager() error = %v", err)
+	}
+
+	stateMgr := NewStateManager()
+	server := &TelemetryServer{dbMgr: dbMgr, stateMgr: stateMgr}
+	ctx, rec := newJSONContext(http.MethodPost, "/api/settings/gathering", nil)
+
+	if err := server.handleToggleGathering(ctx); err != nil {
+		t.Fatalf("handleToggleGathering() error = %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if stateMgr.Get().GatheringSignatures {
+		t.Fatal("expected in-memory state to toggle off")
+	}
+
+	active, err := dbMgr.IsGatheringSignaturesEnabled(context.Background())
+	if err != nil {
+		t.Fatalf("IsGatheringSignaturesEnabled() error = %v", err)
+	}
+	if active {
+		t.Fatal("expected gathering signatures setting to persist as disabled")
+	}
+}
+
 func newJSONContext(method string, target string, body []byte) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, target, bytes.NewReader(body))
