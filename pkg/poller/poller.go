@@ -258,16 +258,16 @@ func (p *Poller) Start() {
 		go p.fingerprintLoop()
 	}
 
-	p.StateMgr.Update(func(s *AppState) {
-		s.Status = StatusPolling
-	})
+	shouldPoll := p.prepareStartState()
 
 	// Use a cron-like Ticker instead of an infinite sleep loop
 	ticker := time.NewTicker(p.PollInterval)
 	defer ticker.Stop()
 
 	// Trigger immediately on start
-	p.checkSong(&currentSong, time.Now())
+	if shouldPoll {
+		p.checkSong(&currentSong, time.Now())
+	}
 
 	var isSleeping bool
 
@@ -277,6 +277,9 @@ func (p *Poller) Start() {
 		now := time.Now()
 
 		if p.StateMgr != nil && p.StateMgr.Get().KillSwitchActive {
+			p.StateMgr.Update(func(s *AppState) {
+				s.Status = StatusKilled
+			})
 			continue // If killed, just sleep
 		}
 
@@ -318,6 +321,24 @@ func (p *Poller) Start() {
 
 		p.checkSong(&currentSong, now)
 	}
+}
+
+func (p *Poller) prepareStartState() bool {
+	if p.StateMgr == nil {
+		return true
+	}
+
+	if p.StateMgr.Get().KillSwitchActive {
+		p.StateMgr.Update(func(s *AppState) {
+			s.Status = StatusKilled
+		})
+		return false
+	}
+
+	p.StateMgr.Update(func(s *AppState) {
+		s.Status = StatusPolling
+	})
+	return true
 }
 
 func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
