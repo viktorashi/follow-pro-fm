@@ -98,7 +98,7 @@ func main() {
 	if emailFrom == "" {
 		emailFrom = "notifications@yourdomain.com"
 	}
-	emAlerter := poller.NewEmailAlerter(sendgridKey, emailFrom, "/data/trusted-emails.txt", envName, baseURL)
+	emAlerter := poller.NewEmailAlerter(sendgridKey, emailFrom, poller.TrustedEmailsFilePath(appDBPath), envName, baseURL)
 	alerter := poller.NewMultiAlerter(tgAlerter, emAlerter)
 
 	// 6. Initialize Auth Manager

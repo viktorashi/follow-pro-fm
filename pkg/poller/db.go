@@ -38,8 +38,12 @@ func NewDBManager(dbPath string) (*DBManager, error) {
 
 	return &DBManager{
 		db:                db,
-		trustedEmailsPath: filepath.Join(filepath.Dir(dbPath), "trusted-emails.txt"),
+		trustedEmailsPath: TrustedEmailsFilePath(dbPath),
 	}, nil
+}
+
+func TrustedEmailsFilePath(dbPath string) string {
+	return filepath.Join(filepath.Dir(dbPath), "trusted-emails.txt")
 }
 
 func initSchema(db *sql.DB) error {

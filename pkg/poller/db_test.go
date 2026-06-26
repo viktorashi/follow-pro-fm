@@ -2,9 +2,18 @@ package poller
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestTrustedEmailsFilePath(t *testing.T) {
+	dbPath := filepath.Join("/tmp", "profm", "app.sqlite")
+	want := filepath.Join("/tmp", "profm", "trusted-emails.txt")
+	if got := TrustedEmailsFilePath(dbPath); got != want {
+		t.Fatalf("TrustedEmailsFilePath() = %q, want %q", got, want)
+	}
+}
 
 func TestWasSongInLastNPlays(t *testing.T) {
 	dbMgr, err := NewDBManager(":memory:")

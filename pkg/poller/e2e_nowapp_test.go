@@ -43,7 +43,7 @@ func TestPoller_E2E_NoWhatsApp(t *testing.T) {
 
 	sendgridKey := os.Getenv("SENDGRID_API_KEY")
 	emailFrom := os.Getenv("EMAIL_FROM")
-	emAlerter := NewEmailAlerter(sendgridKey, emailFrom, filepath.Join(rootDir, "data/trusted-emails.txt"), appEnv, "http://localhost:8080")
+	emAlerter := NewEmailAlerter(sendgridKey, emailFrom, TrustedEmailsFilePath(filepath.Join(rootDir, "data", "app.sqlite")), appEnv, "http://localhost:8080")
 
 	multiAlerter := NewMultiAlerter(tgAlerter, emAlerter)
 
