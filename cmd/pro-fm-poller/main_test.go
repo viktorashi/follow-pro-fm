@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -44,5 +45,29 @@ func TestBootstrapSenderPhonesFallsBackToCanonicalOnly(t *testing.T) {
 
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("bootstrapSenderPhones() = %v, want %v", got, want)
+	}
+}
+
+func TestGatheringSettingLoadsFromDatabaseIntoStateManager(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "app.sqlite")
+	dbMgr, err := poller.NewDBManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewDBManager() error = %v", err)
+	}
+	if err := dbMgr.SetGatheringSignatures(context.Background(), false); err != nil {
+		t.Fatalf("SetGatheringSignatures(false) error = %v", err)
+	}
+
+	stateMgr := poller.NewStateManager()
+	gatheringEnabled, err := dbMgr.IsGatheringSignaturesEnabled(context.Background())
+	if err != nil {
+		t.Fatalf("IsGatheringSignaturesEnabled() error = %v", err)
+	}
+	stateMgr.Update(func(s *poller.AppState) {
+		s.GatheringSignatures = gatheringEnabled
+	})
+
+	if stateMgr.Get().GatheringSignatures {
+		t.Fatal("expected state manager to reflect persisted disabled gathering setting")
 	}
 }

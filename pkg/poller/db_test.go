@@ -15,6 +15,33 @@ func TestTrustedEmailsFilePath(t *testing.T) {
 	}
 }
 
+func TestGatheringSignaturesSettingDefaultsToTrueAndPersists(t *testing.T) {
+	dbMgr, err := NewDBManager(":memory:")
+	if err != nil {
+		t.Fatalf("NewDBManager() error = %v", err)
+	}
+
+	active, err := dbMgr.IsGatheringSignaturesEnabled(context.Background())
+	if err != nil {
+		t.Fatalf("IsGatheringSignaturesEnabled() error = %v", err)
+	}
+	if !active {
+		t.Fatal("expected gathering signatures to default to enabled")
+	}
+
+	if err := dbMgr.SetGatheringSignatures(context.Background(), false); err != nil {
+		t.Fatalf("SetGatheringSignatures(false) error = %v", err)
+	}
+
+	active, err = dbMgr.IsGatheringSignaturesEnabled(context.Background())
+	if err != nil {
+		t.Fatalf("IsGatheringSignaturesEnabled() error = %v", err)
+	}
+	if active {
+		t.Fatal("expected gathering signatures to persist as disabled")
+	}
+}
+
 func TestWasSongInLastNPlays(t *testing.T) {
 	dbMgr, err := NewDBManager(":memory:")
 	if err != nil {

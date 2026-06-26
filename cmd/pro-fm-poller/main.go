@@ -108,6 +108,12 @@ func main() {
 			s.Status = poller.StatusKilled
 		})
 	}
+	gatheringEnabled, err := dbMgr.IsGatheringSignaturesEnabled(context.Background())
+	if err == nil {
+		stateMgr.Update(func(s *poller.AppState) {
+			s.GatheringSignatures = gatheringEnabled
+		})
+	}
 
 	sseBroadcaster := poller.NewSSEBroadcaster()
 
