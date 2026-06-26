@@ -96,6 +96,7 @@ func (s *TelemetryServer) registerRoutes() {
 	s.echo.Static("/static", staticPath)
 	s.echo.GET("/login", s.handleLoginView)
 	s.echo.POST("/login", s.handleLoginSubmit)
+	s.echo.GET("/logout", s.handleLogout)
 	s.echo.POST("/auth/magic/request", s.handleMagicLinkRequest)
 	s.echo.GET("/auth/magic", s.handleMagicLinkVerify)
 	s.echo.GET("/qr.png", s.handleQRImage) // New unauthenticated QR endpoint for email
@@ -144,6 +145,12 @@ func (s *TelemetryServer) handleLoginSubmit(c *echo.Context) error {
 	SetSessionCookie(c, email)
 	c.Response().Header().Set("HX-Redirect", "/")
 	return c.Redirect(http.StatusFound, "/")
+}
+
+func (s *TelemetryServer) handleLogout(c *echo.Context) error {
+	ClearSessionCookie(c)
+	c.Response().Header().Set("HX-Redirect", "/login")
+	return c.Redirect(http.StatusFound, "/login")
 }
 
 func (s *TelemetryServer) handleMagicLinkRequest(c *echo.Context) error {
