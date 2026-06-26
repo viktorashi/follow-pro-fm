@@ -35,9 +35,13 @@ echo "Using ${CORES} CPU cores for compilation."
 # Move to ffmpeg submodule directory
 cd "${FFMPEG_SUBMODULE}"
 
-# Clean if forcing
-if [ "$FORCE" = true ]; then
-  echo "Forced build. Cleaning submodule directory..."
+# Clean if forcing or if prior build artifacts exist in the source tree.
+if [ "$FORCE" = true ] || [ -f "ffbuild/config.mak" ] || [ -f "config.mak" ] || [ -f "fftools/objpool.o" ]; then
+  if [ "$FORCE" = true ]; then
+    echo "Forced build. Cleaning submodule directory..."
+  else
+    echo "Detected existing ffmpeg build artifacts. Cleaning submodule directory..."
+  fi
   make distclean || true
 fi
 
