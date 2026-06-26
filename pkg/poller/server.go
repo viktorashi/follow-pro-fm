@@ -117,7 +117,7 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.POST("/api/audio/upload", s.handleAudioUpload)
 
 	if os.Getenv("MOCK_WHATSAPP") == "true" {
-		s.echo.POST("/api/test/mock-scan", s.handleMockScan)
+		protected.POST("/api/test/mock-scan", s.handleMockScan)
 	}
 	protected.POST("/api/settings/gathering", s.handleToggleGathering)
 	protected.GET("/api/unreviewed", s.handleUnreviewedList)
