@@ -3,6 +3,7 @@ wapp.sqlite
 tests/
 coverage.out
 pro-fm-poller
+bin/
 *.sqlite
 .DS_Store
 .git
