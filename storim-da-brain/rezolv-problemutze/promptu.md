@@ -86,6 +86,45 @@ You can disable everything and only enable the file protocol, the Ogg container,
 
 If anyhting else needs to be added, please make sure the corresponding ffmpeg compilation is extremely DRY in regards to just using it in unit-testing and locally as well as what's built for inside the container, and not deduping the logic. You could add ffmpeg as a submodule in that regard then.
 
-```
+```actual-issue
+``- Nu se mai trimit deloc voicenoteurile lol, gen primesc  notificare ca s-a dat piesa de concurs, dar numa nimic ciuciu, ma uit pe telefon si chiar nu s-a trimis nimic, trebuie sa ma pun sa trimit eu manual.
 
+
+
+<img width="1088" height="163" alt="Image" src="https://github.com/user-attachments/assets/30d11c9c-843c-47eb-b999-e5c833e1a247" />
+
+<img width="1177" height="143" alt="Image" src="https://github.com/user-attachments/assets/510022b1-f3ef-4060-b278-a2ed30517174" />
+
+chiar daca din E2E-Testing merge super bine n-are treaba
+
+
+------------------------------------------------
+
+- Dupa as vrea sa trimit de la mai multe numere catre acelasi, ca sa-mi cresc practic sanele de concurs
+
+- O data ca nu stiu exact tot timpul cum arata si introu si outro-u
+Pune un buffer circular de 3 minute de filmeaza constant, dar care incepe dupa sa continue sa filmeze, extizand bufferu inca vreo 4 miunte DACA aude o piesa pe care o cautam (de la artistu respectiv)
+Gen efectiv ca la camera de dashboard de la masina care filmeaza constant, sterge ce a fost inainte, dar daca apesi pe buttonu de record ca CEVA INTERESANT S-A INTAMPLAT dupa continue sa filmeze mai lung, si dupa salveaza filmarea aia persistent.
+
+- Nu avem metoda usoara sa uploadam audouri noi
+
+- Putem doar o singura conexiunea de wapp o data, daca vrem sa punem mai multe numere, fiecare cu audiourile lui?
+
+- Deocamdata nu detecteaza decat DUPA ce a inceput sa se transmita metadatele alea de "ce melodie - artist se aude?" ... Am am observat ca se trimit destul de tarziu DUPA ce s-a dat deja "startul" la concurs, si piesa se aude gen deja, cel mai bine ar fi sa facem super bun pasul 1, ca sa culegem date de sound signature-ul audio-ului de intro respectiv, si dupa sa-l folosim sa detectam ca ba VINE AUDIOU
+
+- Nu se vad audiowaveurile alea la vocale for some reason
+
+Gen uite aici primul a fost trimis automat, si al doilea, manual de mine chiar filmandul in momentul ala:
+<img width="465" height="192" alt="Image" src="https://github.com/user-attachments/assets/e4ad4c6d-02b6-4fae-be74-60377639c026" />
+
+poate asta ma descalifica ca shadowban or something who knows? poate pentru ca dupa ce sa da hold-down la "butonu pentru vocal" dupa aceea doar sa da instant drop in la audio fara sa se mai formeze waveformu ala.
+
+- Nu mai trimite 1000 de alerteruri fix inainte sa tirmiti lor mesaju pe whatsapp. Prioretizeaza voicenoteu- si dabea dupa raporteaza un singur raport.
+
+
+- Aaa, also sa faci niste mega Otel pe faptul daca "chiar se detecteaza bine intro-u inainte sa se vada in metadate piesa cum canta" Pentru at that point, daca ajuge 100%, nu mai trebuie deloc sa ne uitam la piesa, si doar sa ascultam audio-ul.
+
+- Also loguri super clare de la ce ore apar piesele, si ce piese mai exact (daca ajungem sa ascultam doar intr-oul, trebiue sa mai dam query la metadate pentru asta doar atunci cand incepem sa auzim introu)
+
+- Dupa, daca devine chiar prea bun si OP, ceva RNG, care alege pentru fiecare zi, la care dintre piesele zilei sa trimita, si sa nu trimita chiar la toate, pt ca dupa ar fi chiar prea ciudat de accurate. Asta ar fi populata pentru absolut toata perioada tuturor campaniilor, direct la startup de program, si incarcam toate zilele alea in memorie direct si stau acolo persistant, si daca cumva cand pornim prima data si ajung sa nu fie pre-poulate toate campaniile cu algerile din ce zile, atunci facem noi alt RNG si-l populam doar cu ce lipseste de acolo.`
 ```
