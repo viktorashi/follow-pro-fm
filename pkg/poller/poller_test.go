@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -679,6 +680,57 @@ func TestPoller_checkSongFingerprintTriggeredTurnSkipsMetadataDashcamSave(t *tes
 	}
 }
 
+func TestPoller_resolveFingerprintSongUsesLiveMetadata(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"epg": map[string]string{
+					"playerExtendedSongTitle":    "BTS",
+					"playerExtendedSongSubtitle": "2026 - Butter",
+				},
+			},
+		})
+	}))
+	defer api.Close()
+
+	poller := &Poller{APIURL: api.URL}
+	got := poller.resolveFingerprintSong(fingerprintTrigger{artist: "BTS", title: "Unknown"})
+
+	if got.Artist != "BTS" {
+		t.Fatalf("resolveFingerprintSong() artist = %q, want %q", got.Artist, "BTS")
+	}
+	if got.Title != "Butter" {
+		t.Fatalf("resolveFingerprintSong() title = %q, want %q", got.Title, "Butter")
+	}
+}
+
+func TestPoller_saveUnreviewedChunkForReviewAlertsOnceWhenSaved(t *testing.T) {
+	alerter := &recordingAlerter{}
+	signaturesDir := t.TempDir()
+	poller := &Poller{
+		Alerter:       alerter,
+		SignaturesDir: signaturesDir,
+		BaseURL:       "http://localhost:8080",
+	}
+
+	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"))
+
+	if len(alerter.infoEvents) != 1 {
+		t.Fatalf("AlertInfo() calls = %d, want 1", len(alerter.infoEvents))
+	}
+	if got := alerter.infoEvents[0].Title; got != "Intro Chunk Needs Review" {
+		t.Fatalf("AlertInfo().Title = %q, want %q", got, "Intro Chunk Needs Review")
+	}
+
+	files, err := os.ReadDir(filepath.Join(signaturesDir, "unreviewed"))
+	if err != nil {
+		t.Fatalf("ReadDir() error = %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("saved review chunks = %d, want 1", len(files))
+	}
+}
+
 func TestPoller_doTriggerVoiceNote_ReportsOnlySuccessAfterSend(t *testing.T) {
 	audiosDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(audiosDir, "test.ogg"), []byte("fake"), 0o644); err != nil {
@@ -698,7 +750,7 @@ func TestPoller_doTriggerVoiceNote_ReportsOnlySuccessAfterSend(t *testing.T) {
 		},
 	}
 
-	poller.doTriggerVoiceNote("BTS", "BTS", "Dynamite", bucharestTime(2026, time.June, 17, 12, 0, 0), 1, 0)
+	poller.doTriggerVoiceNote(triggerSourceFingerprint, "BTS", "BTS", "Dynamite", bucharestTime(2026, time.June, 17, 12, 0, 0), 1, 0)
 
 	if sendCalls != 1 {
 		t.Fatalf("SendVoiceNote() calls = %d, want 1", sendCalls)
@@ -708,6 +760,9 @@ func TestPoller_doTriggerVoiceNote_ReportsOnlySuccessAfterSend(t *testing.T) {
 	}
 	if len(alerter.successEvents) != 1 {
 		t.Fatalf("AlertSuccess() calls = %d, want 1", len(alerter.successEvents))
+	}
+	if !strings.Contains(alerter.successEvents[0].Message, "Trigger: "+triggerSourceFingerprint) {
+		t.Fatalf("AlertSuccess().Message = %q, want trigger source", alerter.successEvents[0].Message)
 	}
 	if len(alerter.criticalEvents) != 0 {
 		t.Fatalf("AlertCritical() calls = %d, want 0", len(alerter.criticalEvents))
@@ -733,7 +788,7 @@ func TestPoller_doTriggerVoiceNote_ReportsOnlyFailureAfterSendError(t *testing.T
 		},
 	}
 
-	poller.doTriggerVoiceNote("BTS", "BTS", "Dynamite", bucharestTime(2026, time.June, 17, 12, 0, 0), 1, 0)
+	poller.doTriggerVoiceNote(triggerSourceMetadata, "BTS", "BTS", "Dynamite", bucharestTime(2026, time.June, 17, 12, 0, 0), 1, 0)
 
 	if sendCalls != 1 {
 		t.Fatalf("SendVoiceNote() calls = %d, want 1", sendCalls)
@@ -746,6 +801,9 @@ func TestPoller_doTriggerVoiceNote_ReportsOnlyFailureAfterSendError(t *testing.T
 	}
 	if len(alerter.criticalEvents) != 1 {
 		t.Fatalf("AlertCritical() calls = %d, want 1", len(alerter.criticalEvents))
+	}
+	if !strings.Contains(alerter.criticalEvents[0].Message, "Trigger: "+triggerSourceMetadata) {
+		t.Fatalf("AlertCritical().Message = %q, want trigger source", alerter.criticalEvents[0].Message)
 	}
 }
 
