@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math/rand"
 	"os"
+	"slices"
 	"sort"
 	"time"
 )
@@ -75,13 +76,7 @@ func IsMatchSelectedToday(dbMgr *DBManager, now time.Time, matchIndex int) (bool
 		return false, err
 	}
 
-	for _, scheduledIndex := range schedule {
-		if scheduledIndex == matchIndex {
-			return true, nil
-		}
-	}
-
-	return false, nil
+	return slices.Contains(schedule, matchIndex), nil
 }
 
 func ParseSchedule(scheduleJSON string) ([]int, error) {

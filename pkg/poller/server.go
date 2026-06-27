@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -398,12 +399,9 @@ func (s *TelemetryServer) statusAfterKillSwitchDisabled(state AppState, now time
 }
 
 func isAnyCampaignActive(campaigns []Campaign, now time.Time) bool {
-	for _, campaign := range campaigns {
-		if campaign.IsActive(now) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(campaigns, func(campaign Campaign) bool {
+		return campaign.IsActive(now)
+	})
 }
 
 type FileInfo struct {
