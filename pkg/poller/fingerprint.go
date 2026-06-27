@@ -12,18 +12,23 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"gonum.org/v1/gonum/dsp/fourier"
 )
 
 const (
-	defaultFingerprintFormat   = "mp3"
-	fingerprintSampleRate      = 8000
-	fingerprintDownsampleStep  = 16
-	fingerprintSimilarityFloor = 0.88
+	defaultFingerprintFormat    = "mp3"
+	fingerprintSampleRate       = 8000
+	fingerprintFFTSize          = 512
+	fingerprintHopSize          = 128
+	fingerprintMelBandCount     = 40
+	fingerprintCoefficientCount = 20
+	fingerprintSimilarityFloor  = 0.58
 )
 
 // MatchSignature checks if a signature exists within an audio stream.
 func MatchSignature(stream []byte, signature []byte) bool {
-	matched, err := matchSignatureWithFormats(stream, defaultFingerprintFormat, signature, defaultFingerprintFormat)
+	matched, _, err := matchSignatureWithFormats(stream, "", signature, "")
 	if err == nil {
 		return matched
 	}
@@ -77,7 +82,7 @@ func SaveUnreviewedChunkIfDistinct(data []byte, unreviewedDir, canonicalDir, fil
 
 // ChunkMatchesCanonical reports whether the chunk already contains a canonical signature.
 func ChunkMatchesCanonical(data []byte, canonicalDir string) (bool, string, error) {
-	return findMatchingCanonicalSignature(data, defaultFingerprintFormat, canonicalDir)
+	return findMatchingCanonicalSignature(data, "", canonicalDir)
 }
 
 func findMatchingCanonicalSignature(stream []byte, streamFormat, canonicalDir string) (bool, string, error) {
@@ -98,7 +103,7 @@ func findMatchingCanonicalSignatureInSet(stream []byte, streamFormat, canonicalD
 			}
 		}
 		sigFormat := fingerprintFormatForName(name)
-		matched, err := matchSignatureWithFormats(stream, streamFormat, sig, sigFormat)
+		matched, _, err := matchSignatureWithFormats(stream, streamFormat, sig, sigFormat)
 		if err == nil {
 			if matched {
 				return true, name, nil
@@ -208,26 +213,27 @@ func allowedCanonicalSignatureNames(ctx context.Context, dbMgr *DBManager, campa
 	return allowed, nil
 }
 
-func matchSignatureWithFormats(stream []byte, streamFormat string, signature []byte, signatureFormat string) (bool, error) {
+func matchSignatureWithFormats(stream []byte, streamFormat string, signature []byte, signatureFormat string) (bool, float64, error) {
 	if len(stream) == 0 || len(signature) == 0 {
-		return false, nil
+		return false, 0, nil
 	}
 
 	streamFeatures, err := extractFingerprintFeatures(stream, streamFormat)
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
 
 	signatureFeatures, err := extractFingerprintFeatures(signature, signatureFormat)
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
 
 	if len(signatureFeatures) == 0 || len(streamFeatures) < len(signatureFeatures) {
-		return false, nil
+		return false, 0, nil
 	}
 
-	return maxFeatureSimilarity(streamFeatures, signatureFeatures) >= fingerprintSimilarityFloor, nil
+	score := maxFeatureSimilarity(streamFeatures, signatureFeatures, fingerprintCoefficientCount)
+	return score >= fingerprintSimilarityFloor, score, nil
 }
 
 func fingerprintFormatForName(name string) string {
@@ -245,45 +251,129 @@ func extractFingerprintFeatures(data []byte, format string) ([]float64, error) {
 	}
 
 	samples := pcmToFloatSamples(pcm)
-	if len(samples) < fingerprintDownsampleStep {
+	if len(samples) < fingerprintFFTSize {
 		return nil, fmt.Errorf("decoded audio too short for fingerprinting")
 	}
 
-	features := make([]float64, 0, len(samples)/fingerprintDownsampleStep)
-	for start := 0; start+fingerprintDownsampleStep <= len(samples); start += fingerprintDownsampleStep {
-		window := samples[start : start+fingerprintDownsampleStep]
-		sum := 0.0
-		for _, sample := range window {
-			sum += sample
+	window := fingerprintWindow()
+	filterBank := melFilterBank(fingerprintSampleRate, fingerprintFFTSize, fingerprintMelBandCount)
+	fft := fourier.NewFFT(fingerprintFFTSize)
+	dct := fourier.NewDCT(fingerprintMelBandCount)
+
+	frame := make([]float64, fingerprintFFTSize)
+	melEnergies := make([]float64, fingerprintMelBandCount)
+	features := make([]float64, 0, ((len(samples)-fingerprintFFTSize)/fingerprintHopSize+1)*fingerprintCoefficientCount)
+
+	for start := 0; start+fingerprintFFTSize <= len(samples); start += fingerprintHopSize {
+		for i := range fingerprintFFTSize {
+			frame[i] = samples[start+i] * window[i]
 		}
-		features = append(features, sum/float64(len(window)))
+
+		coeffs := fft.Coefficients(nil, frame)
+		power := make([]float64, len(coeffs))
+		for i, coeff := range coeffs {
+			power[i] = real(coeff)*real(coeff) + imag(coeff)*imag(coeff)
+		}
+
+		for band := 0; band < fingerprintMelBandCount; band++ {
+			energy := 0.0
+			for bin, weight := range filterBank[band] {
+				energy += power[bin] * weight
+			}
+			melEnergies[band] = math.Log(energy + 1e-12)
+		}
+
+		cepstral := dct.Transform(nil, melEnergies)
+		features = append(features, cepstral[:fingerprintCoefficientCount]...)
 	}
 
 	if len(features) == 0 {
 		return nil, fmt.Errorf("decoded audio produced no fingerprint features")
 	}
 
-	mean := 0.0
-	for _, value := range features {
-		mean += value
-	}
-	mean /= float64(len(features))
-
-	maxAbs := 0.0
-	for i := range features {
-		features[i] -= mean
-		if abs := math.Abs(features[i]); abs > maxAbs {
-			maxAbs = abs
-		}
-	}
-	if maxAbs == 0 {
-		maxAbs = 1
-	}
-	for i := range features {
-		features[i] /= maxAbs
-	}
+	normalizeFeatureFrames(features, fingerprintCoefficientCount)
 
 	return features, nil
+}
+
+func fingerprintWindow() []float64 {
+	window := make([]float64, fingerprintFFTSize)
+	for i := range window {
+		window[i] = 0.54 - 0.46*math.Cos(2*math.Pi*float64(i)/float64(fingerprintFFTSize-1))
+	}
+	return window
+}
+
+func melFilterBank(sampleRate, fftSize, bandCount int) [][]float64 {
+	nyquist := float64(sampleRate) / 2
+	maxMel := hzToMel(nyquist)
+	melPoints := make([]float64, bandCount+2)
+	for i := range melPoints {
+		melPoints[i] = float64(i) * maxMel / float64(len(melPoints)-1)
+	}
+
+	binCount := fftSize/2 + 1
+	binFreqs := make([]float64, binCount)
+	for i := range binFreqs {
+		binFreqs[i] = float64(i) * float64(sampleRate) / float64(fftSize)
+	}
+
+	filterBank := make([][]float64, bandCount)
+	for band := 0; band < bandCount; band++ {
+		leftHz := melToHz(melPoints[band])
+		centerHz := melToHz(melPoints[band+1])
+		rightHz := melToHz(melPoints[band+2])
+
+		weights := make([]float64, binCount)
+		for bin, freq := range binFreqs {
+			switch {
+			case freq <= leftHz || freq >= rightHz:
+				continue
+			case freq <= centerHz:
+				weights[bin] = (freq - leftHz) / (centerHz - leftHz)
+			default:
+				weights[bin] = (rightHz - freq) / (rightHz - centerHz)
+			}
+		}
+		filterBank[band] = weights
+	}
+
+	return filterBank
+}
+
+func hzToMel(hz float64) float64 {
+	return 2595 * math.Log10(1+hz/700)
+}
+
+func melToHz(mel float64) float64 {
+	return 700 * (math.Pow(10, mel/2595) - 1)
+}
+
+func normalizeFeatureFrames(features []float64, width int) {
+	frameCount := len(features) / width
+	if frameCount == 0 {
+		return
+	}
+
+	for coeff := 0; coeff < width; coeff++ {
+		mean := 0.0
+		for frame := 0; frame < frameCount; frame++ {
+			mean += features[frame*width+coeff]
+		}
+		mean /= float64(frameCount)
+
+		variance := 0.0
+		for frame := 0; frame < frameCount; frame++ {
+			idx := frame*width + coeff
+			features[idx] -= mean
+			variance += features[idx] * features[idx]
+		}
+
+		scale := math.Sqrt(variance/float64(frameCount)) + 1e-6
+		for frame := 0; frame < frameCount; frame++ {
+			features[frame*width+coeff] /= scale
+		}
+	}
 }
 
 func decodeAudioForFingerprinting(data []byte, format string) ([]byte, error) {
@@ -324,8 +414,14 @@ func pcmToFloatSamples(pcm []byte) []float64 {
 	return samples
 }
 
-func maxFeatureSimilarity(stream []float64, signature []float64) float64 {
-	if len(signature) == 0 || len(stream) < len(signature) {
+func maxFeatureSimilarity(stream []float64, signature []float64, width int) float64 {
+	if len(signature) == 0 || len(stream) < len(signature) || width <= 0 {
+		return 0
+	}
+
+	sigFrames := len(signature) / width
+	streamFrames := len(stream) / width
+	if sigFrames == 0 || streamFrames < sigFrames {
 		return 0
 	}
 
@@ -335,8 +431,9 @@ func maxFeatureSimilarity(stream []float64, signature []float64) float64 {
 	}
 
 	maxSimilarity := 0.0
-	for offset := 0; offset <= len(stream)-len(signature); offset++ {
-		window := stream[offset : offset+len(signature)]
+	for offset := 0; offset <= streamFrames-sigFrames; offset++ {
+		start := offset * width
+		window := stream[start : start+len(signature)]
 		windowNorm := vectorNorm(window)
 		if windowNorm == 0 {
 			continue

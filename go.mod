@@ -10,6 +10,7 @@ require (
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	go.mau.fi/whatsmeow v0.0.0-20260611094716-089932318bc2
+	gonum.org/v1/gonum v0.16.0
 	google.golang.org/protobuf v1.36.11
 	modernc.org/sqlite v1.52.0
 )
