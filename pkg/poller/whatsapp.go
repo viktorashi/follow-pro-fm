@@ -381,6 +381,7 @@ type MockWhatsAppClient struct {
 	baseURL       string
 	connected     bool
 	loggedIn      bool
+	uploadedAudio []byte
 	eventHandlers []whatsmeow.EventHandler
 	mu            sync.Mutex
 }
@@ -477,6 +478,10 @@ func (m *MockWhatsAppClient) IsOnWhatsApp(ctx context.Context, phones []string) 
 }
 
 func (m *MockWhatsAppClient) Upload(ctx context.Context, data []byte, mediaType whatsmeow.MediaType) (whatsmeow.UploadResponse, error) {
+	m.mu.Lock()
+	m.uploadedAudio = append(m.uploadedAudio[:0], data...)
+	m.mu.Unlock()
+
 	return whatsmeow.UploadResponse{
 		URL:           "https://mock.whatsapp.net/media",
 		DirectPath:    "/mock/media/path",
