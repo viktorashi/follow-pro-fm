@@ -135,6 +135,44 @@ func TestHandleToggleGatheringPersistsSetting(t *testing.T) {
 	}
 }
 
+func TestHandleFillAllSchedulesSetsEveryCampaignWeekdayToAllMatches(t *testing.T) {
+	dbMgr, err := NewDBManager(":memory:")
+	if err != nil {
+		t.Fatalf("NewDBManager() error = %v", err)
+	}
+
+	server := &TelemetryServer{
+		dbMgr: dbMgr,
+		campaigns: []Campaign{
+			{StartDate: "15-06-2026", EndDate: "17-06-2026", Artist: "BTS"},
+			{StartDate: "20-06-2026", EndDate: "23-06-2026", Artist: "Ariana"},
+		},
+	}
+	ctx, rec := newJSONContext(http.MethodPost, "/api/schedule/fill-all", nil)
+
+	if err := server.handleFillAllSchedules(ctx); err != nil {
+		t.Fatalf("handleFillAllSchedules() error = %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	schedules, err := dbMgr.GetAllSchedules(context.Background())
+	if err != nil {
+		t.Fatalf("GetAllSchedules() error = %v", err)
+	}
+
+	wantDates := []string{"2026-06-15", "2026-06-16", "2026-06-17", "2026-06-22", "2026-06-23"}
+	if len(schedules) != len(wantDates) {
+		t.Fatalf("len(schedules) = %d, want %d", len(schedules), len(wantDates))
+	}
+	for _, date := range wantDates {
+		if got := schedules[date]; got != "[1,2,3,4,5,6]" {
+			t.Fatalf("schedule[%s] = %q, want %q", date, got, "[1,2,3,4,5,6]")
+		}
+	}
+}
+
 func newJSONContext(method string, target string, body []byte) (*echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, target, bytes.NewReader(body))

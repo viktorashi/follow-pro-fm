@@ -102,7 +102,7 @@ func TestHandleAudioUploadRejectsUsedNameCollisions(t *testing.T) {
 	}
 }
 
-func TestHandleAudioUploadRejectsUnknownDashboardPhone(t *testing.T) {
+func TestHandleAudioUploadAllowsPhoneNotPrelistedInDashboardState(t *testing.T) {
 	audiosDir := t.TempDir()
 	server := &TelemetryServer{
 		audiosDir: audiosDir,
@@ -118,11 +118,12 @@ func TestHandleAudioUploadRejectsUnknownDashboardPhone(t *testing.T) {
 		t.Fatalf("handleAudioUpload returned error: %v", err)
 	}
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	if body := rec.Body.String(); !strings.Contains(body, "Phone is not configured on the dashboard") {
-		t.Fatalf("body = %q, want unknown phone validation message", body)
+	activePath := filepath.Join(audiosDir, NormalizePhone("+40999888777"), "fresh.ogg")
+	if _, err := os.Stat(activePath); err != nil {
+		t.Fatalf("expected upload at %s: %v", activePath, err)
 	}
 }
 
