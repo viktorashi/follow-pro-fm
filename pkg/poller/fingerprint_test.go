@@ -49,8 +49,8 @@ func forEachFingerprintCase(t *testing.T, fn func(t *testing.T, tc fingerprintCa
 	}
 
 	for _, tc := range loadFingerprintCases(t) {
-		stream := mustReadTestFile(t, tc.Dir, "stream.mp3")
-		signature := mustReadTestFile(t, tc.Dir, "signature.mp3")
+		stream := mustReadFingerprintFixture(t, tc.Dir, "stream")
+		signature := mustReadFingerprintFixture(t, tc.Dir, "signature")
 		fn(t, tc, stream, signature)
 	}
 }
@@ -98,8 +98,8 @@ func TestCampaignBoundFingerprintDetectionDoesNotTriggerOtherCampaignSignature(t
 	ctx := context.Background()
 	canonicalDir := t.TempDir()
 
-	stream := mustReadTestFile(t, "testdata", "fingerprint", "cases", "quiet_match", "stream.mp3")
-	signature := mustReadTestFile(t, "testdata", "fingerprint", "cases", "quiet_match", "signature.mp3")
+	stream := mustReadFingerprintFixture(t, filepath.Join("testdata", "fingerprint", "cases", "quiet_match"), "stream")
+	signature := mustReadFingerprintFixture(t, filepath.Join("testdata", "fingerprint", "cases", "quiet_match"), "signature")
 	writeFile(t, filepath.Join(canonicalDir, "Ariana - candidate.mp3"), signature)
 
 	if err := dbMgr.UpsertSignatureFile(ctx, "canonical", "Ariana - candidate.mp3", bucharestTime(2026, time.July, 22, 12, 0, 0), "Ariana"); err != nil {
@@ -233,8 +233,8 @@ func loadFingerprintCases(t *testing.T) []fingerprintCase {
 		if len(audioNames) != 2 {
 			t.Fatalf("%s must contain exactly 2 audio files, found %d", dir, len(audioNames))
 		}
-		if audioNames[0] != "signature.mp3" || audioNames[1] != "stream.mp3" {
-			t.Fatalf("%s audio files must be signature.mp3 and stream.mp3, found %v", dir, audioNames)
+		if !isFingerprintFixturePair(audioNames) {
+			t.Fatalf("%s audio files must be stream.* and signature.*, found %v", dir, audioNames)
 		}
 
 		cases = append(cases, fingerprintCase{
@@ -295,12 +295,53 @@ func fingerprintAudioFiles(t *testing.T, dir string) []string {
 
 	var names []string
 	for _, entry := range entries {
-		if entry.IsDir() || strings.ToLower(filepath.Ext(entry.Name())) != ".mp3" {
+		if entry.IsDir() || strings.EqualFold(entry.Name(), "case.toml") {
 			continue
 		}
 		names = append(names, entry.Name())
 	}
 	return names
+}
+
+func mustReadFingerprintFixture(t *testing.T, dir string, base string) []byte {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir(%s) error = %v", dir, err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || strings.EqualFold(entry.Name(), "case.toml") {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name())), base) {
+			return mustReadTestFile(t, dir, entry.Name())
+		}
+	}
+
+	t.Fatalf("missing %s fixture in %s", base, dir)
+	return nil
+}
+
+func isFingerprintFixturePair(names []string) bool {
+	if len(names) != 2 {
+		return false
+	}
+
+	var hasSignature, hasStream bool
+	for _, name := range names {
+		base := strings.ToLower(strings.TrimSuffix(name, filepath.Ext(name)))
+		switch base {
+		case "signature":
+			hasSignature = true
+		case "stream":
+			hasStream = true
+		default:
+			return false
+		}
+	}
+	return hasSignature && hasStream
 }
 
 func mustReadTestFile(t *testing.T, elems ...string) []byte {
