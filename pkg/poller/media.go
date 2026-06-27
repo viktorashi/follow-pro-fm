@@ -9,14 +9,18 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
 
-// GetAudioDuration calculates the exact duration of an audio file in pure Go.
-// Currently, it fully supports exact extraction for OGG Opus/Vorbis files.
-// For unsupported formats, it falls back to a size-based heuristic.
+// GetAudioDuration uses ffprobe when available, then falls back to the tiny
+// built-in parsers for formats we already understand exactly.
 func GetAudioDuration(path string) (time.Duration, error) {
+	if duration, err := getFFprobeDuration(path); err == nil {
+		return duration, nil
+	}
+
 	ext := strings.ToLower(filepath.Ext(path))
 
 	switch ext {
@@ -25,10 +29,32 @@ func GetAudioDuration(path string) (time.Duration, error) {
 	case ".wav":
 		return getWavDuration(path)
 	default:
-		// Fallback heuristic for unsupported formats (.mp3, .m4a, etc)
-		// Document that these are not exactly supported in pure Go.
-		return getHeuristicDuration(path)
+		return 0, fmt.Errorf("unsupported audio duration format: %s", ext)
 	}
+}
+
+func getFFprobeDuration(path string) (time.Duration, error) {
+	ffprobePath, err := ffprobeBinaryPath()
+	if err != nil {
+		return 0, err
+	}
+
+	cmd := exec.Command(ffprobePath, "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return 0, fmt.Errorf("ffprobe failed: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
+	}
+
+	seconds, err := strconv.ParseFloat(strings.TrimSpace(stdout.String()), 64)
+	if err != nil {
+		return 0, fmt.Errorf("ffprobe returned invalid duration %q: %w", strings.TrimSpace(stdout.String()), err)
+	}
+
+	return time.Duration(seconds * float64(time.Second)), nil
 }
 
 func getOggDuration(path string) (time.Duration, error) {
@@ -134,17 +160,6 @@ func getWavDuration(path string) (time.Duration, error) {
 
 	durationSec := float64(dataSize) / float64(byteRate)
 	return time.Duration(durationSec * float64(time.Second)), nil
-}
-
-func getHeuristicDuration(path string) (time.Duration, error) {
-	stat, err := os.Stat(path)
-	if err != nil {
-		return 0, err
-	}
-
-	// Assume ~2.5KB/s as a fallback generic heuristic (e.g., highly compressed voice notes)
-	seconds := float64(stat.Size()) / 2500.0
-	return time.Duration(seconds * float64(time.Second)), nil
 }
 
 func ffmpegBinaryPath() (string, error) {
