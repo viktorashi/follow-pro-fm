@@ -22,3 +22,15 @@
 `waveform_long_match`
 - Source: derived from `pkg/poller/testdata/waveform_sample.ogg`
 - Fixture prep: `stream.mp3` is a full MP3 transcode of `waveform_sample.ogg`; `signature.mp3` is a 3.60s interior crop re-encoded as MP3.
+
+`commons_boing_long_nearmiss_waveform`
+- Stream source: `Boing raw.ogg` from Wikimedia Commons
+- Stream URL: `https://commons.wikimedia.org/wiki/Special:FilePath/Boing%20raw.ogg`
+- Signature source: derived from `pkg/poller/testdata/waveform_sample.ogg`
+- Fixture prep: both files are MP3 CBR `96k`; `stream.mp3` is a full Boing transcode, `signature.mp3` is a 3.60s crop from unrelated waveform content.
+
+`waveform_long_nearmiss_boing`
+- Stream source: derived from `pkg/poller/testdata/waveform_sample.ogg`
+- Signature source: `Boing raw.ogg` from Wikimedia Commons
+- Signature URL: `https://commons.wikimedia.org/wiki/Special:FilePath/Boing%20raw.ogg`
+- Fixture prep: both files are MP3 CBR `96k`; `stream.mp3` is a full waveform transcode, `signature.mp3` is a 3.60s crop from unrelated Boing content.
