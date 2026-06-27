@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,7 +68,9 @@ func TestSendVoiceNote_Success(t *testing.T) {
 	}
 
 	// Send voice note
+	sendStart := time.Now().UTC()
 	err = SendVoiceNote(client, "+40 770-661-491", testAudio)
+	sendEnd := time.Now().UTC()
 	if err != nil {
 		t.Fatalf("expected SendVoiceNote to succeed, got error: %v", err)
 	}
@@ -96,6 +100,54 @@ func TestSendVoiceNote_Success(t *testing.T) {
 	}
 	if !bytes.Equal(record.Waveform, expectedWaveformSample()) {
 		t.Errorf("unexpected waveform sent: got %v", record.Waveform)
+	}
+
+	ffprobePath, err := ffprobeBinaryPath()
+	if err != nil {
+		t.Skip("ffprobe not installed, skipping uploaded artifact metadata proof")
+	}
+
+	mockClient.mu.Lock()
+	uploadedAudio := append([]byte(nil), mockClient.uploadedAudio...)
+	mockClient.mu.Unlock()
+	if len(uploadedAudio) == 0 {
+		t.Fatal("expected mock upload to capture remuxed send artifact")
+	}
+
+	originalAudio, err := os.ReadFile(testAudio)
+	if err != nil {
+		t.Fatalf("failed to read original test audio: %v", err)
+	}
+	if bytes.Equal(uploadedAudio, originalAudio) {
+		t.Fatal("expected uploaded artifact to differ from original audio after remux")
+	}
+
+	uploadedPath := filepath.Join(tempDir, "uploaded.ogg")
+	if err := os.WriteFile(uploadedPath, uploadedAudio, 0644); err != nil {
+		t.Fatalf("failed to persist uploaded artifact: %v", err)
+	}
+
+	cmd := exec.Command(ffprobePath, "-v", "error", "-show_entries", "stream_tags=creation_time", "-of", "default=noprint_wrappers=1:nokey=1", uploadedPath)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("ffprobe failed for uploaded artifact: %v", err)
+	}
+
+	creationTimeStr := strings.TrimSpace(out.String())
+	if creationTimeStr == "" {
+		t.Fatal("expected uploaded artifact creation_time metadata")
+	}
+
+	creationTime, err := time.Parse(time.RFC3339, creationTimeStr)
+	if err != nil {
+		t.Fatalf("failed to parse creation_time %q: %v", creationTimeStr, err)
+	}
+
+	sendWindowStart := sendStart.Add(-1 * time.Second)
+	sendWindowEnd := sendEnd.Add(1 * time.Second)
+	if creationTime.Before(sendWindowStart) || creationTime.After(sendWindowEnd) {
+		t.Fatalf("creation_time %s outside expected send window [%s, %s]", creationTime, sendWindowStart, sendWindowEnd)
 	}
 }
 
