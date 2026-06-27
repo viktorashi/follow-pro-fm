@@ -162,6 +162,40 @@ func (e *TestEnv) cleanup() {
 	_ = os.RemoveAll(e.TempDir)
 }
 
+func (e *TestEnv) markPaired(t *testing.T) {
+	t.Helper()
+
+	if err := os.WriteFile(e.WappDBPath, []byte("paired"), 0o644); err != nil {
+		t.Fatalf("failed to mark mock WhatsApp client paired: %v", err)
+	}
+}
+
+func (e *TestEnv) setMockSong(artist, title string) {
+	e.mu.Lock()
+	e.MockArtist = artist
+	e.MockTitle = title
+	e.mu.Unlock()
+}
+
+func (e *TestEnv) startManagedApp(t *testing.T) *exec.Cmd {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd, err := e.startApp(ctx)
+	if err != nil {
+		cancel()
+		t.Fatalf("failed to start app: %v", err)
+	}
+
+	t.Cleanup(func() {
+		cancel()
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+
+	return cmd
+}
+
 func (e *TestEnv) startApp(ctx context.Context) (*exec.Cmd, error) {
 	cmd := exec.Command(binPath)
 	cmd.Env = append(os.Environ(),
@@ -200,17 +234,7 @@ func TestE2E(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
-			ctx, cancel := context.WithCancel(context.Background())
-			cmd, err := env.startApp(ctx)
-			if err != nil {
-				cancel()
-				t.Fatalf("failed to start app: %v", err)
-			}
-			defer func() {
-				cancel()
-				_ = cmd.Process.Kill()
-				_ = cmd.Wait()
-			}()
+			_ = env.startManagedApp(t)
 
 			// Wait for app to initialize and enter StatusPairingRequired
 			time.Sleep(1 * time.Second)
@@ -241,26 +265,9 @@ func TestE2E(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
-			// Pre-pair client so it doesn't wait for QR code scan
-			_ = os.WriteFile(env.WappDBPath, []byte("paired"), 0644)
-
-			// Setup campaign match
-			env.mu.Lock()
-			env.MockArtist = "BTS"
-			env.MockTitle = "Dynamite"
-			env.mu.Unlock()
-
-			ctx, cancel := context.WithCancel(context.Background())
-			cmd, err := env.startApp(ctx)
-			if err != nil {
-				cancel()
-				t.Fatalf("failed to start app: %v", err)
-			}
-			defer func() {
-				cancel()
-				_ = cmd.Process.Kill()
-				_ = cmd.Wait()
-			}()
+			env.markPaired(t)
+			env.setMockSong("BTS", "Dynamite")
+			_ = env.startManagedApp(t)
 
 			// Wait for poller to run and send voice note
 			time.Sleep(3 * time.Second)
@@ -294,24 +301,9 @@ func TestE2E(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
-			_ = os.WriteFile(env.WappDBPath, []byte("paired"), 0644)
-
-			env.mu.Lock()
-			env.MockArtist = "BTS"
-			env.MockTitle = "Butter"
-			env.mu.Unlock()
-
-			ctx, cancel := context.WithCancel(context.Background())
-			cmd, err := env.startApp(ctx)
-			if err != nil {
-				cancel()
-				t.Fatalf("failed to start app: %v", err)
-			}
-			defer func() {
-				cancel()
-				_ = cmd.Process.Kill()
-				_ = cmd.Wait()
-			}()
+			env.markPaired(t)
+			env.setMockSong("BTS", "Butter")
+			_ = env.startManagedApp(t)
 
 			time.Sleep(3 * time.Second)
 
@@ -350,24 +342,9 @@ func TestE2E(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
-			_ = os.WriteFile(env.WappDBPath, []byte("paired"), 0644)
-
-			env.mu.Lock()
-			env.MockArtist = "BTS"
-			env.MockTitle = "Dynamite"
-			env.mu.Unlock()
-
-			ctx, cancel := context.WithCancel(context.Background())
-			cmd, err := env.startApp(ctx)
-			if err != nil {
-				cancel()
-				t.Fatalf("failed to start app: %v", err)
-			}
-			defer func() {
-				cancel()
-				_ = cmd.Process.Kill()
-				_ = cmd.Wait()
-			}()
+			env.markPaired(t)
+			env.setMockSong("BTS", "Dynamite")
+			_ = env.startManagedApp(t)
 
 			time.Sleep(3 * time.Second)
 
@@ -388,18 +365,7 @@ func TestE2E(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
-			// Launch process without pairing, so it transitions to StatusPairingRequired
-			ctx, cancel := context.WithCancel(context.Background())
-			cmd, err := env.startApp(ctx)
-			if err != nil {
-				cancel()
-				t.Fatalf("failed to start app: %v", err)
-			}
-			defer func() {
-				cancel()
-				_ = cmd.Process.Kill()
-				_ = cmd.Wait()
-			}()
+			_ = env.startManagedApp(t)
 
 			time.Sleep(1500 * time.Millisecond)
 
@@ -419,7 +385,7 @@ func TestE2E(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
-			_ = os.WriteFile(env.WappDBPath, []byte("paired"), 0644)
+			env.markPaired(t)
 
 			// Clean out all files in the audios directory to simulate empty pool
 			files, _ := filepath.Glob(filepath.Join(env.AudiosDir, "*"))
@@ -427,22 +393,8 @@ func TestE2E(t *testing.T) {
 				_ = os.RemoveAll(f)
 			}
 
-			env.mu.Lock()
-			env.MockArtist = "BTS"
-			env.MockTitle = "Dynamite"
-			env.mu.Unlock()
-
-			ctx, cancel := context.WithCancel(context.Background())
-			cmd, err := env.startApp(ctx)
-			if err != nil {
-				cancel()
-				t.Fatalf("failed to start app: %v", err)
-			}
-			defer func() {
-				cancel()
-				_ = cmd.Process.Kill()
-				_ = cmd.Wait()
-			}()
+			env.setMockSong("BTS", "Dynamite")
+			_ = env.startManagedApp(t)
 
 			time.Sleep(3 * time.Second)
 
@@ -464,28 +416,14 @@ func TestE2E(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
-			_ = os.WriteFile(env.WappDBPath, []byte("paired"), 0644)
+			env.markPaired(t)
 
 			// Create a corrupted .ogg file
 			corruptPath := filepath.Join(env.AudiosDir, sampleAudioName)
 			_ = os.WriteFile(corruptPath, []byte("THIS IS NOT A VALID OGG PACKET OR OPUS AUDIO STREAM"), 0644)
 
-			env.mu.Lock()
-			env.MockArtist = "BTS"
-			env.MockTitle = "Butter"
-			env.mu.Unlock()
-
-			ctx, cancel := context.WithCancel(context.Background())
-			cmd, err := env.startApp(ctx)
-			if err != nil {
-				cancel()
-				t.Fatalf("failed to start app: %v", err)
-			}
-			defer func() {
-				cancel()
-				_ = cmd.Process.Kill()
-				_ = cmd.Wait()
-			}()
+			env.setMockSong("BTS", "Butter")
+			cmd := env.startManagedApp(t)
 
 			time.Sleep(3 * time.Second)
 
@@ -506,17 +444,7 @@ func TestE2E(t *testing.T) {
 			}
 			defer func() { _ = l.Close() }()
 
-			ctx, cancel := context.WithCancel(context.Background())
-			cmd, err := env.startApp(ctx)
-			if err != nil {
-				cancel()
-				t.Fatalf("failed to start app: %v", err)
-			}
-			defer func() {
-				cancel()
-				_ = cmd.Process.Kill()
-				_ = cmd.Wait()
-			}()
+			cmd := env.startManagedApp(t)
 
 			time.Sleep(1 * time.Second)
 
@@ -530,12 +458,8 @@ func TestE2E(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
-			_ = os.WriteFile(env.WappDBPath, []byte("paired"), 0644)
-
-			env.mu.Lock()
-			env.MockArtist = "BTS"
-			env.MockTitle = "Dynamite"
-			env.mu.Unlock()
+			env.markPaired(t)
+			env.setMockSong("BTS", "Dynamite")
 
 			// Run app under a boundary timezone environment variable
 			cmd := exec.Command(binPath)
@@ -577,7 +501,7 @@ func TestE2E(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
-			_ = os.WriteFile(env.WappDBPath, []byte("paired"), 0644)
+			env.markPaired(t)
 
 			// Create a short 0.5s audio clip using ffmpeg from the template audio
 			shortPath := filepath.Join(env.AudiosDir, sampleAudioName)
@@ -588,22 +512,8 @@ func TestE2E(t *testing.T) {
 				t.Fatalf("failed to create extremely short audio clip: %v", err)
 			}
 
-			env.mu.Lock()
-			env.MockArtist = "BTS"
-			env.MockTitle = "Dynamite"
-			env.mu.Unlock()
-
-			ctx, cancel := context.WithCancel(context.Background())
-			cmd, err := env.startApp(ctx)
-			if err != nil {
-				cancel()
-				t.Fatalf("failed to start app: %v", err)
-			}
-			defer func() {
-				cancel()
-				_ = cmd.Process.Kill()
-				_ = cmd.Wait()
-			}()
+			env.setMockSong("BTS", "Dynamite")
+			_ = env.startManagedApp(t)
 
 			time.Sleep(3 * time.Second)
 
@@ -631,41 +541,21 @@ func TestE2E(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
-			_ = os.WriteFile(env.WappDBPath, []byte("paired"), 0644)
-
-			ctx, cancel := context.WithCancel(context.Background())
-			cmd, err := env.startApp(ctx)
-			if err != nil {
-				cancel()
-				t.Fatalf("failed to start app: %v", err)
-			}
-			defer func() {
-				cancel()
-				_ = cmd.Process.Kill()
-				_ = cmd.Wait()
-			}()
+			env.markPaired(t)
+			_ = env.startManagedApp(t)
 
 			// 1. Play campaign song (BTS)
-			env.mu.Lock()
-			env.MockArtist = "BTS"
-			env.MockTitle = "Dynamite"
-			env.mu.Unlock()
+			env.setMockSong("BTS", "Dynamite")
 
 			time.Sleep(1 * time.Second)
 
 			// 2. Play other song
-			env.mu.Lock()
-			env.MockArtist = "Ariana Grande"
-			env.MockTitle = "7 Rings"
-			env.mu.Unlock()
+			env.setMockSong("Ariana Grande", "7 Rings")
 
 			time.Sleep(100 * time.Millisecond)
 
 			// 3. Play campaign song again immediately (simulating flicker)
-			env.mu.Lock()
-			env.MockArtist = "BTS"
-			env.MockTitle = "Dynamite"
-			env.mu.Unlock()
+			env.setMockSong("BTS", "Dynamite")
 
 			time.Sleep(2 * time.Second)
 
