@@ -15,6 +15,8 @@ import (
 	"pro-fm-poller/pkg/poller"
 )
 
+type whatsAppInitFunc func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error)
+
 func bootstrapSenderPhones(dbPath string) []string {
 	phones := []string{poller.CanonicalSenderPhone}
 	seen := map[string]struct{}{
@@ -40,6 +42,49 @@ func bootstrapSenderPhones(dbPath string) []string {
 	}
 
 	return phones
+}
+
+func ensureSenderConnectionState(stateMgr *poller.StateManager, phone string) bool {
+	added := false
+	stateMgr.Update(func(s *poller.AppState) {
+		for i := range s.Connections {
+			if s.Connections[i].Phone == phone {
+				return
+			}
+		}
+		s.Connections = append(s.Connections, poller.WAConnectionState{
+			Phone:  phone,
+			Status: poller.StatusInitializing,
+		})
+		added = true
+	})
+	return added
+}
+
+func removeSenderConnectionState(stateMgr *poller.StateManager, phone string) {
+	stateMgr.Update(func(s *poller.AppState) {
+		filtered := make([]poller.WAConnectionState, 0, len(s.Connections))
+		for _, conn := range s.Connections {
+			if conn.Phone != phone {
+				filtered = append(filtered, conn)
+			}
+		}
+		s.Connections = filtered
+	})
+}
+
+func initSenderPhone(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string, initWhatsApp whatsAppInitFunc) (poller.WhatsAppClient, error) {
+	added := ensureSenderConnectionState(stateMgr, phone)
+
+	client, err := initWhatsApp(phone, dbPath, stateMgr, alerter, baseURL)
+	if err != nil {
+		if added {
+			removeSenderConnectionState(stateMgr, phone)
+		}
+		return nil, fmt.Errorf("failed to initialize WhatsApp for %s: %v", phone, err)
+	}
+
+	return client, nil
 }
 
 func main() {
@@ -221,25 +266,9 @@ func main() {
 			dbForPhone = dbPath
 		}
 
-		stateMgr.Update(func(s *poller.AppState) {
-			found := false
-			for i := range s.Connections {
-				if s.Connections[i].Phone == p {
-					found = true
-					break
-				}
-			}
-			if !found {
-				s.Connections = append(s.Connections, poller.WAConnectionState{
-					Phone:  p,
-					Status: poller.StatusInitializing,
-				})
-			}
-		})
-
-		c, err := poller.InitWhatsApp(p, dbForPhone, stateMgr, alerter, baseURL)
+		c, err := initSenderPhone(p, dbForPhone, stateMgr, alerter, baseURL, poller.InitWhatsApp)
 		if err != nil {
-			return fmt.Errorf("failed to initialize WhatsApp for %s: %v", p, err)
+			return err
 		}
 
 		wappMutex.Lock()
