@@ -146,8 +146,13 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 				const result = document.getElementById('schedule-result');
 				result.textContent = 'Filling all campaign days with 1,2,3,4,5,6...';
 				result.className = 'mt-4 text-sm text-muted';
-				fetch('/api/schedule/fill-all', {
-					method: 'POST'
+				fetch('/api/schedule', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						date: '*',
+						target_matches: [1, 2, 3, 4, 5, 6]
+					})
 				}).then(async res => {
 					const payload = await res.json().catch(() => ({}));
 					if (!res.ok) {

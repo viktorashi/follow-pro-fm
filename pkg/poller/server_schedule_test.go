@@ -135,7 +135,7 @@ func TestHandleToggleGatheringPersistsSetting(t *testing.T) {
 	}
 }
 
-func TestHandleFillAllSchedulesSetsEveryCampaignWeekdayToAllMatches(t *testing.T) {
+func TestHandleSetScheduleWildcardDateSetsEveryCampaignWeekdayToAllMatches(t *testing.T) {
 	dbMgr, err := NewDBManager(":memory:")
 	if err != nil {
 		t.Fatalf("NewDBManager() error = %v", err)
@@ -148,10 +148,10 @@ func TestHandleFillAllSchedulesSetsEveryCampaignWeekdayToAllMatches(t *testing.T
 			{StartDate: "20-06-2026", EndDate: "23-06-2026", Artist: "Ariana"},
 		},
 	}
-	ctx, rec := newJSONContext(http.MethodPost, "/api/schedule/fill-all", nil)
+	ctx, rec := newJSONContext(http.MethodPost, "/api/schedule", []byte(`{"date":"*","target_matches":[1,2,3,4,5,6]}`))
 
-	if err := server.handleFillAllSchedules(ctx); err != nil {
-		t.Fatalf("handleFillAllSchedules() error = %v", err)
+	if err := server.handleSetSchedule(ctx); err != nil {
+		t.Fatalf("handleSetSchedule() error = %v", err)
 	}
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
