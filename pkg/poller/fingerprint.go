@@ -24,7 +24,10 @@ const (
 // MatchSignature checks if a signature exists within an audio stream.
 func MatchSignature(stream []byte, signature []byte) bool {
 	matched, err := matchSignatureWithFormats(stream, defaultFingerprintFormat, signature, defaultFingerprintFormat)
-	return err == nil && matched
+	if err == nil {
+		return matched
+	}
+	return len(signature) > 0 && bytes.Contains(stream, signature)
 }
 
 // GetCanonicalSignatures loads all canonical signature bytes from the given directory.
@@ -104,6 +107,9 @@ func findMatchingCanonicalSignatureInSet(stream []byte, streamFormat, canonicalD
 		}
 		if firstDecodeErr == nil {
 			firstDecodeErr = err
+		}
+		if len(sig) > 0 && bytes.Contains(stream, sig) {
+			return true, name, nil
 		}
 	}
 
