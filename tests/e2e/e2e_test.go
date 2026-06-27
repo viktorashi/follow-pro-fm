@@ -22,6 +22,11 @@ var (
 	binOnce sync.Once
 )
 
+const (
+	sampleAudioName = "WhatsApp Ptt 1.ogg"
+	sampleAudioPath = "../../pkg/poller/testdata/waveform_sample.ogg"
+)
+
 type TestEnv struct {
 	TempDir               string
 	AudiosDir             string
@@ -66,14 +71,12 @@ func setupTestEnv(t *testing.T) *TestEnv {
 		t.Fatalf("failed to create audios dir: %v", err)
 	}
 
-	// Copy a sample audio file from the source data dir if it exists
-	srcAudio := "../../data/audios/WhatsApp Ptt 1.ogg"
-	if _, err := os.Stat(srcAudio); err == nil {
-		destAudio := filepath.Join(audiosDir, "WhatsApp Ptt 1.ogg")
-		data, err := os.ReadFile(srcAudio)
-		if err == nil {
-			_ = os.WriteFile(destAudio, data, 0644)
-		}
+	data, err := os.ReadFile(sampleAudioPath)
+	if err != nil {
+		t.Fatalf("failed to read sample audio fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(audiosDir, sampleAudioName), data, 0644); err != nil {
+		t.Fatalf("failed to seed sample audio fixture: %v", err)
 	}
 
 	// Allocate dynamic free port
@@ -370,13 +373,13 @@ func TestE2E(t *testing.T) {
 			time.Sleep(3 * time.Second)
 
 			// Original audio file should no longer exist in the root of audios
-			origPath := filepath.Join(env.AudiosDir, "WhatsApp Ptt 1.ogg")
+			origPath := filepath.Join(env.AudiosDir, sampleAudioName)
 			if _, err := os.Stat(origPath); !os.IsNotExist(err) {
 				t.Errorf("original voice note still exists in root audios directory")
 			}
 
 			// Audio should be in the /used subdirectory
-			usedPath := filepath.Join(env.AudiosDir, "used", "WhatsApp Ptt 1.ogg")
+			usedPath := filepath.Join(env.AudiosDir, "used", sampleAudioName)
 			if _, err := os.Stat(usedPath); err != nil {
 				t.Errorf("voice note was not moved to the used directory: %v", err)
 			}
@@ -546,7 +549,7 @@ func TestE2E(t *testing.T) {
 			_ = os.WriteFile(env.WappDBPath, []byte("paired"), 0644)
 
 			// Create a corrupted .ogg file
-			corruptPath := filepath.Join(env.AudiosDir, "WhatsApp Ptt 1.ogg")
+			corruptPath := filepath.Join(env.AudiosDir, sampleAudioName)
 			_ = os.WriteFile(corruptPath, []byte("THIS IS NOT A VALID OGG PACKET OR OPUS AUDIO STREAM"), 0644)
 
 			env.mu.Lock()
@@ -659,11 +662,10 @@ func TestE2E(t *testing.T) {
 			_ = os.WriteFile(env.WappDBPath, []byte("paired"), 0644)
 
 			// Create a short 0.5s audio clip using ffmpeg from the template audio
-			shortPath := filepath.Join(env.AudiosDir, "WhatsApp Ptt 1.ogg")
+			shortPath := filepath.Join(env.AudiosDir, sampleAudioName)
 			_ = os.Remove(shortPath) // remove copied full audio
 
-			srcAudio := "../../data/audios/WhatsApp Ptt 1.ogg"
-			cmdCrop := exec.Command("ffmpeg", "-y", "-i", srcAudio, "-t", "0.5", "-c", "copy", shortPath)
+			cmdCrop := exec.Command("ffmpeg", "-y", "-i", sampleAudioPath, "-t", "0.5", "-c", "copy", shortPath)
 			if err := cmdCrop.Run(); err != nil {
 				t.Fatalf("failed to create extremely short audio clip: %v", err)
 			}
