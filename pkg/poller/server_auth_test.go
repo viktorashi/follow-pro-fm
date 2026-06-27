@@ -1,7 +1,6 @@
 package poller
 
 import (
-	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -154,7 +153,7 @@ func TestHandleKillSwitchDeactivateRestoresSleepingOutsideCampaignHours(t *testi
 		},
 	}
 
-	ctx, rec := newAuthJSONContext(http.MethodPost, "/api/kill-switch", []byte(`{"password":"admin-pass","active":false}`))
+	ctx, rec := newJSONContext(http.MethodPost, "/api/kill-switch", []byte(`{"password":"admin-pass","active":false}`))
 	if err := server.handleKillSwitch(ctx); err != nil {
 		t.Fatalf("handleKillSwitch() error = %v", err)
 	}
@@ -191,7 +190,7 @@ func TestHandleKillSwitchDeactivateRestoresPairingRequiredWhenCampaignActive(t *
 		},
 	}
 
-	ctx, rec := newAuthJSONContext(http.MethodPost, "/api/kill-switch", []byte(`{"password":"admin-pass","active":false}`))
+	ctx, rec := newJSONContext(http.MethodPost, "/api/kill-switch", []byte(`{"password":"admin-pass","active":false}`))
 	if err := server.handleKillSwitch(ctx); err != nil {
 		t.Fatalf("handleKillSwitch() error = %v", err)
 	}
@@ -206,13 +205,4 @@ func TestHandleKillSwitchDeactivateRestoresPairingRequiredWhenCampaignActive(t *
 	if state.Status != StatusPairingRequired {
 		t.Fatalf("status = %q, want %q", state.Status, StatusPairingRequired)
 	}
-}
-
-func newAuthJSONContext(method string, target string, body []byte) (*echo.Context, *httptest.ResponseRecorder) {
-	e := echo.New()
-	req := httptest.NewRequest(method, target, bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	return ctx, rec
 }
