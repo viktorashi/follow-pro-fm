@@ -97,12 +97,18 @@ func TestCampaignBoundFingerprintDetectionDoesNotTriggerOtherCampaignSignature(t
 }
 
 func TestSaveUnreviewedChunkIfDistinctSkipsCanonical(t *testing.T) {
+	if _, err := ffmpegBinaryPath(); err != nil {
+		t.Skip("ffmpeg not installed, skipping audio fingerprint validation")
+	}
+
 	unreviewedDir := t.TempDir()
 	canonicalDir := t.TempDir()
 
-	writeFile(t, filepath.Join(canonicalDir, "known.mp3"), []byte("signature"))
+	signature := mustReadTestFile(t, "testdata", "fingerprint", "cases", "match", "signature.mp3")
+	stream := mustReadTestFile(t, "testdata", "fingerprint", "cases", "match", "stream.mp3")
+	writeFile(t, filepath.Join(canonicalDir, "known.mp3"), signature)
 
-	saved, matchedName, err := SaveUnreviewedChunkIfDistinct([]byte("prefix-signature-suffix"), unreviewedDir, canonicalDir, "candidate.mp3")
+	saved, matchedName, err := SaveUnreviewedChunkIfDistinct(stream, unreviewedDir, canonicalDir, "candidate.mp3")
 	if err != nil {
 		t.Fatalf("SaveUnreviewedChunkIfDistinct failed: %v", err)
 	}
