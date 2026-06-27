@@ -19,6 +19,12 @@ jobs:
           go-version-file: "go.mod"
           cache-dependency-path: "go.sum"
 
+      - name: Restore ffmpeg cache
+        uses: actions/cache@v4
+        with:
+          path: bin
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/build_ffmpeg.sh', 'third_party/ffmpeg/configure', 'third_party/ffmpeg/fftools/ffmpeg.c', 'third_party/ffmpeg/libavcodec/allcodecs.c') }}
+
       - name: Build minimal ffmpeg
         run: |
           ./scripts/build_ffmpeg.sh
