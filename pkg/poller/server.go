@@ -115,6 +115,7 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.POST("/api/kill-switch", s.handleKillSwitch)
 	protected.GET("/api/schedule", s.handleGetSchedule)
 	protected.POST("/api/schedule", s.handleSetSchedule)
+	protected.POST("/api/schedule/fill-all", s.handleFillAllSchedules)
 	protected.POST("/api/sender/add", s.handleAddSenderPhone)
 	protected.POST("/api/audio/upload", s.handleAudioUpload)
 
@@ -497,9 +498,6 @@ func (s *TelemetryServer) handleAudioUpload(c *echo.Context) error {
 	if !strings.HasPrefix(phone, "+") {
 		phone = "+" + phone
 	}
-	if s.stateMgr != nil && !isKnownDashboardPhone(phone, s.stateMgr.Get().Connections) {
-		return c.String(http.StatusBadRequest, "Phone is not configured on the dashboard")
-	}
 
 	fileHeader, err := c.FormFile("audio")
 	if err != nil {
@@ -692,6 +690,40 @@ func (s *TelemetryServer) handleSetSchedule(c *echo.Context) error {
 		"date":           req.Date,
 		"target_matches": json.RawMessage(scheduleJSON),
 		"status":         "ok",
+	})
+}
+
+func (s *TelemetryServer) handleFillAllSchedules(c *echo.Context) error {
+	if s.dbMgr == nil {
+		return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "database not configured"})
+	}
+	if len(s.campaigns) == 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "campaigns not configured"})
+	}
+
+	scheduleJSON, err := MarshalSchedule([]int{1, 2, 3, 4, 5, 6})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	updated := 0
+	for _, campaign := range s.campaigns {
+		dates, err := campaignWeekdays(campaign, bucharestLocation)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+		for _, day := range dates {
+			if err := s.dbMgr.SetDailySchedule(c.Request().Context(), day.Format("2006-01-02"), scheduleJSON); err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+			updated++
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"status":         "ok",
+		"updated_days":   updated,
+		"target_matches": json.RawMessage(scheduleJSON),
 	})
 }
 

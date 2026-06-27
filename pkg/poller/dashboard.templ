@@ -142,6 +142,25 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 				});
 				return false;
 			}
+			function fillAllSchedules() {
+				const result = document.getElementById('schedule-result');
+				result.textContent = 'Filling all campaign days with 1,2,3,4,5,6...';
+				result.className = 'mt-4 text-sm text-muted';
+				fetch('/api/schedule/fill-all', {
+					method: 'POST'
+				}).then(async res => {
+					const payload = await res.json().catch(() => ({}));
+					if (!res.ok) {
+						throw new Error(payload.error || 'Fill failed');
+					}
+					result.textContent = `Updated ${payload.updated_days} campaign days to 1, 2, 3, 4, 5, 6.`;
+					result.className = 'mt-4 text-sm text-success';
+					window.location.reload();
+				}).catch(err => {
+					result.textContent = err.message;
+					result.className = 'mt-4 text-sm text-warning';
+				});
+			}
 			function toggleKillSwitch(active) {
 				const pw = prompt(active ? "⚠️ DANGER! Enter Admin Password to permanently disable the bot:" : "Enter Admin Password to re-enable the bot:");
 				if (!pw) return;
@@ -307,7 +326,10 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 								<label class="text-xs text-muted mb-1">Target matches</label>
 								<input type="text" name="target_matches" placeholder="1,3,5" class="input" required />
 							</div>
-							<button type="submit" class="btn btn-primary">Save Schedule</button>
+							<div class="flex gap-2">
+								<button type="submit" class="btn btn-primary">Save Schedule</button>
+								<button type="button" class="btn btn-secondary" onclick="fillAllSchedules()">All 6/6</button>
+							</div>
 						</form>
 						<div id="schedule-result" class="mt-4 text-sm text-muted">Use comma-separated match indices such as <code>1, 3, 5</code>.</div>
 						if len(schedules) == 0 {
