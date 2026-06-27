@@ -1,4 +1,4 @@
-Never spawn subagents in fast mode
+Spawn all sub-agents with gpt 5.4-mini and NEVER in fast mode!! Always slow mode. As slow as possible
 
 Never merge / push onto main by yourself unless specifically prompted otherwise.
 That's what's actually deploying to main through CI / CD
