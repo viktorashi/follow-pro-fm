@@ -13,18 +13,45 @@ import (
 )
 
 func TestMatchSignature(t *testing.T) {
+	forEachFingerprintCase(t, func(t *testing.T, tc fingerprintCase, stream []byte, signature []byte) {
+		t.Run(tc.Name, func(t *testing.T) {
+			if got := MatchSignature(stream, signature); got != tc.ShouldMatch {
+				t.Fatalf("MatchSignature() = %v, want %v", got, tc.ShouldMatch)
+			}
+		})
+	})
+}
+
+func TestMatchSignatureScoresStaySeparated(t *testing.T) {
+	forEachFingerprintCase(t, func(t *testing.T, tc fingerprintCase, stream []byte, signature []byte) {
+		t.Run(tc.Name, func(t *testing.T) {
+			matched, score, err := matchSignatureWithFormats(stream, "", signature, "")
+			if err != nil {
+				t.Fatalf("matchSignatureWithFormats() error = %v", err)
+			}
+
+			t.Logf("score=%.4f matched=%v", score, matched)
+			if tc.ShouldMatch && score < fingerprintSimilarityFloor {
+				t.Fatalf("positive score %.4f fell below floor %.2f", score, fingerprintSimilarityFloor)
+			}
+			if !tc.ShouldMatch && score >= fingerprintSimilarityFloor {
+				t.Fatalf("negative score %.4f reached floor %.2f", score, fingerprintSimilarityFloor)
+			}
+		})
+	})
+}
+
+func forEachFingerprintCase(t *testing.T, fn func(t *testing.T, tc fingerprintCase, stream []byte, signature []byte)) {
+	t.Helper()
+
 	if _, err := ffmpegBinaryPath(); err != nil {
 		t.Skip("ffmpeg not installed, skipping audio fingerprint validation")
 	}
 
 	for _, tc := range loadFingerprintCases(t) {
-		t.Run(tc.Name, func(t *testing.T) {
-			stream := mustReadTestFile(t, tc.Dir, "stream.mp3")
-			signature := mustReadTestFile(t, tc.Dir, "signature.mp3")
-			if got := MatchSignature(stream, signature); got != tc.ShouldMatch {
-				t.Fatalf("MatchSignature() = %v, want %v", got, tc.ShouldMatch)
-			}
-		})
+		stream := mustReadTestFile(t, tc.Dir, "stream.mp3")
+		signature := mustReadTestFile(t, tc.Dir, "signature.mp3")
+		fn(t, tc, stream, signature)
 	}
 }
 
