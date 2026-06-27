@@ -4,68 +4,30 @@
 package poller
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
-
-	"github.com/joho/godotenv"
 )
 
-const TARGET_PHONE = "+40770661491"
-
 func TestPoller_E2E_NoWhatsApp(t *testing.T) {
-	// Dynamically compute the project root directory relative to this test file.
-	_, filename, _, _ := runtime.Caller(0)
-	rootDir := filepath.Join(filepath.Dir(filename), "../..")
+	rootDir := E2EProjectRoot(t)
 	audiosDir := filepath.Join(rootDir, "data/audios")
-	envPath := filepath.Join(rootDir, ".env")
-
-	// Load local .env variables
-	_ = godotenv.Load(envPath)
+	LoadE2EEnv(rootDir)
 
 	t.Log("Skipping real WhatsApp client initialization (nowapp build tag)")
 
-	// Initialize Audio Pool (creates the 'used' folder if it doesn't exist)
 	if err := InitAudioPool(audiosDir); err != nil {
 		t.Fatalf("Failed to initialize audio pool: %v", err)
 	}
 
-	// 2. Setup Alerters from .env
-	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
-	appEnv := "E2E-Testing"
-	tgAlerter := NewTelegramAlerter(telegramToken, telegramChatID, appEnv, "http://localhost:8080")
+	multiAlerter := E2EMultiAlerter(rootDir)
+	targetPhone := E2ETargetPhoneFromEnv()
 
-	sendgridKey := os.Getenv("SENDGRID_API_KEY")
-	emailFrom := os.Getenv("EMAIL_FROM")
-	emAlerter := NewEmailAlerter(sendgridKey, emailFrom, TrustedEmailsFilePath(filepath.Join(rootDir, "data", "app.sqlite")), appEnv, "http://localhost:8080")
-
-	multiAlerter := NewMultiAlerter(tgAlerter, emAlerter)
-
-	// target phone
-	targetPhone := os.Getenv("TARGET_PHONE")
-	if targetPhone == "" {
-		targetPhone = TARGET_PHONE
-	}
-
-	// A Wednesday at 12:00 PM (Active time for campaigns)
 	activeTime := time.Date(2026, time.June, 17, 12, 0, 0, 0, time.UTC)
 
-	// Mock ProFM server that explicitly returns a campaign hit (BTS)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		epg := EPGData{}
-		epg.Data.Epg.Title = "BTS"
-		epg.Data.Epg.Subtitle = "Dynamite"
-		_ = json.NewEncoder(w).Encode(epg)
-	}))
+	server := NewCampaignHitServer(t)
 	defer server.Close()
 
-	// Create poller with real WhatsApp send function
 	poller := &Poller{
 		APIURL:       server.URL,
 		PollInterval: 1 * time.Millisecond,
@@ -87,7 +49,6 @@ func TestPoller_E2E_NoWhatsApp(t *testing.T) {
 
 	currentSong := &SongInfo{}
 
-	// Call checkSong once. Because the mock server returns BTS, it will trigger the voice note.
 	t.Log("Triggering song check...")
 	poller.checkSong(currentSong, activeTime)
 
