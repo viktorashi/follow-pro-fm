@@ -244,6 +244,8 @@ func fingerprintFormatForName(name string) string {
 	return ext
 }
 
+// extractFingerprintFeatures builds MFCC-style features:
+// windowed FFT -> mel filter bank -> log energies -> DCT coefficients.
 func extractFingerprintFeatures(data []byte, format string) ([]float64, error) {
 	pcm, err := decodeAudioForFingerprinting(data, format)
 	if err != nil {
