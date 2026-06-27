@@ -791,9 +791,13 @@ func (s *TelemetryServer) handleUnreviewedCrop(c *echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
+	if s.dbMgr != nil {
+		if err := s.dbMgr.CopySignatureFile(c.Request().Context(), "unreviewed", "canonical", filename); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
-
 }
 
 func (s *TelemetryServer) listUnreviewedChunks() ([]ReviewChunk, error) {

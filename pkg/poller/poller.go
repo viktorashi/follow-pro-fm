@@ -175,29 +175,75 @@ func (p *Poller) resolveFingerprintSong(trigger fingerprintTrigger) SongInfo {
 }
 
 func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte) {
-	filename := fmt.Sprintf("%s - %s - %d.mp3", song.Artist, song.Title, time.Now().Unix())
-	saved, matchedName, err := SaveUnreviewedChunkIfDistinct(
-		data,
-		filepath.Join(p.SignaturesDir, "unreviewed"),
-		filepath.Join(p.SignaturesDir, "canonical"),
-		filename,
-	)
-	if err != nil {
-		log.Printf("   ⚠️ Failed to save unreviewed chunk %q: %v", filename, err)
-		return
-	}
-	if !saved {
-		log.Printf("   [SIGNATURE REVIEW] Skipped saving %q because it matches canonical signature %q", filename, matchedName)
-		return
+	recordedAt := time.Now()
+	filename := fmt.Sprintf("%s - %s - %d.mp3", song.Artist, song.Title, recordedAt.Unix())
+	unreviewedDir := filepath.Join(p.SignaturesDir, "unreviewed")
+	canonicalDir := filepath.Join(p.SignaturesDir, "canonical")
+
+	var allowed map[string]struct{}
+	matchedName := ""
+	if p.DBMgr != nil {
+		loaded, err := allowedCanonicalSignatureNames(context.Background(), p.DBMgr, p.ActiveCampaigns, canonicalDir, recordedAt)
+		if err != nil {
+			log.Printf("   ⚠️ Failed to load campaign-bound canonical signatures: %v", err)
+		} else {
+			allowed = loaded
+			match, name, err := findMatchingCanonicalSignatureInSet(data, defaultFingerprintFormat, canonicalDir, allowed)
+			if err == nil && match {
+				matchedName = name
+			}
+		}
 	}
 
-	log.Printf("   [SIGNATURE REVIEW] Saved unreviewed chunk %q for manual review", filename)
-	_ = p.Alerter.AlertInfo(AlertEvent{
-		Title:       "Intro Chunk Needs Review",
-		Message:     fmt.Sprintf("Saved new unreviewed intro chunk for manual review\nArtist: %s\nPiesa: %s\nFile: %s", song.Artist, song.Title, filename),
-		ActionLabel: "View Dashboard",
-		ActionURL:   p.BaseURL,
-	})
+	if matchedName == "" {
+		if allowed == nil {
+			saved, name, err := SaveUnreviewedChunkIfDistinct(data, unreviewedDir, canonicalDir, filename)
+			if err != nil {
+				log.Printf("   ⚠️ Failed to save unreviewed chunk %q: %v", filename, err)
+				return
+			}
+			if saved {
+				if campaignArtist, ok := campaignArtistForTime(p.ActiveCampaigns, recordedAt); ok && p.DBMgr != nil {
+					_ = p.DBMgr.UpsertSignatureFile(context.Background(), "unreviewed", filename, recordedAt, campaignArtist)
+				}
+				log.Printf("   [SIGNATURE REVIEW] Saved unreviewed chunk %q for manual review", filename)
+				_ = p.Alerter.AlertInfo(AlertEvent{
+					Title:       "Intro Chunk Needs Review",
+					Message:     fmt.Sprintf("Saved new unreviewed intro chunk for manual review\nArtist: %s\nPiesa: %s\nFile: %s", song.Artist, song.Title, filename),
+					ActionLabel: "View Dashboard",
+					ActionURL:   p.BaseURL,
+				})
+				return
+			}
+			matchedName = name
+		} else {
+			match, name, err := findMatchingCanonicalSignatureInSet(data, defaultFingerprintFormat, canonicalDir, allowed)
+			if err != nil {
+				log.Printf("   ⚠️ Failed to compare unreviewed chunk %q against campaign signatures: %v", filename, err)
+				return
+			}
+			if !match {
+				if err := SaveUnreviewedChunk(data, unreviewedDir, filename); err != nil {
+					log.Printf("   ⚠️ Failed to save unreviewed chunk %q: %v", filename, err)
+					return
+				}
+				if campaignArtist, ok := campaignArtistForTime(p.ActiveCampaigns, recordedAt); ok {
+					_ = p.DBMgr.UpsertSignatureFile(context.Background(), "unreviewed", filename, recordedAt, campaignArtist)
+				}
+				log.Printf("   [SIGNATURE REVIEW] Saved unreviewed chunk %q for manual review", filename)
+				_ = p.Alerter.AlertInfo(AlertEvent{
+					Title:       "Intro Chunk Needs Review",
+					Message:     fmt.Sprintf("Saved new unreviewed intro chunk for manual review\nArtist: %s\nPiesa: %s\nFile: %s", song.Artist, song.Title, filename),
+					ActionLabel: "View Dashboard",
+					ActionURL:   p.BaseURL,
+				})
+				return
+			}
+			matchedName = name
+		}
+	}
+
+	log.Printf("   [SIGNATURE REVIEW] Skipped saving %q because it matches canonical signature %q", filename, matchedName)
 }
 
 func (p *Poller) consumeIgnoredMetadataTrigger(song SongInfo) bool {
@@ -674,8 +720,12 @@ func (p *Poller) fingerprintLoop() {
 		if p.matchesToday >= MaxDailyMatches {
 			continue
 		}
-		sigs, err := GetCanonicalSignatures(canonicalDir)
-		if err != nil || len(sigs) == 0 {
+		allowedNames, err := allowedCanonicalSignatureNames(context.Background(), p.DBMgr, p.ActiveCampaigns, canonicalDir, now)
+		if err != nil {
+			log.Printf("   ⚠️ Failed to load campaign-bound signatures: %v", err)
+			continue
+		}
+		if len(allowedNames) == 0 {
 			continue
 		}
 		buf := p.AudioBuffer.ReadCurrentBuffer()
@@ -686,7 +736,7 @@ func (p *Poller) fingerprintLoop() {
 			buf = buf[len(buf)-fingerprintTailBytes:]
 		}
 
-		matched, name, err := findMatchingCanonicalSignature(buf, defaultFingerprintFormat, canonicalDir)
+		matched, name, err := findMatchingCanonicalSignatureInSet(buf, defaultFingerprintFormat, canonicalDir, allowedNames)
 		if err != nil {
 			log.Printf("   ⚠️ Fingerprint matching failed: %v", err)
 			continue
@@ -695,12 +745,14 @@ func (p *Poller) fingerprintLoop() {
 			continue
 		}
 
-		trigger := parseFingerprintTrigger(name)
-		song := p.resolveFingerprintSong(trigger)
-		campaignArtist, matchesCampaign := p.matchingCampaignArtist(now, song)
-		if !matchesCampaign {
+		campaignArtist, err := signatureCampaignArtist(context.Background(), p.DBMgr, p.ActiveCampaigns, "canonical", name, canonicalDir)
+		if err != nil {
+			log.Printf("   ⚠️ Failed to resolve campaign owner for signature %q: %v", name, err)
 			continue
 		}
+
+		trigger := fingerprintTrigger{signatureName: name, artist: campaignArtist, title: "Unknown"}
+		song := p.resolveFingerprintSong(trigger)
 
 		p.ignoredTriggerMu.Lock()
 		if p.ignoredTrigger.signatureName != name {
