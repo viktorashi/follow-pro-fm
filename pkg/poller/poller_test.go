@@ -607,6 +607,57 @@ func TestPoller_consumeIgnoredMetadataTrigger(t *testing.T) {
 	}
 }
 
+func TestPoller_checkSongFingerprintTriggeredTurnSkipsMetadataDashcamSave(t *testing.T) {
+	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"epg": map[string]string{
+					"playerExtendedSongTitle":    "BTS",
+					"playerExtendedSongSubtitle": "Butter",
+				},
+			},
+		})
+	}))
+	defer api.Close()
+
+	stateMgr := createMockStateMgr()
+	stateMgr.Update(func(s *AppState) {
+		s.GatheringSignatures = true
+	})
+
+	audioBuffer := NewCircularAudioBuffer("", 8)
+	audioBuffer.writeBytes([]byte("preroll"))
+
+	poller := &Poller{
+		APIURL:          api.URL,
+		ActiveCampaigns: []Campaign{{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"}},
+		StateMgr:        stateMgr,
+		AudioBuffer:     audioBuffer,
+		AudiosDir:       t.TempDir(),
+		SignaturesDir:   t.TempDir(),
+		ignoredTrigger:  parseFingerprintTrigger("BTS - Butter.mp3"),
+		SendVoiceNote: func(senderPhone, targetPhone, audioPath string) error {
+			t.Fatal("metadata path should have been ignored after fingerprint trigger")
+			return nil
+		},
+	}
+
+	currentSong := SongInfo{}
+	poller.checkSong(&currentSong, activeTime)
+
+	audioBuffer.mu.Lock()
+	isRecording := audioBuffer.isRecording
+	audioBuffer.mu.Unlock()
+
+	if isRecording {
+		t.Fatal("expected metadata-triggered dashcam save to stay off for a fingerprint-triggered turn")
+	}
+	if poller.ignoredTrigger.signatureName != "" {
+		t.Fatal("expected consumed fingerprint trigger to be cleared")
+	}
+}
+
 func TestPoller_prepareStartStateHonorsKillSwitch(t *testing.T) {
 	stateMgr := createMockStateMgr()
 	stateMgr.Update(func(s *AppState) {

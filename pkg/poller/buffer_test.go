@@ -8,6 +8,26 @@ import (
 	"time"
 )
 
+func TestCircularAudioBuffer_TriggerPreservesWrappedPrerollAndExtendsFutureBytes(t *testing.T) {
+	cab := NewCircularAudioBuffer("", 5)
+	cab.writeBytes([]byte("abcdef"))
+
+	done := make(chan []byte, 1)
+	cab.Trigger(0, func(data []byte) {
+		done <- append([]byte(nil), data...)
+	})
+	cab.writeBytes([]byte("gh"))
+
+	select {
+	case captured := <-done:
+		if got, want := string(captured), "bcdefgh"; got != want {
+			t.Fatalf("captured = %q, want %q", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for trigger callback")
+	}
+}
+
 func TestCircularAudioBuffer_Trigger(t *testing.T) {
 	// 1. Create a dummy HTTP server that streams bytes
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
