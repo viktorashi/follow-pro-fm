@@ -2,12 +2,16 @@ package poller
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
@@ -79,6 +83,10 @@ func ChunkMatchesCanonical(data []byte, canonicalDir string) (bool, string, erro
 }
 
 func findMatchingCanonicalSignature(stream []byte, streamFormat, canonicalDir string) (bool, string, error) {
+	return findMatchingCanonicalSignatureInSet(stream, streamFormat, canonicalDir, nil)
+}
+
+func findMatchingCanonicalSignatureInSet(stream []byte, streamFormat, canonicalDir string, allowed map[string]struct{}) (bool, string, error) {
 	sigs, err := GetCanonicalSignatures(canonicalDir)
 	if err != nil {
 		return false, "", err
@@ -86,6 +94,11 @@ func findMatchingCanonicalSignature(stream []byte, streamFormat, canonicalDir st
 
 	var firstDecodeErr error
 	for name, sig := range sigs {
+		if allowed != nil {
+			if _, ok := allowed[name]; !ok {
+				continue
+			}
+		}
 		sigFormat := fingerprintFormatForName(name)
 		matched, err := matchSignatureWithFormats(stream, streamFormat, sig, sigFormat)
 		if err == nil {
@@ -107,7 +120,8 @@ func findMatchingCanonicalSignature(stream []byte, streamFormat, canonicalDir st
 
 // CropAndMarkCanonical crops an unreviewed chunk and saves it as a canonical signature.
 func CropAndMarkCanonical(unreviewedDir, canonicalDir, filename string, startBytes, endBytes int) error {
-	data, err := os.ReadFile(filepath.Join(unreviewedDir, filename))
+	sourcePath := filepath.Join(unreviewedDir, filename)
+	data, err := os.ReadFile(sourcePath)
 	if err != nil {
 		return err
 	}
@@ -119,7 +133,81 @@ func CropAndMarkCanonical(unreviewedDir, canonicalDir, filename string, startByt
 	cropped := data[startBytes:endBytes]
 
 	_ = os.MkdirAll(canonicalDir, 0755)
-	return os.WriteFile(filepath.Join(canonicalDir, filename), cropped, 0644)
+	targetPath := filepath.Join(canonicalDir, filename)
+	if err := os.WriteFile(targetPath, cropped, 0644); err != nil {
+		return err
+	}
+
+	info, err := os.Stat(sourcePath)
+	if err == nil {
+		_ = os.Chtimes(targetPath, info.ModTime(), info.ModTime())
+	}
+
+	return nil
+}
+
+func campaignArtistForTime(campaigns []Campaign, recordedAt time.Time) (string, bool) {
+	for _, campaign := range campaigns {
+		if campaign.IsActive(recordedAt) {
+			return campaign.Artist, true
+		}
+	}
+	return "", false
+}
+
+func signatureCampaignArtist(ctx context.Context, dbMgr *DBManager, campaigns []Campaign, bucket, filename, dir string) (string, error) {
+	if dbMgr != nil {
+		meta, err := dbMgr.GetSignatureFile(ctx, bucket, filename)
+		if err == nil {
+			return meta.CampaignArtist, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return "", err
+		}
+	}
+
+	info, err := os.Stat(filepath.Join(dir, filename))
+	if err != nil {
+		return "", err
+	}
+	campaignArtist, ok := campaignArtistForTime(campaigns, info.ModTime())
+	if !ok {
+		return "", fmt.Errorf("no active campaign found for %s at %s", filename, info.ModTime().Format(time.RFC3339))
+	}
+	if dbMgr != nil {
+		_ = dbMgr.UpsertSignatureFile(ctx, bucket, filename, info.ModTime(), campaignArtist)
+	}
+	return campaignArtist, nil
+}
+
+func allowedCanonicalSignatureNames(ctx context.Context, dbMgr *DBManager, campaigns []Campaign, canonicalDir string, now time.Time) (map[string]struct{}, error) {
+	entries, err := os.ReadDir(canonicalDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	currentCampaignArtist, ok := campaignArtistForTime(campaigns, now)
+	if !ok {
+		return nil, nil
+	}
+
+	allowed := make(map[string]struct{})
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		campaignArtist, err := signatureCampaignArtist(ctx, dbMgr, campaigns, "canonical", entry.Name(), canonicalDir)
+		if err != nil {
+			continue
+		}
+		if strings.EqualFold(currentCampaignArtist, campaignArtist) {
+			allowed[entry.Name()] = struct{}{}
+		}
+	}
+	return allowed, nil
 }
 
 func matchSignatureWithFormats(stream []byte, streamFormat string, signature []byte, signatureFormat string) (bool, error) {

@@ -1,6 +1,7 @@
 package poller
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -728,6 +729,40 @@ func TestPoller_saveUnreviewedChunkForReviewAlertsOnceWhenSaved(t *testing.T) {
 	}
 	if len(files) != 1 {
 		t.Fatalf("saved review chunks = %d, want 1", len(files))
+	}
+}
+
+func TestPoller_saveUnreviewedChunkForReviewStoresCampaignOwnership(t *testing.T) {
+	alerter := &recordingAlerter{}
+	signaturesDir := t.TempDir()
+	dbMgr := mustNewTestDBManager(t)
+	poller := &Poller{
+		Alerter:       alerter,
+		SignaturesDir: signaturesDir,
+		BaseURL:       "http://localhost:8080",
+		DBMgr:         dbMgr,
+		ActiveCampaigns: []Campaign{
+			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
+		},
+	}
+
+	t.Setenv("BYPASS_CAMPAIGN_TIME_CHECKS", "true")
+	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"))
+
+	files, err := os.ReadDir(filepath.Join(signaturesDir, "unreviewed"))
+	if err != nil {
+		t.Fatalf("ReadDir() error = %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("saved review chunks = %d, want 1", len(files))
+	}
+
+	meta, err := dbMgr.GetSignatureFile(context.Background(), "unreviewed", files[0].Name())
+	if err != nil {
+		t.Fatalf("GetSignatureFile() error = %v", err)
+	}
+	if meta.CampaignArtist != "BTS" {
+		t.Fatalf("CampaignArtist = %q, want %q", meta.CampaignArtist, "BTS")
 	}
 }
 

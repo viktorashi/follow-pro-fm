@@ -83,6 +83,13 @@ func initSchema(db *sql.DB) error {
 			last_sent_radio_log_id INTEGER NOT NULL,
 			last_sent_at TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS signature_files (
+			bucket TEXT NOT NULL,
+			filename TEXT NOT NULL,
+			recorded_at TEXT NOT NULL,
+			campaign_artist TEXT NOT NULL,
+			PRIMARY KEY(bucket, filename)
+		);`,
 	}
 
 	for _, q := range queries {
@@ -383,4 +390,57 @@ func (m *DBManager) GetAllSchedules(ctx context.Context) (map[string]string, err
 		return nil, err
 	}
 	return schedules, nil
+}
+
+type SignatureFile struct {
+	Bucket         string
+	Filename       string
+	RecordedAt     time.Time
+	CampaignArtist string
+}
+
+func (m *DBManager) UpsertSignatureFile(ctx context.Context, bucket, filename string, recordedAt time.Time, campaignArtist string) error {
+	_, err := m.db.ExecContext(
+		ctx,
+		`INSERT INTO signature_files (bucket, filename, recorded_at, campaign_artist)
+		 VALUES (?, ?, ?, ?)
+		 ON CONFLICT(bucket, filename) DO UPDATE SET
+		   recorded_at = excluded.recorded_at,
+		   campaign_artist = excluded.campaign_artist`,
+		bucket,
+		filename,
+		recordedAt.Format(time.RFC3339),
+		campaignArtist,
+	)
+	return err
+}
+
+func (m *DBManager) GetSignatureFile(ctx context.Context, bucket, filename string) (SignatureFile, error) {
+	var meta SignatureFile
+	var recordedAt string
+	err := m.db.QueryRowContext(
+		ctx,
+		`SELECT bucket, filename, recorded_at, campaign_artist
+		 FROM signature_files
+		 WHERE bucket = ? AND filename = ?`,
+		bucket,
+		filename,
+	).Scan(&meta.Bucket, &meta.Filename, &recordedAt, &meta.CampaignArtist)
+	if err != nil {
+		return SignatureFile{}, err
+	}
+	parsed, err := time.Parse(time.RFC3339, recordedAt)
+	if err != nil {
+		return SignatureFile{}, err
+	}
+	meta.RecordedAt = parsed
+	return meta, nil
+}
+
+func (m *DBManager) CopySignatureFile(ctx context.Context, fromBucket, toBucket, filename string) error {
+	meta, err := m.GetSignatureFile(ctx, fromBucket, filename)
+	if err != nil {
+		return err
+	}
+	return m.UpsertSignatureFile(ctx, toBucket, filename, meta.RecordedAt, meta.CampaignArtist)
 }
