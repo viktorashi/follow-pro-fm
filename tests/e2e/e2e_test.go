@@ -195,9 +195,8 @@ func TestE2E(t *testing.T) {
 		t.Fatal("compiled binary path is empty")
 	}
 
-	t.Run("Tier 1: Feature Coverage", func(t *testing.T) {
-		// --- FEATURE A: WHATSAPP SEND & WAVEFORMS (F1) ---
-		t.Run("F1_Test_01_WhatsApp_Status_Transitions", func(t *testing.T) {
+	t.Run("Implemented coverage", func(t *testing.T) {
+		t.Run("WhatsApp_Status_Transitions", func(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
@@ -238,7 +237,7 @@ func TestE2E(t *testing.T) {
 			}
 		})
 
-		t.Run("F1_Test_02_Audio_Remux_CreationTime", func(t *testing.T) {
+		t.Run("Audio_Remux_CreationTime", func(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
@@ -291,7 +290,7 @@ func TestE2E(t *testing.T) {
 			}
 		})
 
-		t.Run("F1_Test_03_Waveform_Field", func(t *testing.T) {
+		t.Run("Waveform_Field", func(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
@@ -347,7 +346,7 @@ func TestE2E(t *testing.T) {
 			}
 		})
 
-		t.Run("F1_Test_04_Audio_Marked_Used", func(t *testing.T) {
+		t.Run("Audio_Marked_Used", func(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
@@ -385,7 +384,7 @@ func TestE2E(t *testing.T) {
 			}
 		})
 
-		t.Run("F1_Test_05_Alerter_Triggers_On_Disconnect", func(t *testing.T) {
+		t.Run("Alerter_Triggers_On_Disconnect", func(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
@@ -413,91 +412,10 @@ func TestE2E(t *testing.T) {
 			}
 		})
 
-		// --- FEATURE B: MULTIPLE WHATSAPP CONNECTIONS (F2) ---
-		for i := 6; i <= 10; i++ {
-			t.Run(fmt.Sprintf("F2_Test_%02d_Placeholder", i), func(t *testing.T) {
-				t.Skip("Feature F2 (Multiple WhatsApp Connections) not yet implemented")
-
-				// Assertions fully written out
-				env := setupTestEnv(t)
-				defer env.cleanup()
-				db1 := filepath.Join(env.TempDir, "wapp1.sqlite")
-				db2 := filepath.Join(env.TempDir, "wapp2.sqlite")
-				_, err1 := os.Stat(db1)
-				_, err2 := os.Stat(db2)
-				if os.IsNotExist(err1) || os.IsNotExist(err2) {
-					t.Errorf("databases for multi-connections not created independently")
-				}
-			})
-		}
-
-		// --- FEATURE C: CIRCULAR AUDIO BUFFER (F3) ---
-		for i := 11; i <= 15; i++ {
-			t.Run(fmt.Sprintf("F3_Test_%02d_Placeholder", i), func(t *testing.T) {
-				t.Skip("Feature F3 (Circular Audio Buffer) not yet implemented")
-
-				// Assertions fully written out
-				resp, err := http.Get("http://localhost:8080/api/buffer/chunks")
-				if err != nil {
-					t.Errorf("REST API call failed: %v", err)
-				}
-				if resp.StatusCode != http.StatusOK {
-					t.Errorf("expected 200 OK, got %d", resp.StatusCode)
-				}
-			})
-		}
-
-		// --- FEATURE D: AUDIO SIGNATURE FINGERPRINTING & DETECTION (F4) ---
-		for i := 16; i <= 20; i++ {
-			t.Run(fmt.Sprintf("F4_Test_%02d_Placeholder", i), func(t *testing.T) {
-				t.Skip("Feature F4 (Audio Signature Fingerprinting & Detection) not yet implemented")
-
-				// Assertions fully written out
-				resp, err := http.Post("http://localhost:8080/api/signatures/toggle", "application/json", nil)
-				if err != nil {
-					t.Errorf("REST API call failed: %v", err)
-				}
-				if resp.StatusCode != http.StatusOK {
-					t.Errorf("expected 200 OK, got %d", resp.StatusCode)
-				}
-			})
-		}
-
-		// --- FEATURE E: DAILY RNG SELECTION (F5) ---
-		for i := 21; i <= 26; i++ {
-			t.Run(fmt.Sprintf("F5_Test_%02d_Placeholder", i), func(t *testing.T) {
-				t.Skip("Feature E (Daily RNG Selection) not yet implemented")
-
-				// Assertions fully written out
-				resp, err := http.Get("http://localhost:8080/api/rng/schedule")
-				if err != nil {
-					t.Errorf("REST API call failed: %v", err)
-				}
-				if resp.StatusCode != http.StatusOK {
-					t.Errorf("expected 200 OK, got %d", resp.StatusCode)
-				}
-			})
-		}
-
-		// --- FEATURE F: DASHBOARD PER-PHONE AUDIO UPLOAD (F6) ---
-		for i := 27; i <= 31; i++ {
-			t.Run(fmt.Sprintf("F6_Test_%02d_Placeholder", i), func(t *testing.T) {
-				t.Skip("Feature F (Dashboard Per-Phone Audio Upload) not yet implemented")
-
-				// Assertions fully written out
-				resp, err := http.Post("http://localhost:8080/api/upload", "multipart/form-data", nil)
-				if err != nil {
-					t.Errorf("REST API call failed: %v", err)
-				}
-				if resp.StatusCode != http.StatusOK {
-					t.Errorf("expected 200 OK, got %d", resp.StatusCode)
-				}
-			})
-		}
 	})
 
-	t.Run("Tier 2: Boundary & Corner Cases", func(t *testing.T) {
-		t.Run("F1_Test_32_Empty_Audio_Pool", func(t *testing.T) {
+	t.Run("Boundary coverage", func(t *testing.T) {
+		t.Run("Empty_Audio_Pool", func(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
@@ -542,7 +460,7 @@ func TestE2E(t *testing.T) {
 			}
 		})
 
-		t.Run("F1_Test_33_Corrupted_Audio_File", func(t *testing.T) {
+		t.Run("Corrupted_Audio_File", func(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
@@ -577,7 +495,7 @@ func TestE2E(t *testing.T) {
 			}
 		})
 
-		t.Run("F1_Test_34_Telemetry_Port_Conflicts", func(t *testing.T) {
+		t.Run("Telemetry_Port_Conflicts", func(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
@@ -608,7 +526,7 @@ func TestE2E(t *testing.T) {
 			}
 		})
 
-		t.Run("F1_Test_35_Timezone_Boundary_Transitions", func(t *testing.T) {
+		t.Run("Timezone_Boundary_Transitions", func(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
@@ -655,7 +573,7 @@ func TestE2E(t *testing.T) {
 			}
 		})
 
-		t.Run("F1_Test_36_Waveform_Extremely_Short_Clips", func(t *testing.T) {
+		t.Run("Waveform_Extremely_Short_Clips", func(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
@@ -706,55 +624,10 @@ func TestE2E(t *testing.T) {
 			}
 		})
 
-		// --- BOUNDARY AND CORNER CASES FOR FEATURES B TO F (F2-F6) ---
-		for i := 37; i <= 61; i++ {
-			t.Run(fmt.Sprintf("F_Boundary_Test_%02d_Placeholder", i), func(t *testing.T) {
-				t.Skipf("Feature boundaries not yet implemented (Test Case %d)", i)
-
-				// Assertions fully written out
-				resp, err := http.Get("http://localhost:8080/api/status")
-				if err != nil {
-					t.Errorf("REST API call failed: %v", err)
-				}
-				if resp.StatusCode != http.StatusOK {
-					t.Errorf("expected 200 OK, got %d", resp.StatusCode)
-				}
-			})
-		}
 	})
 
-	t.Run("Tier 3: Cross-Feature Combinations", func(t *testing.T) {
-		for i := 62; i <= 67; i++ {
-			t.Run(fmt.Sprintf("Cross_Feature_Test_%02d_Placeholder", i), func(t *testing.T) {
-				t.Skipf("Cross-Feature combinations not yet implemented (Test Case %d)", i)
-
-				// Assertions fully written out
-				resp, err := http.Get("http://localhost:8080/api/dashboard")
-				if err != nil {
-					t.Errorf("REST API call failed: %v", err)
-				}
-				if resp.StatusCode != http.StatusOK {
-					t.Errorf("expected 200 OK, got %d", resp.StatusCode)
-				}
-			})
-		}
-	})
-
-	t.Run("Tier 4: Real-World Scenarios", func(t *testing.T) {
-		t.Run("Scenario_68_Lifecycle_Placeholder", func(t *testing.T) {
-			t.Skip("Scenario 68 (Complete Campaign Day Lifecycle) not yet implemented")
-
-			// Assertions fully written out
-			resp, err := http.Get("http://localhost:8080/")
-			if err != nil {
-				t.Errorf("failed: %v", err)
-			}
-			if resp.StatusCode != http.StatusOK {
-				t.Errorf("expected 200")
-			}
-		})
-
-		t.Run("Scenario_69_Metadata_Flicker_And_Deduplication", func(t *testing.T) {
+	t.Run("Real-world coverage", func(t *testing.T) {
+		t.Run("Metadata_Flicker_And_Deduplication", func(t *testing.T) {
 			env := setupTestEnv(t)
 			defer env.cleanup()
 
@@ -809,19 +682,5 @@ func TestE2E(t *testing.T) {
 			}
 		})
 
-		for i := 70; i <= 72; i++ {
-			t.Run(fmt.Sprintf("Scenario_%02d_Placeholder", i), func(t *testing.T) {
-				t.Skipf("Scenario %d not yet implemented", i)
-
-				// Assertions fully written out
-				resp, err := http.Get("http://localhost:8080/")
-				if err != nil {
-					t.Errorf("failed: %v", err)
-				}
-				if resp.StatusCode != http.StatusOK {
-					t.Errorf("expected 200")
-				}
-			})
-		}
 	})
 }
