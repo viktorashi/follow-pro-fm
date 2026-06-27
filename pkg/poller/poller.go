@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -275,12 +276,9 @@ func (p *Poller) matchingCampaignArtist(now time.Time, song SongInfo) (string, b
 }
 
 func (p *Poller) hasActiveCampaign(now time.Time) bool {
-	for _, c := range p.ActiveCampaigns {
-		if c.IsActive(now) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(p.ActiveCampaigns, func(c Campaign) bool {
+		return c.IsActive(now)
+	})
 }
 
 func (p *Poller) getNowPlaying() (SongInfo, error) {
