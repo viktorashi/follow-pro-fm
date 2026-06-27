@@ -11,6 +11,27 @@ import (
 	"time"
 )
 
+type recordingAlerter struct {
+	infoEvents     []AlertEvent
+	successEvents  []AlertEvent
+	criticalEvents []AlertEvent
+}
+
+func (a *recordingAlerter) AlertCritical(event AlertEvent) error {
+	a.criticalEvents = append(a.criticalEvents, event)
+	return nil
+}
+
+func (a *recordingAlerter) AlertInfo(event AlertEvent) error {
+	a.infoEvents = append(a.infoEvents, event)
+	return nil
+}
+
+func (a *recordingAlerter) AlertSuccess(event AlertEvent) error {
+	a.successEvents = append(a.successEvents, event)
+	return nil
+}
+
 func bucharestTime(year int, month time.Month, day, hour, min, sec int) time.Time {
 	return time.Date(year, month, day, hour, min, sec, 0, bucharestLocation)
 }
@@ -655,6 +676,76 @@ func TestPoller_checkSongFingerprintTriggeredTurnSkipsMetadataDashcamSave(t *tes
 	}
 	if poller.ignoredTrigger.signatureName != "" {
 		t.Fatal("expected consumed fingerprint trigger to be cleared")
+	}
+}
+
+func TestPoller_doTriggerVoiceNote_ReportsOnlySuccessAfterSend(t *testing.T) {
+	audiosDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(audiosDir, "test.ogg"), []byte("fake"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	alerter := &recordingAlerter{}
+	sendCalls := 0
+	poller := &Poller{
+		TargetPhone: "+40770661491",
+		StateMgr:    createMockStateMgr(),
+		Alerter:     alerter,
+		AudiosDir:   audiosDir,
+		SendVoiceNote: func(senderPhone, targetPhone, audioPath string) error {
+			sendCalls++
+			return nil
+		},
+	}
+
+	poller.doTriggerVoiceNote("BTS", "BTS", "Dynamite", bucharestTime(2026, time.June, 17, 12, 0, 0), 1, 0)
+
+	if sendCalls != 1 {
+		t.Fatalf("SendVoiceNote() calls = %d, want 1", sendCalls)
+	}
+	if len(alerter.infoEvents) != 0 {
+		t.Fatalf("AlertInfo() calls = %d, want 0", len(alerter.infoEvents))
+	}
+	if len(alerter.successEvents) != 1 {
+		t.Fatalf("AlertSuccess() calls = %d, want 1", len(alerter.successEvents))
+	}
+	if len(alerter.criticalEvents) != 0 {
+		t.Fatalf("AlertCritical() calls = %d, want 0", len(alerter.criticalEvents))
+	}
+}
+
+func TestPoller_doTriggerVoiceNote_ReportsOnlyFailureAfterSendError(t *testing.T) {
+	audiosDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(audiosDir, "test.ogg"), []byte("fake"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	alerter := &recordingAlerter{}
+	sendCalls := 0
+	poller := &Poller{
+		TargetPhone: "+40770661491",
+		StateMgr:    createMockStateMgr(),
+		Alerter:     alerter,
+		AudiosDir:   audiosDir,
+		SendVoiceNote: func(senderPhone, targetPhone, audioPath string) error {
+			sendCalls++
+			return fmt.Errorf("boom")
+		},
+	}
+
+	poller.doTriggerVoiceNote("BTS", "BTS", "Dynamite", bucharestTime(2026, time.June, 17, 12, 0, 0), 1, 0)
+
+	if sendCalls != 1 {
+		t.Fatalf("SendVoiceNote() calls = %d, want 1", sendCalls)
+	}
+	if len(alerter.infoEvents) != 0 {
+		t.Fatalf("AlertInfo() calls = %d, want 0", len(alerter.infoEvents))
+	}
+	if len(alerter.successEvents) != 0 {
+		t.Fatalf("AlertSuccess() calls = %d, want 0", len(alerter.successEvents))
+	}
+	if len(alerter.criticalEvents) != 1 {
+		t.Fatalf("AlertCritical() calls = %d, want 1", len(alerter.criticalEvents))
 	}
 }
 
