@@ -1,6 +1,8 @@
 package poller
 
 import (
+	"encoding/binary"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +11,8 @@ import (
 )
 
 func TestExtractWaveform_Stress(t *testing.T) {
+	const sampleRate = 8000
+
 	// 1. Create a temp directory for test files
 	tempDir, err := os.MkdirTemp("", "waveform_stress")
 	if err != nil {
@@ -16,9 +20,8 @@ func TestExtractWaveform_Stress(t *testing.T) {
 	}
 	defer func() { _ = os.RemoveAll(tempDir) }()
 
-	// Helper function to generate an ogg file with specific audio properties using system ffmpeg
-	generateOgg := func(name string, filterStr string) string {
-		outPath := filepath.Join(tempDir, name)
+	findSystemFFmpeg := func() string {
+		t.Helper()
 
 		// Filter out "./bin" from PATH so we find the system ffmpeg with libopus encoding support
 		originalPath := os.Getenv("PATH")
@@ -31,20 +34,52 @@ func TestExtractWaveform_Stress(t *testing.T) {
 			filteredPathElements = append(filteredPathElements, pe)
 		}
 
-		// Find system ffmpeg
 		oldPathEnv := os.Getenv("PATH")
 		_ = os.Setenv("PATH", strings.Join(filteredPathElements, string(filepath.ListSeparator)))
 		systemFfmpeg, err := exec.LookPath("ffmpeg")
 		_ = os.Setenv("PATH", oldPathEnv)
+		if err == nil {
+			return systemFfmpeg
+		}
+		return "/opt/homebrew/bin/ffmpeg"
+	}
 
-		if err != nil {
-			// Fallback to homebrew path
-			systemFfmpeg = "/opt/homebrew/bin/ffmpeg"
+	writePCM := func(name string, durationSeconds float64, sample func(i int, t float64) float64) string {
+		t.Helper()
+
+		sampleCount := int(math.Round(durationSeconds * sampleRate))
+		if sampleCount < 0 {
+			sampleCount = 0
 		}
 
-		cmd := exec.Command(systemFfmpeg, "-y", "-f", "lavfi", "-i", filterStr, "-c:a", "libopus", "-b:a", "64k", "-f", "ogg", outPath)
+		pcm := make([]byte, sampleCount*2)
+		for i := 0; i < sampleCount; i++ {
+			timestamp := float64(i) / sampleRate
+			value := sample(i, timestamp)
+			if value > 1 {
+				value = 1
+			}
+			if value < -1 {
+				value = -1
+			}
+			binary.LittleEndian.PutUint16(pcm[i*2:], uint16(int16(math.Round(value*32767))))
+		}
+
+		outPath := filepath.Join(tempDir, name)
+		if err := os.WriteFile(outPath, pcm, 0o644); err != nil {
+			t.Fatalf("failed to write pcm %s: %v", name, err)
+		}
+		return outPath
+	}
+
+	// Helper function to generate an ogg file with specific audio properties using system ffmpeg
+	generateOgg := func(name string, pcmPath string) string {
+		t.Helper()
+
+		outPath := filepath.Join(tempDir, name)
+		cmd := exec.Command(findSystemFFmpeg(), "-y", "-f", "s16le", "-ar", "8000", "-ac", "1", "-i", pcmPath, "-c:a", "libopus", "-b:a", "64k", "-f", "ogg", outPath)
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("failed to generate ogg %s using %s: %v (output: %s)", name, systemFfmpeg, err, string(out))
+			t.Fatalf("failed to generate ogg %s from %s: %v (output: %s)", name, pcmPath, err, string(out))
 		}
 		return outPath
 	}
@@ -105,22 +140,35 @@ func TestExtractWaveform_Stress(t *testing.T) {
 	verifyWaveform(corruptPath, true, true, "Corrupt File")
 
 	// Case 3: Extremely short file (0.01 seconds)
-	shortPath1 := generateOgg("short1.ogg", "sine=frequency=1000:duration=0.01")
+	shortPath1 := generateOgg("short1.ogg", writePCM("short1.pcm", 0.01, func(_ int, ts float64) float64 {
+		return math.Sin(2 * math.Pi * 1000 * ts)
+	}))
 	verifyWaveform(shortPath1, false, false, "Extremely short file 0.01s")
 
 	// Case 4: Short file (0.5 seconds)
-	shortPath2 := generateOgg("short2.ogg", "sine=frequency=1000:duration=0.5")
+	shortPath2 := generateOgg("short2.ogg", writePCM("short2.pcm", 0.5, func(_ int, ts float64) float64 {
+		return math.Sin(2 * math.Pi * 1000 * ts)
+	}))
 	verifyWaveform(shortPath2, false, false, "Short file 0.5s")
 
 	// Case 5: Silent file (1 second of silence)
-	silentPath := generateOgg("silent.ogg", "anullsrc=r=8000:cl=mono:d=1")
+	silentPath := generateOgg("silent.ogg", writePCM("silent.pcm", 1, func(_ int, _ float64) float64 {
+		return 0
+	}))
 	verifyWaveform(silentPath, false, true, "Silent File")
 
 	// Case 6: Extreme volume differences - Very loud signal then silence
-	loudQuietPath2 := generateOgg("loud_quiet2.ogg", "aevalsrc=if(lt(t\\,0.5)\\,sin(2*PI*1000*t)\\,0):d=1")
+	loudQuietPath2 := generateOgg("loud_quiet2.ogg", writePCM("loud_quiet2.pcm", 1, func(_ int, ts float64) float64 {
+		if ts < 0.5 {
+			return math.Sin(2 * math.Pi * 1000 * ts)
+		}
+		return 0
+	}))
 	verifyWaveform(loudQuietPath2, false, false, "Loud then silent file")
 
 	// Case 7: Extremely quiet file (sine wave with scale 0.01)
-	quietPath := generateOgg("quiet.ogg", "sine=frequency=1000:duration=1, volume=0.01")
+	quietPath := generateOgg("quiet.ogg", writePCM("quiet.pcm", 1, func(_ int, ts float64) float64 {
+		return 0.01 * math.Sin(2*math.Pi*1000*ts)
+	}))
 	verifyWaveform(quietPath, false, false, "Extremely quiet file")
 }

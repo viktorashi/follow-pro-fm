@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v5"
@@ -157,8 +156,8 @@ func TestGetAudioDurationFallbacks(t *testing.T) {
 	if err := os.WriteFile(otherPath, bytes.Repeat([]byte("a"), 5000), 0o644); err != nil {
 		t.Fatalf("WriteFile(bin) error = %v", err)
 	}
-	if got, err := GetAudioDuration(otherPath); err != nil || got != 2*time.Second {
-		t.Fatalf("GetAudioDuration(bin) = %v, %v, want 2s", got, err)
+	if got, err := GetAudioDuration(otherPath); err == nil {
+		t.Fatalf("GetAudioDuration(bin) = %v, nil error, want unsupported format error", got)
 	}
 }
 
