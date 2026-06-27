@@ -96,6 +96,20 @@ func TestCampaign_IsActive_BadDates(t *testing.T) {
 	}
 }
 
+func TestCampaign_IsActive_BypassCampaignTimeChecks(t *testing.T) {
+	t.Setenv("BYPASS_CAMPAIGN_TIME_CHECKS", "true")
+
+	c := Campaign{
+		StartDate: "15-06-2026",
+		EndDate:   "26-06-2026",
+		Artist:    "BTS",
+	}
+
+	if got := c.IsActive(bucharestTime(2026, time.June, 29, 12, 0, 0)); got != true {
+		t.Fatalf("IsActive() with bypass = %v, want true", got)
+	}
+}
+
 func TestPoller_getNowPlaying(t *testing.T) {
 	tests := []struct {
 		name       string

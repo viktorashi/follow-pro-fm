@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -58,6 +59,10 @@ type Campaign struct {
 
 // IsActive checks if the current time falls within the campaign date period
 func (c Campaign) IsActive(now time.Time) bool {
+	if shouldBypassCampaignTimeChecks() {
+		return true
+	}
+
 	now = now.In(bucharestLocation)
 
 	// Global Rule 1: Monday to Friday only
@@ -82,6 +87,10 @@ func (c Campaign) IsActive(now time.Time) bool {
 	end = end.Add(24*time.Hour - time.Second)
 
 	return now.After(start) && now.Before(end)
+}
+
+func shouldBypassCampaignTimeChecks() bool {
+	return os.Getenv("BYPASS_CAMPAIGN_TIME_CHECKS") == "true"
 }
 
 type Poller struct {
