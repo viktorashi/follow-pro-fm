@@ -50,7 +50,11 @@ echo "Configuring ffmpeg..."
 ./configure \
   --disable-everything \
   --disable-doc \
+  --disable-debug \
   --disable-ffplay \
+  --disable-avdevice \
+  --disable-postproc \
+  --disable-swscale \
   --enable-ffmpeg \
   --enable-ffprobe \
   --enable-protocol=file \
