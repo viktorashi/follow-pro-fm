@@ -123,6 +123,11 @@ type fingerprintTrigger struct {
 	title         string
 }
 
+const (
+	triggerSourceMetadata    = "metadata"
+	triggerSourceFingerprint = "fingerprint"
+)
+
 func normalizeTriggerValue(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	return strings.Join(strings.Fields(value), " ")
@@ -146,6 +151,53 @@ func parseFingerprintTrigger(signatureName string) fingerprintTrigger {
 		trigger.title = parts[1]
 	}
 	return trigger
+}
+
+func isUnknownSongValue(value string) bool {
+	value = strings.TrimSpace(strings.ToLower(value))
+	return value == "" || strings.HasPrefix(value, "unknown")
+}
+
+func (p *Poller) resolveFingerprintSong(trigger fingerprintTrigger) SongInfo {
+	song := SongInfo{Artist: trigger.artist, Title: trigger.title}
+
+	nowPlaying, err := p.getNowPlaying()
+	if err != nil {
+		return song
+	}
+	if !isUnknownSongValue(nowPlaying.Artist) {
+		song.Artist = nowPlaying.Artist
+	}
+	if !isUnknownSongValue(nowPlaying.Title) {
+		song.Title = nowPlaying.Title
+	}
+	return song
+}
+
+func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte) {
+	filename := fmt.Sprintf("%s - %s - %d.mp3", song.Artist, song.Title, time.Now().Unix())
+	saved, matchedName, err := SaveUnreviewedChunkIfDistinct(
+		data,
+		filepath.Join(p.SignaturesDir, "unreviewed"),
+		filepath.Join(p.SignaturesDir, "canonical"),
+		filename,
+	)
+	if err != nil {
+		log.Printf("   ⚠️ Failed to save unreviewed chunk %q: %v", filename, err)
+		return
+	}
+	if !saved {
+		log.Printf("   [SIGNATURE REVIEW] Skipped saving %q because it matches canonical signature %q", filename, matchedName)
+		return
+	}
+
+	log.Printf("   [SIGNATURE REVIEW] Saved unreviewed chunk %q for manual review", filename)
+	_ = p.Alerter.AlertInfo(AlertEvent{
+		Title:       "Intro Chunk Needs Review",
+		Message:     fmt.Sprintf("Saved new unreviewed intro chunk for manual review\nArtist: %s\nPiesa: %s\nFile: %s", song.Artist, song.Title, filename),
+		ActionLabel: "View Dashboard",
+		ActionURL:   p.BaseURL,
+	})
 }
 
 func (p *Poller) consumeIgnoredMetadataTrigger(song SongInfo) bool {
@@ -387,25 +439,12 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 				} else if !p.wasSongPlayedRecently(song.Artist, song.Title) && p.canSendCampaignArtist(campaignArtist, currentRadioLogID) {
 					matchIndex, selected := p.claimScheduledMatch(now, song.Artist, song.Title)
 					if selected {
-						p.doTriggerVoiceNote(campaignArtist, song.Artist, song.Title, now, matchIndex, currentRadioLogID)
+						p.doTriggerVoiceNote(triggerSourceMetadata, campaignArtist, song.Artist, song.Title, now, matchIndex, currentRadioLogID)
 
 						if p.StateMgr != nil && p.StateMgr.Get().GatheringSignatures && p.AudioBuffer != nil {
 							// Metadata-only detections extend the preserved pre-roll by 4 minutes.
 							p.AudioBuffer.Trigger(dashcamAfterDuration, func(data []byte) {
-								filename := fmt.Sprintf("%s - %s - %d.mp3", song.Artist, song.Title, time.Now().Unix())
-								saved, matchedName, err := SaveUnreviewedChunkIfDistinct(
-									data,
-									filepath.Join(p.SignaturesDir, "unreviewed"),
-									filepath.Join(p.SignaturesDir, "canonical"),
-									filename,
-								)
-								if err != nil {
-									log.Printf("   ⚠️ Failed to save unreviewed chunk %q: %v", filename, err)
-									return
-								}
-								if !saved {
-									log.Printf("   [SIGNATURE REVIEW] Skipped saving %q because it matches canonical signature %q", filename, matchedName)
-								}
+								p.saveUnreviewedChunkForReview(song, data)
 							})
 						}
 					}
@@ -501,7 +540,7 @@ func (p *Poller) canSendCampaignArtist(campaignArtist string, currentRadioLogID 
 	return allowed
 }
 
-func (p *Poller) doTriggerVoiceNote(campaignArtist, artist, title string, now time.Time, matchIndex int, currentRadioLogID int64) {
+func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist, artist, title string, now time.Time, matchIndex int, currentRadioLogID int64) {
 	p.sendMu.Lock()
 	defer p.sendMu.Unlock()
 
@@ -511,13 +550,14 @@ func (p *Poller) doTriggerVoiceNote(campaignArtist, artist, title string, now ti
 
 	msg := dedent.Dedent(fmt.Sprintf(`
 							🎉 [VEZI BAA ca se aude piesa]
+							Trigger: %s
 							Artistu: %s
 
 							Piesa: %s
 
 							(Match-ul %d/%d de azi)
 								`,
-		artist, title, matchIndex, MaxDailyMatches))
+		triggerSource, artist, title, matchIndex, MaxDailyMatches))
 	log.Println("   " + msg)
 
 	p.StateMgr.Update(func(s *AppState) {
@@ -563,7 +603,7 @@ func (p *Poller) doTriggerVoiceNote(campaignArtist, artist, title string, now ti
 		s.Status = StatusSendingAudio
 	})
 
-	log.Println("   Sending WhatsApp voice note using: " + audioFile)
+	log.Printf("   Sending WhatsApp voice note using: %s (trigger=%s)", audioFile, triggerSource)
 	err := p.SendVoiceNote(chosenSender, p.TargetPhone, audioFile)
 	if err != nil {
 		log.Printf("   ❌ Error sending voice note: %v\n", err)
@@ -573,7 +613,7 @@ func (p *Poller) doTriggerVoiceNote(campaignArtist, artist, title string, now ti
 		})
 		_ = p.Alerter.AlertCritical(AlertEvent{
 			Title:       "Voice Note Failed",
-			Message:     fmt.Sprintf("Could not send voice note to %s\nArtist: %s\nPiesa: %s\nEroare: %v", p.TargetPhone, artist, title, err),
+			Message:     fmt.Sprintf("Could not send voice note to %s\nTrigger: %s\nArtist: %s\nPiesa: %s\nEroare: %v", p.TargetPhone, triggerSource, artist, title, err),
 			ActionLabel: "View Dashboard",
 			ActionURL:   p.BaseURL,
 		})
@@ -593,10 +633,11 @@ func (p *Poller) doTriggerVoiceNote(campaignArtist, artist, title string, now ti
 		}
 		msg := dedent.Dedent(fmt.Sprintf(`
 			S-a trimis vocalu pe Wapp la nr: %s
+			Trigger: %s
 			Artist: %s
 			Piesa: %s
 			Fisieru audio trimis: %s
-			`, p.TargetPhone, artist, title, audioFile))
+			`, p.TargetPhone, triggerSource, artist, title, audioFile))
 		log.Println("✅", msg)
 		_ = p.Alerter.AlertSuccess(AlertEvent{
 			Title:       "Voice Note Sent",
@@ -655,7 +696,8 @@ func (p *Poller) fingerprintLoop() {
 		}
 
 		trigger := parseFingerprintTrigger(name)
-		campaignArtist, matchesCampaign := p.matchingCampaignArtist(now, SongInfo{Artist: trigger.artist, Title: trigger.title})
+		song := p.resolveFingerprintSong(trigger)
+		campaignArtist, matchesCampaign := p.matchingCampaignArtist(now, song)
 		if !matchesCampaign {
 			continue
 		}
@@ -665,8 +707,8 @@ func (p *Poller) fingerprintLoop() {
 			p.ignoredTrigger = trigger
 			p.ignoredTriggerMu.Unlock()
 
-			log.Printf("   [FINGERPRINT MATCH] Matched signature: %s", name)
-			if p.wasSongPlayedRecently(trigger.artist, trigger.title) {
+			log.Printf("   [FINGERPRINT MATCH] Matched signature: %s -> %s - %s", name, song.Artist, song.Title)
+			if p.wasSongPlayedRecently(song.Artist, song.Title) {
 				continue
 			}
 
@@ -684,12 +726,12 @@ func (p *Poller) fingerprintLoop() {
 				continue
 			}
 
-			matchIndex, selected := p.claimScheduledMatch(now, trigger.artist, trigger.title)
+			matchIndex, selected := p.claimScheduledMatch(now, song.Artist, song.Title)
 			if !selected {
 				continue
 			}
 
-			p.doTriggerVoiceNote(campaignArtist, trigger.artist, trigger.title, now, matchIndex, currentRadioLogID)
+			p.doTriggerVoiceNote(triggerSourceFingerprint, campaignArtist, song.Artist, song.Title, now, matchIndex, currentRadioLogID)
 		} else {
 			p.ignoredTriggerMu.Unlock()
 		}
