@@ -103,3 +103,84 @@ func TestExtractWaveform(t *testing.T) {
 		t.Fatalf("expected remuxed file at %s to be non-empty", remuxedPath)
 	}
 }
+
+func TestExtractWaveform_RemuxPreservesWaveform(t *testing.T) {
+	ffmpegPath, err := ffmpegBinaryPath()
+	if err != nil {
+		t.Skip("ffmpeg not installed, skipping remux waveform validation")
+	}
+
+	originalPath := filepath.Join("testdata", "waveform_sample.ogg")
+	originalWaveform, err := ExtractWaveform(originalPath)
+	if err != nil {
+		t.Fatalf("ExtractWaveform(original) failed: %v", err)
+	}
+
+	remuxedPath := filepath.Join(t.TempDir(), "waveform_sample.remuxed.ogg")
+	cmd := exec.Command(ffmpegPath, "-v", "error", "-y", "-i", originalPath, "-c", "copy", "-metadata", "creation_time=2026-06-28T12:00:00Z", remuxedPath)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("bundled ffmpeg remux failed: %v (output: %s)", err, strings.TrimSpace(string(out)))
+	}
+
+	remuxedWaveform, err := ExtractWaveform(remuxedPath)
+	if err != nil {
+		t.Fatalf("ExtractWaveform(remuxed) failed: %v", err)
+	}
+
+	if !bytes.Equal(originalWaveform, remuxedWaveform) {
+		t.Fatalf("waveform changed after remux:\noriginal: %v\nremuxed: %v", originalWaveform, remuxedWaveform)
+	}
+}
+
+func TestDecodeAudioForFingerprinting_AllFixtures(t *testing.T) {
+	if _, err := ffmpegBinaryPath(); err != nil {
+		t.Skip("ffmpeg not installed, skipping fixture decode validation")
+	}
+
+	root := filepath.Join("testdata", "fingerprint", "cases")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("ReadDir(%s) error = %v", root, err)
+	}
+
+	found := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		caseDir := filepath.Join(root, entry.Name())
+		audioEntries, err := os.ReadDir(caseDir)
+		if err != nil {
+			t.Fatalf("ReadDir(%s) error = %v", caseDir, err)
+		}
+
+		for _, audioEntry := range audioEntries {
+			if audioEntry.IsDir() || strings.ToLower(filepath.Ext(audioEntry.Name())) != ".mp3" {
+				continue
+			}
+
+			found++
+			name := filepath.Join(entry.Name(), audioEntry.Name())
+			path := filepath.Join(caseDir, audioEntry.Name())
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("ReadFile(%s) error = %v", path, err)
+			}
+
+			t.Run(name, func(t *testing.T) {
+				pcm, err := decodeAudioForFingerprinting(data, "")
+				if err != nil {
+					t.Fatalf("decodeAudioForFingerprinting(%s) error = %v", path, err)
+				}
+				if len(pcm) == 0 {
+					t.Fatalf("decodeAudioForFingerprinting(%s) returned empty pcm", path)
+				}
+			})
+		}
+	}
+
+	if found == 0 {
+		t.Fatal("expected fingerprint audio fixtures")
+	}
+}
