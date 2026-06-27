@@ -519,14 +519,6 @@ func (p *Poller) doTriggerVoiceNote(campaignArtist, artist, title string, now ti
 								`,
 		artist, title, matchIndex, MaxDailyMatches))
 	log.Println("   " + msg)
-	if alertErr := p.Alerter.AlertInfo(AlertEvent{
-		Title:       "Campaign Alert",
-		Message:     msg,
-		ActionLabel: "View Dashboard",
-		ActionURL:   p.BaseURL,
-	}); alertErr != nil {
-		log.Printf("   ⚠️ Alerter warning: %v\n", alertErr)
-	}
 
 	p.StateMgr.Update(func(s *AppState) {
 		s.Status = StatusCampaignTriggered
@@ -578,6 +570,12 @@ func (p *Poller) doTriggerVoiceNote(campaignArtist, artist, title string, now ti
 		p.StateMgr.Update(func(s *AppState) {
 			s.Status = StatusError
 			s.LastError = fmt.Sprintf("Voice note failed: %v", err)
+		})
+		_ = p.Alerter.AlertCritical(AlertEvent{
+			Title:       "Voice Note Failed",
+			Message:     fmt.Sprintf("Could not send voice note to %s\nArtist: %s\nPiesa: %s\nEroare: %v", p.TargetPhone, artist, title, err),
+			ActionLabel: "View Dashboard",
+			ActionURL:   p.BaseURL,
 		})
 	} else {
 		if p.DBMgr != nil {
