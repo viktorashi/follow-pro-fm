@@ -1,14 +1,10 @@
 package poller
 
 import (
-	"bytes"
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/labstack/echo/v5"
 )
 
 func TestHandleGetScheduleReturnsParsedSchedules(t *testing.T) {
@@ -171,13 +167,4 @@ func TestHandleSetScheduleWildcardDateSetsEveryCampaignWeekdayToAllMatches(t *te
 			t.Fatalf("schedule[%s] = %q, want %q", date, got, "[1,2,3,4,5,6]")
 		}
 	}
-}
-
-func newJSONContext(method string, target string, body []byte) (*echo.Context, *httptest.ResponseRecorder) {
-	e := echo.New()
-	req := httptest.NewRequest(method, target, bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	return ctx, rec
 }

@@ -178,3 +178,12 @@ func newFormContext(method string, target string, values url.Values) (*echo.Cont
 	ctx := e.NewContext(req, rec)
 	return ctx, rec
 }
+
+func newJSONContext(method string, target string, body []byte) (*echo.Context, *httptest.ResponseRecorder) {
+	e := echo.New()
+	req := httptest.NewRequest(method, target, bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	return ctx, rec
+}

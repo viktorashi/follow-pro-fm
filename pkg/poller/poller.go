@@ -203,16 +203,7 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte) {
 				return
 			}
 			if saved {
-				if campaignArtist, ok := campaignArtistForTime(p.ActiveCampaigns, recordedAt); ok && p.DBMgr != nil {
-					_ = p.DBMgr.UpsertSignatureFile(context.Background(), "unreviewed", filename, recordedAt, campaignArtist)
-				}
-				log.Printf("   [SIGNATURE REVIEW] Saved unreviewed chunk %q for manual review", filename)
-				_ = p.Alerter.AlertInfo(AlertEvent{
-					Title:       "Intro Chunk Needs Review",
-					Message:     fmt.Sprintf("Saved new unreviewed intro chunk for manual review\nArtist: %s\nPiesa: %s\nFile: %s", song.Artist, song.Title, filename),
-					ActionLabel: "View Dashboard",
-					ActionURL:   p.BaseURL,
-				})
+				p.reportSavedUnreviewedChunk(song, filename, recordedAt)
 				return
 			}
 			matchedName = name
@@ -227,16 +218,7 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte) {
 					log.Printf("   ⚠️ Failed to save unreviewed chunk %q: %v", filename, err)
 					return
 				}
-				if campaignArtist, ok := campaignArtistForTime(p.ActiveCampaigns, recordedAt); ok {
-					_ = p.DBMgr.UpsertSignatureFile(context.Background(), "unreviewed", filename, recordedAt, campaignArtist)
-				}
-				log.Printf("   [SIGNATURE REVIEW] Saved unreviewed chunk %q for manual review", filename)
-				_ = p.Alerter.AlertInfo(AlertEvent{
-					Title:       "Intro Chunk Needs Review",
-					Message:     fmt.Sprintf("Saved new unreviewed intro chunk for manual review\nArtist: %s\nPiesa: %s\nFile: %s", song.Artist, song.Title, filename),
-					ActionLabel: "View Dashboard",
-					ActionURL:   p.BaseURL,
-				})
+				p.reportSavedUnreviewedChunk(song, filename, recordedAt)
 				return
 			}
 			matchedName = name
@@ -244,6 +226,19 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte) {
 	}
 
 	log.Printf("   [SIGNATURE REVIEW] Skipped saving %q because it matches canonical signature %q", filename, matchedName)
+}
+
+func (p *Poller) reportSavedUnreviewedChunk(song SongInfo, filename string, recordedAt time.Time) {
+	if campaignArtist, ok := campaignArtistForTime(p.ActiveCampaigns, recordedAt); ok && p.DBMgr != nil {
+		_ = p.DBMgr.UpsertSignatureFile(context.Background(), "unreviewed", filename, recordedAt, campaignArtist)
+	}
+	log.Printf("   [SIGNATURE REVIEW] Saved unreviewed chunk %q for manual review", filename)
+	_ = p.Alerter.AlertInfo(AlertEvent{
+		Title:       "Intro Chunk Needs Review",
+		Message:     fmt.Sprintf("Saved new unreviewed intro chunk for manual review\nArtist: %s\nPiesa: %s\nFile: %s", song.Artist, song.Title, filename),
+		ActionLabel: "View Dashboard",
+		ActionURL:   p.BaseURL,
+	})
 }
 
 func (p *Poller) consumeIgnoredMetadataTrigger(song SongInfo) bool {
