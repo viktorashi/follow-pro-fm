@@ -115,7 +115,6 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.POST("/api/kill-switch", s.handleKillSwitch)
 	protected.GET("/api/schedule", s.handleGetSchedule)
 	protected.POST("/api/schedule", s.handleSetSchedule)
-	protected.POST("/api/schedule/fill-all", s.handleFillAllSchedules)
 	protected.POST("/api/sender/add", s.handleAddSenderPhone)
 	protected.POST("/api/audio/upload", s.handleAudioUpload)
 
@@ -664,6 +663,38 @@ func (s *TelemetryServer) handleSetSchedule(c *echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid payload"})
 	}
 
+	scheduleJSON, err := normalizeSchedulePayload(req.TargetMatches)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	if req.Date == "*" {
+		if len(s.campaigns) == 0 {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "campaigns not configured"})
+		}
+
+		updated := 0
+		for _, campaign := range s.campaigns {
+			dates, err := campaignWeekdays(campaign, bucharestLocation)
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+			for _, day := range dates {
+				if err := s.dbMgr.SetDailySchedule(c.Request().Context(), day.Format("2006-01-02"), scheduleJSON); err != nil {
+					return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				}
+				updated++
+			}
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"date":           req.Date,
+			"status":         "ok",
+			"updated_days":   updated,
+			"target_matches": json.RawMessage(scheduleJSON),
+		})
+	}
+
 	if _, err := time.Parse("2006-01-02", req.Date); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "date must be in YYYY-MM-DD format"})
 	}
@@ -677,11 +708,6 @@ func (s *TelemetryServer) handleSetSchedule(c *echo.Context) error {
 		}
 	}
 
-	scheduleJSON, err := normalizeSchedulePayload(req.TargetMatches)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
-	}
-
 	if err := s.dbMgr.SetDailySchedule(c.Request().Context(), req.Date, scheduleJSON); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -690,40 +716,6 @@ func (s *TelemetryServer) handleSetSchedule(c *echo.Context) error {
 		"date":           req.Date,
 		"target_matches": json.RawMessage(scheduleJSON),
 		"status":         "ok",
-	})
-}
-
-func (s *TelemetryServer) handleFillAllSchedules(c *echo.Context) error {
-	if s.dbMgr == nil {
-		return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "database not configured"})
-	}
-	if len(s.campaigns) == 0 {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "campaigns not configured"})
-	}
-
-	scheduleJSON, err := MarshalSchedule([]int{1, 2, 3, 4, 5, 6})
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-	}
-
-	updated := 0
-	for _, campaign := range s.campaigns {
-		dates, err := campaignWeekdays(campaign, bucharestLocation)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		}
-		for _, day := range dates {
-			if err := s.dbMgr.SetDailySchedule(c.Request().Context(), day.Format("2006-01-02"), scheduleJSON); err != nil {
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			}
-			updated++
-		}
-	}
-
-	return c.JSON(http.StatusOK, map[string]any{
-		"status":         "ok",
-		"updated_days":   updated,
-		"target_matches": json.RawMessage(scheduleJSON),
 	})
 }
 
