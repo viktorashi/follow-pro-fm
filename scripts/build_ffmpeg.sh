@@ -61,6 +61,7 @@ echo "Configuring ffmpeg..."
   --enable-protocol=pipe \
   --enable-demuxer=mp3 \
   --enable-demuxer=ogg \
+  --enable-demuxer=pcm_s16le \
   --enable-muxer=ogg \
   --enable-muxer=pcm_s16le \
   --enable-encoder=pcm_s16le \
