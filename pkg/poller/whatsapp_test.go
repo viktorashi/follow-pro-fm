@@ -47,7 +47,7 @@ func TestSendVoiceNote_Success(t *testing.T) {
 
 	// Since we haven't paired yet, client is connected but not logged in.
 	// SendVoiceNote should fail.
-	testAudio := filepath.Join("..", "..", "data", "audios", "WhatsApp Ptt 1.ogg")
+	testAudio := filepath.Join("testdata", "waveform_sample.ogg")
 	if _, err := os.Stat(testAudio); err != nil {
 		t.Skipf("skipping test because test audio is not available at %s: %v", testAudio, err)
 	}
@@ -179,7 +179,7 @@ func TestSendVoiceNote_Errors(t *testing.T) {
 	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	dbPath := filepath.Join(tempDir, "mock_wapp.sqlite")
-	testAudio := filepath.Join("..", "..", "data", "audios", "WhatsApp Ptt 1.ogg")
+	testAudio := filepath.Join("testdata", "waveform_sample.ogg")
 	if _, err := os.Stat(testAudio); err != nil {
 		t.Skipf("skipping test because test audio is not available at %s", testAudio)
 	}
