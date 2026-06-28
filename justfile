@@ -4,7 +4,10 @@ default:
 format:
     go fmt ./...
 
-build:
+generate:
+    templ generate
+
+build: generate
     CGO_ENABLED=1 go build -o ./pro-fm-poller ./cmd/pro-fm-poller/main.go 
 
 air-run:
@@ -23,23 +26,23 @@ lint:
 build-ffmpeg:
     ./scripts/build_ffmpeg.sh
 
-test: build-ffmpeg
+test: build-ffmpeg generate
     PATH="./bin:$PATH" go test -count=1 ./pkg/...
 
 smoke-live-mock: build
     ./scripts/smoke_live_mock.sh
 
-test-cover: build-ffmpeg
+test-cover: build-ffmpeg generate
     PATH="./bin:$PATH" go test -count=1 -coverprofile=coverage.out ./pkg/...
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
 
-test-cover-e2e-nowapp: build-ffmpeg
+test-cover-e2e-nowapp: build-ffmpeg generate
     PATH="./bin:$PATH" go test -count=1 -v -coverprofile=coverage.out -tags="e2e,nowapp" ./pkg/...
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
 
-test-cover-e2e-all: build-ffmpeg
+test-cover-e2e-all: build-ffmpeg generate
     PATH="./bin:$PATH" go test -count=1 -v -coverprofile=coverage.out -tags=e2e ./pkg/...
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
