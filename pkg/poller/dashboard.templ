@@ -191,7 +191,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 		</script>
 		<div class="container" hx-ext="sse" sse-connect="/events/dashboard">
 			<header class="header flex justify-between items-center">
-				<h1 class="title m-0">🐆 ProFM Jaguare Telemetry</h1>
+				<h1 class="title m-0">🐆 Telemetrie pe ProFM, Jaguare</h1>
 				<div class="flex items-center gap-4">
 					<div class="text-sm font-mono bg-black/20 px-3 py-1 rounded border border-white/10" id="server-time" data-server-time={ fmt.Sprintf("%d", time.Now().UnixMilli()) }>
 						{ time.Now().Format("15:04:05") }
@@ -401,7 +401,7 @@ templ StatusComponent(state AppState) {
 }
 
 templ SongComponent(song string) {
-	<h2 class="text-sm uppercase text-muted mb-2">Currently Playing</h2>
+	<h2 class="text-sm uppercase text-muted mb-2">Acum joaca:</h2>
 	if song == "" {
 		<div class="text-xl text-muted italic">Waiting for broadcast...</div>
 	} else {
