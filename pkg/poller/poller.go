@@ -343,12 +343,12 @@ func (p *Poller) getNowPlaying() (SongInfo, error) {
 
 func (p *Poller) Start() {
 	_ = p.Alerter.AlertInfo(AlertEvent{
-		Title:       "Service Started",
-		Message:     "ProFM Jaguare Poller started! Fetching Now Playing...",
-		ActionLabel: "View Dashboard",
+		Title:       "Inceput aplicatia!",
+		Message:     "ProFM Poller started! Ascultam ce joacaa lol...",
+		ActionLabel: "Vezi dashboardu",
 		ActionURL:   p.BaseURL,
 	})
-	log.Println("Fetching Now Playing from Pro FM...")
+	log.Println("Ascultam ce joacaa lol...")
 	log.Println(strings.Repeat("-", 40))
 
 	var currentSong SongInfo

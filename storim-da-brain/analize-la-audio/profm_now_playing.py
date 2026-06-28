@@ -27,7 +27,7 @@ def get_now_playing():
         return f"Error fetching data: {e}"
 
 if __name__ == "__main__":
-    print("Fetching Now Playing from Pro FM...")
+    print("Ascultam ce joacaa lol...")
     print("-" * 40)
     current_song = ""
     
