@@ -19,12 +19,6 @@ jobs:
           go-version-file: "go.mod"
           cache-dependency-path: "go.sum"
 
-      - name: Restore golangci-lint cache
-        uses: actions/cache@v4
-        with:
-          path: bin/golangci-lint
-          key: golangci-lint-v2.12.2-${{ runner.os }}-${{ hashFiles('go.sum') }}
-
       - name: Restore ffmpeg cache
         uses: actions/cache@v4
         with:
@@ -37,10 +31,15 @@ jobs:
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
 
       - name: Install golangci-lint
-        run: |
-          if [ ! -x bin/golangci-lint ]; then
-            GOBIN="$PWD/bin" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
-          fi
+        run: curl -sSfL https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz | tar -xz --strip-components=1 -C bin golangci-lint-2.12.2-linux-amd64/golangci-lint
+
+      - name: Restore golangci-lint cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/golangci-lint
+          key: golangci-lint-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            golangci-lint-${{ runner.os }}-
 
       - name: Lint
         run: ./scripts/golangci-lint-shim.sh run
