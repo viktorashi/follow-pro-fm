@@ -4,7 +4,6 @@
 package poller
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
