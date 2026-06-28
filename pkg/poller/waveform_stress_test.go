@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -20,28 +19,14 @@ func TestExtractWaveform_Stress(t *testing.T) {
 	}
 	defer func() { _ = os.RemoveAll(tempDir) }()
 
-	findSystemFFmpeg := func() string {
+	findBundledFFmpeg := func() string {
 		t.Helper()
 
-		// Filter out "./bin" from PATH so we find the system ffmpeg with libopus encoding support
-		originalPath := os.Getenv("PATH")
-		pathElements := filepath.SplitList(originalPath)
-		var filteredPathElements []string
-		for _, pe := range pathElements {
-			if pe == "./bin" || pe == "bin" || strings.HasSuffix(pe, "/pro-fm/bin") {
-				continue
-			}
-			filteredPathElements = append(filteredPathElements, pe)
-		}
-
-		oldPathEnv := os.Getenv("PATH")
-		_ = os.Setenv("PATH", strings.Join(filteredPathElements, string(filepath.ListSeparator)))
-		systemFfmpeg, err := exec.LookPath("ffmpeg")
-		_ = os.Setenv("PATH", oldPathEnv)
+		ffmpegPath, err := ffmpegBinaryPath()
 		if err == nil {
-			return systemFfmpeg
+			return ffmpegPath
 		}
-		return "/opt/homebrew/bin/ffmpeg"
+		return "ffmpeg"
 	}
 
 	writePCM := func(name string, durationSeconds float64, sample func(i int, t float64) float64) string {
@@ -77,7 +62,7 @@ func TestExtractWaveform_Stress(t *testing.T) {
 		t.Helper()
 
 		outPath := filepath.Join(tempDir, name)
-		cmd := exec.Command(findSystemFFmpeg(), "-y", "-f", "s16le", "-ar", "8000", "-ac", "1", "-i", pcmPath, "-c:a", "libopus", "-b:a", "64k", "-f", "ogg", outPath)
+		cmd := exec.Command(findBundledFFmpeg(), "-y", "-f", "s16le", "-ar", "8000", "-ac", "1", "-i", pcmPath, "-strict", "-2", "-c:a", "opus", "-b:a", "64k", "-f", "ogg", outPath)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("failed to generate ogg %s from %s: %v (output: %s)", name, pcmPath, err, string(out))
 		}

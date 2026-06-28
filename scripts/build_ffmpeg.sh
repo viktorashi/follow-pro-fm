@@ -61,12 +61,14 @@ echo "Configuring ffmpeg..."
   --enable-protocol=pipe \
   --enable-demuxer=mp3 \
   --enable-demuxer=ogg \
+  --enable-demuxer=s16le \
   --enable-demuxer=pcm_s16le \
   --enable-muxer=ogg \
   --enable-muxer=pcm_s16le \
   --enable-encoder=pcm_s16le \
   --enable-encoder=opus \
   --enable-decoder=mp3float \
+  --enable-decoder=pcm_s16le \
   --enable-parser=opus \
   --enable-decoder=opus \
   --enable-filter=aresample \
