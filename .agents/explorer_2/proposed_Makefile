@@ -1,0 +1,18 @@
+# proposed_Makefile
+# Wraps the build script for easy integration into local commands and Make workflows
+
+.PHONY: all build-ffmpeg clean-ffmpeg test
+
+all: build-ffmpeg
+
+build-ffmpeg:
+	@chmod +x scripts/build_ffmpeg.sh
+	@./scripts/build_ffmpeg.sh
+
+clean-ffmpeg:
+	@echo "🧹 Cleaning built ffmpeg binaries..."
+	@rm -rf bin/ffmpeg bin/ffprobe
+	@if [ -d third_party/ffmpeg ]; then \
+		echo "🧹 Cleaning submodule build..."; \
+		cd third_party/ffmpeg && make distclean || true; \
+	fi

@@ -1,14 +1,42 @@
 package poller
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+type recordingAlerter struct {
+	infoEvents     []AlertEvent
+	successEvents  []AlertEvent
+	criticalEvents []AlertEvent
+}
+
+func (a *recordingAlerter) AlertCritical(event AlertEvent) error {
+	a.criticalEvents = append(a.criticalEvents, event)
+	return nil
+}
+
+func (a *recordingAlerter) AlertInfo(event AlertEvent) error {
+	a.infoEvents = append(a.infoEvents, event)
+	return nil
+}
+
+func (a *recordingAlerter) AlertSuccess(event AlertEvent) error {
+	a.successEvents = append(a.successEvents, event)
+	return nil
+}
+
+func bucharestTime(year int, month time.Month, day, hour, min, sec int) time.Time {
+	return time.Date(year, month, day, hour, min, sec, 0, bucharestLocation)
+}
 
 func TestCampaign_IsActive(t *testing.T) {
 	c := Campaign{
@@ -24,32 +52,32 @@ func TestCampaign_IsActive(t *testing.T) {
 	}{
 		{
 			name: "Active within window (Wednesday 12:00)",
-			time: time.Date(2026, time.June, 17, 12, 0, 0, 0, time.UTC), // Wed
+			time: bucharestTime(2026, time.June, 17, 12, 0, 0), // Wed
 			want: true,
 		},
 		{
 			name: "Inactive weekend (Saturday)",
-			time: time.Date(2026, time.June, 20, 12, 0, 0, 0, time.UTC), // Sat
+			time: bucharestTime(2026, time.June, 20, 12, 0, 0), // Sat
 			want: false,
 		},
 		{
 			name: "Inactive before 07:00",
-			time: time.Date(2026, time.June, 17, 6, 59, 59, 0, time.UTC), // Wed
+			time: bucharestTime(2026, time.June, 17, 6, 59, 59), // Wed
 			want: false,
 		},
 		{
 			name: "Inactive after 20:00",
-			time: time.Date(2026, time.June, 17, 20, 0, 1, 0, time.UTC), // Wed
+			time: bucharestTime(2026, time.June, 17, 20, 0, 1), // Wed
 			want: false,
 		},
 		{
 			name: "Inactive before StartDate",
-			time: time.Date(2026, time.June, 12, 12, 0, 0, 0, time.UTC), // Friday
+			time: bucharestTime(2026, time.June, 12, 12, 0, 0), // Friday
 			want: false,
 		},
 		{
 			name: "Inactive after EndDate",
-			time: time.Date(2026, time.June, 29, 12, 0, 0, 0, time.UTC), // Monday
+			time: bucharestTime(2026, time.June, 29, 12, 0, 0), // Monday
 			want: false,
 		},
 	}
@@ -70,12 +98,12 @@ func TestPoller_hasActiveCampaign(t *testing.T) {
 		},
 	}
 
-	activeTime := time.Date(2026, time.June, 17, 12, 0, 0, 0, time.UTC) // Wed
+	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0) // Wed
 	if !p.hasActiveCampaign(activeTime) {
 		t.Errorf("Expected hasActiveCampaign to be true for Wed 12:00")
 	}
 
-	inactiveTime := time.Date(2026, time.June, 20, 12, 0, 0, 0, time.UTC) // Sat
+	inactiveTime := bucharestTime(2026, time.June, 20, 12, 0, 0) // Sat
 	if p.hasActiveCampaign(inactiveTime) {
 		t.Errorf("Expected hasActiveCampaign to be false for Saturday")
 	}
@@ -86,8 +114,22 @@ func TestCampaign_IsActive_BadDates(t *testing.T) {
 		StartDate: "bad-date",
 		EndDate:   "26-06-2026",
 	}
-	if got := c.IsActive(time.Date(2026, time.June, 17, 12, 0, 0, 0, time.UTC)); got != false {
+	if got := c.IsActive(bucharestTime(2026, time.June, 17, 12, 0, 0)); got != false {
 		t.Errorf("IsActive with bad dates = %v, want false", got)
+	}
+}
+
+func TestCampaign_IsActive_BypassCampaignTimeChecks(t *testing.T) {
+	t.Setenv("BYPASS_CAMPAIGN_TIME_CHECKS", "true")
+
+	c := Campaign{
+		StartDate: "15-06-2026",
+		EndDate:   "26-06-2026",
+		Artist:    "BTS",
+	}
+
+	if got := c.IsActive(bucharestTime(2026, time.June, 29, 12, 0, 0)); got != true {
+		t.Fatalf("IsActive() with bypass = %v, want true", got)
 	}
 }
 
@@ -227,7 +269,7 @@ func TestPoller_getNowPlaying_BadURL(t *testing.T) {
 
 func TestPoller_checkSong(t *testing.T) {
 	// A Wednesday at 12:00 PM (Active time for campaigns)
-	activeTime := time.Date(2026, time.June, 17, 12, 0, 0, 0, time.UTC)
+	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
 
 	tests := []struct {
 		name               string
@@ -324,11 +366,20 @@ func TestPoller_checkSong(t *testing.T) {
 					{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
 				},
 				TargetPhone: "+40770661491",
-				StateMgr:    NewStateManager(),
+				StateMgr:    createMockStateMgr(),
 				Alerter:     NewMultiAlerter(),
 				AudiosDir:   audiosDir,
 				DBMgr:       dbMgr,
-				SendVoiceNote: func(phone string, audioPath string) error {
+				SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
+					if senderPhone != "+40734788254" {
+						t.Fatalf("SendVoiceNote senderPhone = %q, want %q", senderPhone, "+40734788254")
+					}
+					if targetPhone != "+40770661491" {
+						t.Fatalf("SendVoiceNote targetPhone = %q, want %q", targetPhone, "+40770661491")
+					}
+					if audioPath == "" {
+						t.Fatal("SendVoiceNote audioPath should not be empty")
+					}
 					voiceCalls++
 					if tt.simulateVoiceError {
 						return fmt.Errorf("simulated network error sending audio")
@@ -350,11 +401,12 @@ func TestPoller_checkSong(t *testing.T) {
 }
 
 func TestPoller_checkSong_Deduplication(t *testing.T) {
-	activeTime := time.Date(2026, time.June, 17, 12, 0, 0, 0, time.UTC)
+	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
 	dbMgr, _ := NewDBManager(":memory:")
 	audiosDir := t.TempDir()
-	_ = os.WriteFile(audiosDir+"/test1.ogg", []byte("fake"), 0644)
-	_ = os.WriteFile(audiosDir+"/test2.ogg", []byte("fake"), 0644)
+	_ = os.WriteFile(audiosDir+"/test1.ogg", []byte("fake-1"), 0644)
+	_ = os.WriteFile(audiosDir+"/test2.ogg", []byte("fake-2"), 0644)
+	_ = os.WriteFile(audiosDir+"/test3.ogg", []byte("fake-3"), 0644)
 
 	voiceCalls := 0
 	poller := &Poller{
@@ -364,11 +416,20 @@ func TestPoller_checkSong_Deduplication(t *testing.T) {
 			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
 		},
 		TargetPhone: "+40770661491",
-		StateMgr:    NewStateManager(),
+		StateMgr:    createMockStateMgr(),
 		Alerter:     NewMultiAlerter(),
 		AudiosDir:   audiosDir,
 		DBMgr:       dbMgr,
-		SendVoiceNote: func(phone string, audioPath string) error {
+		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
+			if senderPhone != "+40734788254" {
+				t.Fatalf("SendVoiceNote senderPhone = %q, want %q", senderPhone, "+40734788254")
+			}
+			if targetPhone != "+40770661491" {
+				t.Fatalf("SendVoiceNote targetPhone = %q, want %q", targetPhone, "+40770661491")
+			}
+			if audioPath == "" {
+				t.Fatal("SendVoiceNote audioPath should not be empty")
+			}
 			voiceCalls++
 			return nil
 		},
@@ -421,7 +482,8 @@ func TestPoller_checkSong_Deduplication(t *testing.T) {
 	simulateSong("Bruno Mars", "Leave the Door Open")
 
 	// History: Bruno Mars (1), The Weeknd (2).
-	// 7. Play BTS - Dynamite. Should trigger!
+	// 7. Play BTS - Dynamite. Should trigger again once it is out of the
+	// previous 2-song window and there is still globally unused audio left.
 	simulateSong("BTS", "Dynamite")
 	if voiceCalls != 2 {
 		t.Errorf("Expected BTS Dynamite to trigger again since it's out of last 2 plays! Voice calls got %d", voiceCalls)
@@ -429,7 +491,7 @@ func TestPoller_checkSong_Deduplication(t *testing.T) {
 }
 
 func TestPoller_checkSong_DailyLimit(t *testing.T) {
-	activeTime := time.Date(2026, time.June, 17, 12, 0, 0, 0, time.UTC)
+	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"BTS","playerExtendedSongSubtitle":"Dynamite"}}}`))
 	}))
@@ -445,10 +507,16 @@ func TestPoller_checkSong_DailyLimit(t *testing.T) {
 		matchesToday: 6,
 		lastCheckDay: activeTime.YearDay(), // Prevent matchesToday from being reset
 		TargetPhone:  "+40770661491",
-		StateMgr:     NewStateManager(),
+		StateMgr:     createMockStateMgr(),
 		Alerter:      NewMultiAlerter(),
 		AudiosDir:    t.TempDir(),
-		SendVoiceNote: func(phone string, audioPath string) error {
+		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
+			if senderPhone != "+40734788254" {
+				t.Fatalf("SendVoiceNote senderPhone = %q, want %q", senderPhone, "+40734788254")
+			}
+			if targetPhone != "+40770661491" {
+				t.Fatalf("SendVoiceNote targetPhone = %q, want %q", targetPhone, "+40770661491")
+			}
 			voiceCalls++
 			return nil
 		},
@@ -462,6 +530,348 @@ func TestPoller_checkSong_DailyLimit(t *testing.T) {
 	}
 	if poller.matchesToday != 6 {
 		t.Errorf("matchesToday should remain 6, got %d", poller.matchesToday)
+	}
+}
+
+func TestPoller_checkSong_RequiresDifferentArtistBetweenCampaignSends(t *testing.T) {
+	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
+	dbMgr, err := NewDBManager(":memory:")
+	if err != nil {
+		t.Fatalf("NewDBManager() error = %v", err)
+	}
+
+	audiosDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(audiosDir, "test1.ogg"), []byte("first"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(audiosDir, "test2.ogg"), []byte("second"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	voiceCalls := 0
+	poller := &Poller{
+		APIURL:       "",
+		PollInterval: 1 * time.Millisecond,
+		ActiveCampaigns: []Campaign{
+			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
+		},
+		TargetPhone: "+40770661491",
+		StateMgr:    createMockStateMgr(),
+		Alerter:     NewMultiAlerter(),
+		AudiosDir:   audiosDir,
+		DBMgr:       dbMgr,
+		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
+			voiceCalls++
+			return nil
+		},
+	}
+
+	currentSong := &SongInfo{}
+	simulateSong := func(artist, title string, when time.Time) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = fmt.Fprintf(w, `{"data":{"epg":{"playerExtendedSongTitle":"%s","playerExtendedSongSubtitle":"%s"}}}`, artist, title)
+		}))
+		defer server.Close()
+		poller.APIURL = server.URL
+		poller.checkSong(currentSong, when)
+	}
+
+	simulateSong("BTS", "Dynamite", activeTime)
+	if voiceCalls != 1 {
+		t.Fatalf("Expected first BTS detection to send once, got %d", voiceCalls)
+	}
+
+	simulateSong("BTS", "Butter", activeTime.Add(time.Minute))
+	if voiceCalls != 1 {
+		t.Fatalf("Expected BTS resend without another artist in between to be blocked, got %d", voiceCalls)
+	}
+
+	simulateSong("Kamrad", "BE MINE", activeTime.Add(2*time.Minute))
+	simulateSong("BTS", "Permission to Dance", activeTime.Add(3*time.Minute))
+	if voiceCalls != 2 {
+		t.Fatalf("Expected BTS resend after another artist to be allowed, got %d", voiceCalls)
+	}
+}
+
+func TestPoller_matchingCampaignArtistRequiresActualCampaignMatch(t *testing.T) {
+	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
+	poller := &Poller{
+		ActiveCampaigns: []Campaign{
+			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
+		},
+	}
+
+	campaignArtist, matched := poller.matchingCampaignArtist(activeTime, SongInfo{Artist: "Taylor Swift", Title: "Cruel Summer"})
+	if matched {
+		t.Fatalf("Expected unrelated fingerprint signature to be ignored, got campaign artist %q", campaignArtist)
+	}
+
+	campaignArtist, matched = poller.matchingCampaignArtist(activeTime, SongInfo{Artist: "BTS feat. Halsey", Title: "Butter"})
+	if !matched || campaignArtist != "BTS" {
+		t.Fatalf("Expected BTS song to match active campaign, got matched=%v campaignArtist=%q", matched, campaignArtist)
+	}
+}
+
+func TestPoller_consumeIgnoredMetadataTrigger(t *testing.T) {
+	poller := &Poller{
+		ignoredTrigger: parseFingerprintTrigger("BTS - Butter.mp3"),
+	}
+
+	if !poller.consumeIgnoredMetadataTrigger(SongInfo{Artist: "BTS", Title: "CONCURS FOLLOW PROFM 2026 MUNCHEN - BUTTER"}) {
+		t.Fatal("Expected metadata trigger for the same campaign turn to be consumed after a fingerprint match")
+	}
+	if poller.ignoredTrigger.signatureName != "" {
+		t.Fatal("Expected ignored trigger to be cleared after consuming the matching metadata event")
+	}
+
+	poller.ignoredTrigger = parseFingerprintTrigger("BTS - Butter.mp3")
+	if poller.consumeIgnoredMetadataTrigger(SongInfo{Artist: "Kamrad", Title: "BE MINE"}) {
+		t.Fatal("Expected unrelated metadata trigger to remain eligible")
+	}
+}
+
+func TestPoller_checkSongFingerprintTriggeredTurnSkipsMetadataDashcamSave(t *testing.T) {
+	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"epg": map[string]string{
+					"playerExtendedSongTitle":    "BTS",
+					"playerExtendedSongSubtitle": "Butter",
+				},
+			},
+		})
+	}))
+	defer api.Close()
+
+	stateMgr := createMockStateMgr()
+	stateMgr.Update(func(s *AppState) {
+		s.GatheringSignatures = true
+	})
+
+	audioBuffer := NewCircularAudioBuffer("", 8)
+	audioBuffer.writeBytes([]byte("preroll"))
+
+	poller := &Poller{
+		APIURL:          api.URL,
+		ActiveCampaigns: []Campaign{{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"}},
+		StateMgr:        stateMgr,
+		AudioBuffer:     audioBuffer,
+		AudiosDir:       t.TempDir(),
+		SignaturesDir:   t.TempDir(),
+		ignoredTrigger:  parseFingerprintTrigger("BTS - Butter.mp3"),
+		SendVoiceNote: func(senderPhone, targetPhone, audioPath string) error {
+			t.Fatal("metadata path should have been ignored after fingerprint trigger")
+			return nil
+		},
+	}
+
+	currentSong := SongInfo{}
+	poller.checkSong(&currentSong, activeTime)
+
+	audioBuffer.mu.Lock()
+	isRecording := audioBuffer.isRecording
+	audioBuffer.mu.Unlock()
+
+	if isRecording {
+		t.Fatal("expected metadata-triggered dashcam save to stay off for a fingerprint-triggered turn")
+	}
+	if poller.ignoredTrigger.signatureName != "" {
+		t.Fatal("expected consumed fingerprint trigger to be cleared")
+	}
+}
+
+func TestPoller_resolveFingerprintSongUsesLiveMetadata(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"epg": map[string]string{
+					"playerExtendedSongTitle":    "BTS",
+					"playerExtendedSongSubtitle": "2026 - Butter",
+				},
+			},
+		})
+	}))
+	defer api.Close()
+
+	poller := &Poller{APIURL: api.URL}
+	got := poller.resolveFingerprintSong(fingerprintTrigger{artist: "BTS", title: "Unknown"})
+
+	if got.Artist != "BTS" {
+		t.Fatalf("resolveFingerprintSong() artist = %q, want %q", got.Artist, "BTS")
+	}
+	if got.Title != "Butter" {
+		t.Fatalf("resolveFingerprintSong() title = %q, want %q", got.Title, "Butter")
+	}
+}
+
+func TestPoller_saveUnreviewedChunkForReviewAlertsOnceWhenSaved(t *testing.T) {
+	alerter := &recordingAlerter{}
+	signaturesDir := t.TempDir()
+	poller := &Poller{
+		Alerter:       alerter,
+		SignaturesDir: signaturesDir,
+		BaseURL:       "http://localhost:8080",
+	}
+
+	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"))
+
+	if len(alerter.infoEvents) != 1 {
+		t.Fatalf("AlertInfo() calls = %d, want 1", len(alerter.infoEvents))
+	}
+	if got := alerter.infoEvents[0].Title; got != "Intro Chunk Needs Review" {
+		t.Fatalf("AlertInfo().Title = %q, want %q", got, "Intro Chunk Needs Review")
+	}
+
+	files, err := os.ReadDir(filepath.Join(signaturesDir, "unreviewed"))
+	if err != nil {
+		t.Fatalf("ReadDir() error = %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("saved review chunks = %d, want 1", len(files))
+	}
+}
+
+func TestPoller_saveUnreviewedChunkForReviewStoresCampaignOwnership(t *testing.T) {
+	alerter := &recordingAlerter{}
+	signaturesDir := t.TempDir()
+	dbMgr := mustNewTestDBManager(t)
+	poller := &Poller{
+		Alerter:       alerter,
+		SignaturesDir: signaturesDir,
+		BaseURL:       "http://localhost:8080",
+		DBMgr:         dbMgr,
+		ActiveCampaigns: []Campaign{
+			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
+		},
+	}
+
+	t.Setenv("BYPASS_CAMPAIGN_TIME_CHECKS", "true")
+	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"))
+
+	files, err := os.ReadDir(filepath.Join(signaturesDir, "unreviewed"))
+	if err != nil {
+		t.Fatalf("ReadDir() error = %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("saved review chunks = %d, want 1", len(files))
+	}
+
+	meta, err := dbMgr.GetSignatureFile(context.Background(), "unreviewed", files[0].Name())
+	if err != nil {
+		t.Fatalf("GetSignatureFile() error = %v", err)
+	}
+	if meta.CampaignArtist != "BTS" {
+		t.Fatalf("CampaignArtist = %q, want %q", meta.CampaignArtist, "BTS")
+	}
+}
+
+func TestPoller_doTriggerVoiceNote_ReportsOnlySuccessAfterSend(t *testing.T) {
+	audiosDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(audiosDir, "test.ogg"), []byte("fake"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	alerter := &recordingAlerter{}
+	sendCalls := 0
+	poller := &Poller{
+		TargetPhone: "+40770661491",
+		StateMgr:    createMockStateMgr(),
+		Alerter:     alerter,
+		AudiosDir:   audiosDir,
+		SendVoiceNote: func(senderPhone, targetPhone, audioPath string) error {
+			sendCalls++
+			return nil
+		},
+	}
+
+	poller.doTriggerVoiceNote(triggerSourceFingerprint, "BTS", "BTS", "Dynamite", bucharestTime(2026, time.June, 17, 12, 0, 0), 1, 0)
+
+	if sendCalls != 1 {
+		t.Fatalf("SendVoiceNote() calls = %d, want 1", sendCalls)
+	}
+	if len(alerter.infoEvents) != 0 {
+		t.Fatalf("AlertInfo() calls = %d, want 0", len(alerter.infoEvents))
+	}
+	if len(alerter.successEvents) != 1 {
+		t.Fatalf("AlertSuccess() calls = %d, want 1", len(alerter.successEvents))
+	}
+	if !strings.Contains(alerter.successEvents[0].Message, "Trigger: "+triggerSourceFingerprint) {
+		t.Fatalf("AlertSuccess().Message = %q, want trigger source", alerter.successEvents[0].Message)
+	}
+	if len(alerter.criticalEvents) != 0 {
+		t.Fatalf("AlertCritical() calls = %d, want 0", len(alerter.criticalEvents))
+	}
+}
+
+func TestPoller_doTriggerVoiceNote_ReportsOnlyFailureAfterSendError(t *testing.T) {
+	audiosDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(audiosDir, "test.ogg"), []byte("fake"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	alerter := &recordingAlerter{}
+	sendCalls := 0
+	poller := &Poller{
+		TargetPhone: "+40770661491",
+		StateMgr:    createMockStateMgr(),
+		Alerter:     alerter,
+		AudiosDir:   audiosDir,
+		SendVoiceNote: func(senderPhone, targetPhone, audioPath string) error {
+			sendCalls++
+			return fmt.Errorf("boom")
+		},
+	}
+
+	poller.doTriggerVoiceNote(triggerSourceMetadata, "BTS", "BTS", "Dynamite", bucharestTime(2026, time.June, 17, 12, 0, 0), 1, 0)
+
+	if sendCalls != 1 {
+		t.Fatalf("SendVoiceNote() calls = %d, want 1", sendCalls)
+	}
+	if len(alerter.infoEvents) != 0 {
+		t.Fatalf("AlertInfo() calls = %d, want 0", len(alerter.infoEvents))
+	}
+	if len(alerter.successEvents) != 0 {
+		t.Fatalf("AlertSuccess() calls = %d, want 0", len(alerter.successEvents))
+	}
+	if len(alerter.criticalEvents) != 1 {
+		t.Fatalf("AlertCritical() calls = %d, want 1", len(alerter.criticalEvents))
+	}
+	if !strings.Contains(alerter.criticalEvents[0].Message, "Trigger: "+triggerSourceMetadata) {
+		t.Fatalf("AlertCritical().Message = %q, want trigger source", alerter.criticalEvents[0].Message)
+	}
+}
+
+func TestPoller_prepareStartStateHonorsKillSwitch(t *testing.T) {
+	stateMgr := createMockStateMgr()
+	stateMgr.Update(func(s *AppState) {
+		s.KillSwitchActive = true
+		s.Status = StatusKilled
+	})
+
+	poller := &Poller{StateMgr: stateMgr}
+
+	if shouldPoll := poller.prepareStartState(); shouldPoll {
+		t.Fatal("prepareStartState() should skip immediate polling when kill switch is active")
+	}
+
+	state := stateMgr.Get()
+	if state.Status != StatusKilled {
+		t.Fatalf("status = %q, want %q", state.Status, StatusKilled)
+	}
+}
+
+func TestPoller_prepareStartStateSetsPollingWhenActive(t *testing.T) {
+	stateMgr := createMockStateMgr()
+	poller := &Poller{StateMgr: stateMgr}
+
+	if shouldPoll := poller.prepareStartState(); !shouldPoll {
+		t.Fatal("prepareStartState() should allow immediate polling when kill switch is inactive")
+	}
+
+	state := stateMgr.Get()
+	if state.Status != StatusPolling {
+		t.Fatalf("status = %q, want %q", state.Status, StatusPolling)
 	}
 }
 
@@ -500,4 +910,12 @@ func TestNormalizePhoneNumber(t *testing.T) {
 			}
 		})
 	}
+}
+
+func createMockStateMgr() *StateManager {
+	sm := NewStateManager()
+	sm.Update(func(s *AppState) {
+		s.Connections = []WAConnectionState{{Phone: "+40734788254", WhatsAppConnected: true, Status: StatusConnected}}
+	})
+	return sm
 }

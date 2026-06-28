@@ -2,9 +2,17 @@
 FROM golang:1.26-alpine AS builder
 
 # hadolint ignore=DL3018
-RUN apk add --no-cache gcc musl-dev
+RUN apk add --no-cache gcc musl-dev make bash perl
 
 WORKDIR /src
+
+# Copy build script and submodule first to leverage layer caching
+COPY scripts/build_ffmpeg.sh ./scripts/
+COPY third_party/ffmpeg ./third_party/ffmpeg
+
+# Compile minimal ffmpeg
+RUN ./scripts/build_ffmpeg.sh
+
 COPY go.mod go.sum ./
 RUN go mod download
 
@@ -19,6 +27,7 @@ RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /app
 COPY --from=builder /pro-fm-poller .
+COPY --from=builder /src/bin/ffmpeg /src/bin/ffprobe /usr/local/bin/
 
 # /data is where the persistent volume will be mounted for wapp.sqlite
 RUN mkdir -p /data

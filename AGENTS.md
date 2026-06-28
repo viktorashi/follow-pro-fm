@@ -1,6 +1,14 @@
+Spawn all sub-agents with gpt 5.4-mini and NEVER in fast mode!! Always slow mode. As slow as possible
+
+Alwayss, use the ponytail skill (It might have already been injected in your context via a lifecycle hook)
+
 Never merge / push onto main by yourself unless specifically prompted otherwise.
 That's what's actually deploying to main through CI / CD
 If you're given a long multitude of tasks to do, make atomic, structured ordered commits for each of those.
+
+This project depends on a custom light build of ffmpeg with just what we need. Never change anything of the ffmpeg codebase, except the build args
+
+Please make sure the way it runs locally + the tests correctly reproduce exactly in the Dockerfile, of what's actually gonna be running in prod.
 
 The purpose of this project is to automatically listen to songs broadcasted by PRO FM during the specific campaign dates and hours, and if a song by a particular campaign-specific artist pops up, it's supposed to randomly send one of the voice messages in `/data/audio` as a whatsapp voicenote to the configured TARGET_PHONE.
 

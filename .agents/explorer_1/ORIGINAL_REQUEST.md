@@ -1,0 +1,2 @@
+## 2026-06-21T14:51:10Z
+Investigate how WhatsApp voice notes are currently sent in pkg/poller/whatsapp.go and other files. Find where waE2E.AudioMessage is created and where voice note media is prepared. Investigate how we can inject creation_time metadata into the voice note to match the exact send timestamp. You are read-only and must only explore the codebase. Write your findings to /Users/viktorashi/nerdin/pro-fm/.agents/explorer_1/handoff.md. Include code snippets, relevant functions, and recommendations.

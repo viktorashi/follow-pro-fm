@@ -30,3 +30,11 @@ stages = ["pre-push"]
 pass_filenames = false
 
 
+[[repos.hooks]]
+id = "validate-fly-config"
+name = "Validate Fly config"
+entry = "fly config validate"
+language = "system"
+stages = ["pre-commit"]
+files = "fly.toml"
+pass_filenames = false
