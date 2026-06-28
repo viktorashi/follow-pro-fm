@@ -3,10 +3,13 @@
 *.swp
 *.sqlite
 *.db
+*.bak
 coverage.out
 *.bin
 .env
+bin/
+/pro-fm-poller
 audios/
 data/
-storim-da-brain
+apku-ala
 downloaded-from-fly
