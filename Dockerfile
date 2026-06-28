@@ -14,10 +14,13 @@ COPY third_party/ffmpeg ./third_party/ffmpeg
 RUN ./scripts/build_ffmpeg.sh
 
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 COPY . .
-RUN CGO_ENABLED=1 go build -ldflags "-w -s" -o /pro-fm-poller ./cmd/pro-fm-poller
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=1 go build -trimpath -ldflags "-w -s" -o /pro-fm-poller ./cmd/pro-fm-poller
 
 # ---- Stage 2: Runtime ----
 FROM alpine:3.20
