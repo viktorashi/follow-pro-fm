@@ -11,11 +11,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
           cache-dependency-path: "go.sum"
+
+      - name: Restore ffmpeg cache
+        uses: actions/cache@v4
+        with:
+          path: bin
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/build_ffmpeg.sh', 'third_party/ffmpeg/configure', 'third_party/ffmpeg/fftools/ffmpeg.c', 'third_party/ffmpeg/libavcodec/allcodecs.c') }}
+
+      - name: Build minimal ffmpeg
+        run: |
+          ./scripts/build_ffmpeg.sh
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+
+      - name: Install golangci-lint
+        run: curl -sSfL https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz | tar -xz --strip-components=1 -C bin golangci-lint-2.12.2-linux-amd64/golangci-lint
+
+      - name: Restore golangci-lint cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/golangci-lint
+          key: golangci-lint-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            golangci-lint-${{ runner.os }}-
 
       - name: Lint
         run: ./scripts/golangci-lint-shim.sh run
