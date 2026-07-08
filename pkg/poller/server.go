@@ -2,11 +2,19 @@ package poller
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
 	"log/slog"
+	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -24,9 +32,19 @@ type TelemetryServer struct {
 	logWriter   *SSELogWriter
 	dbMgr       *DBManager
 	dataDir     string
+	audiosDir   string
+	campaigns   []Campaign
+	wappClients []WhatsAppClient
+	onAddPhone  func(phone string) error
+	timeNow     func() time.Time
 }
 
-func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster, logWriter *SSELogWriter, dbMgr *DBManager, dataDir string) *TelemetryServer {
+type ScheduleEntry struct {
+	Date          string
+	TargetMatches []int
+}
+
+func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster, logWriter *SSELogWriter, dbMgr *DBManager, dataDir string, audiosDir string, campaigns []Campaign) *TelemetryServer {
 	e := echo.New()
 
 	if logWriter == nil {
@@ -55,6 +73,9 @@ func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaste
 		logWriter:   logWriter,
 		dbMgr:       dbMgr,
 		dataDir:     dataDir,
+		audiosDir:   audiosDir,
+		campaigns:   append([]Campaign(nil), campaigns...),
+		timeNow:     time.Now,
 	}
 
 	ts.registerRoutes()
@@ -78,6 +99,7 @@ func (s *TelemetryServer) registerRoutes() {
 	s.echo.Static("/static", staticPath)
 	s.echo.GET("/login", s.handleLoginView)
 	s.echo.POST("/login", s.handleLoginSubmit)
+	s.echo.GET("/logout", s.handleLogout)
 	s.echo.POST("/auth/magic/request", s.handleMagicLinkRequest)
 	s.echo.GET("/auth/magic", s.handleMagicLinkVerify)
 	s.echo.GET("/qr.png", s.handleQRImage) // New unauthenticated QR endpoint for email
@@ -92,6 +114,18 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.GET("/events/dashboard", s.handleDashboardStream)
 	protected.GET("/events/logs", s.handleLogsStream)
 	protected.POST("/api/kill-switch", s.handleKillSwitch)
+	protected.GET("/api/schedule", s.handleGetSchedule)
+	protected.POST("/api/schedule", s.handleSetSchedule)
+	protected.POST("/api/sender/add", s.handleAddSenderPhone)
+	protected.POST("/api/audio/upload", s.handleAudioUpload)
+
+	if os.Getenv("MOCK_WHATSAPP") == "true" {
+		protected.POST("/api/test/mock-scan", s.handleMockScan)
+	}
+	protected.POST("/api/settings/gathering", s.handleToggleGathering)
+	protected.GET("/api/unreviewed", s.handleUnreviewedList)
+	protected.GET("/api/unreviewed/file", s.handleUnreviewedFile)
+	protected.POST("/unreviewed/crop", s.handleUnreviewedCrop)
 }
 
 func (s *TelemetryServer) Start(addr string) error {
@@ -116,6 +150,12 @@ func (s *TelemetryServer) handleLoginSubmit(c *echo.Context) error {
 	return c.Redirect(http.StatusFound, "/")
 }
 
+func (s *TelemetryServer) handleLogout(c *echo.Context) error {
+	ClearSessionCookie(c)
+	c.Response().Header().Set("HX-Redirect", "/login")
+	return c.Redirect(http.StatusFound, "/login")
+}
+
 func (s *TelemetryServer) handleMagicLinkRequest(c *echo.Context) error {
 	email := c.FormValue("email")
 	err := s.authMgr.GenerateAndSendMagicLink(c.Request().Context(), email)
@@ -138,7 +178,16 @@ func (s *TelemetryServer) handleMagicLinkVerify(c *echo.Context) error {
 }
 
 func (s *TelemetryServer) handleDashboardView(c *echo.Context) error {
-	return Render(c, http.StatusOK, Dashboard())
+	state := s.stateMgr.Get()
+	chunks, err := s.listUnreviewedChunks()
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error reading unreviewed signatures: "+err.Error())
+	}
+	schedules, err := s.listScheduleEntries(c.Request().Context())
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error reading schedule entries: "+err.Error())
+	}
+	return Render(c, http.StatusOK, Dashboard(state, chunks, dashboardUploadPhones(state.Connections), schedules))
 }
 
 func (s *TelemetryServer) handleLogsView(c *echo.Context) error {
@@ -158,8 +207,15 @@ func (s *TelemetryServer) handleRadioLogsView(c *echo.Context) error {
 
 func (s *TelemetryServer) handleQRImage(c *echo.Context) error {
 	state := s.stateMgr.Get()
-	b64 := state.QRCodeData
-	if b64 == "" || state.Status != StatusPairingRequired {
+	var b64 string
+	for _, conn := range state.Connections {
+		if conn.QRCodeData != "" && conn.Status == StatusPairingRequired {
+			b64 = conn.QRCodeData
+			break
+		}
+	}
+
+	if b64 == "" {
 		// Return 404 or a placeholder if no QR is needed
 		return c.String(http.StatusNotFound, "No QR Code active")
 	}
@@ -227,7 +283,7 @@ func (s *TelemetryServer) streamEvents(c *echo.Context, isLogs bool) error {
 		_, _ = c.Response().Write((&SSEEvent{Event: "audio", Data: audioBuf.Bytes()}).Marshal())
 
 		var qrBuf bytes.Buffer
-		_ = QRComponent(state.QRCodeData).Render(c.Request().Context(), &qrBuf)
+		_ = QRComponent(state.Connections).Render(c.Request().Context(), &qrBuf)
 		_, _ = c.Response().Write((&SSEEvent{Event: "qrcode", Data: qrBuf.Bytes()}).Marshal())
 
 		if f, ok := c.Response().(http.Flusher); ok {
@@ -270,8 +326,8 @@ func (s *TelemetryServer) streamEvents(c *echo.Context, isLogs bool) error {
 
 // Render is a helper to render Templ components in Echo
 func Render(c *echo.Context, statusCode int, t templ.Component) error {
-	c.Response().WriteHeader(statusCode)
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextHTML)
+	c.Response().WriteHeader(statusCode)
 	return t.Render(c.Request().Context(), c.Response())
 }
 func (s *TelemetryServer) handleKillSwitch(c *echo.Context) error {
@@ -300,11 +356,52 @@ func (s *TelemetryServer) handleKillSwitch(c *echo.Context) error {
 		if payload.Active {
 			state.Status = StatusKilled
 		} else {
-			state.Status = StatusPolling
+			state.Status = s.statusAfterKillSwitchDisabled(*state, s.timeNow())
 		}
 	})
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
+}
+
+func (s *TelemetryServer) statusAfterKillSwitchDisabled(state AppState, now time.Time) AppStatus {
+	if len(s.campaigns) > 0 && !isAnyCampaignActive(s.campaigns, now) {
+		return StatusSleeping
+	}
+
+	anyConnected := false
+	anyPairingRequired := false
+	anyError := false
+
+	for _, conn := range state.Connections {
+		if conn.WhatsAppConnected {
+			anyConnected = true
+		}
+		switch conn.Status {
+		case StatusPairingRequired:
+			anyPairingRequired = true
+		case StatusError:
+			anyError = true
+		}
+	}
+
+	switch {
+	case anyPairingRequired:
+		return StatusPairingRequired
+	case anyConnected:
+		return StatusPolling
+	case anyError:
+		return StatusError
+	case len(state.Connections) > 0:
+		return StatusInitializing
+	default:
+		return StatusInitializing
+	}
+}
+
+func isAnyCampaignActive(campaigns []Campaign, now time.Time) bool {
+	return slices.ContainsFunc(campaigns, func(campaign Campaign) bool {
+		return campaign.IsActive(now)
+	})
 }
 
 type FileInfo struct {
@@ -313,6 +410,13 @@ type FileInfo struct {
 	Size    int64
 	ModTime string
 	IsDir   bool
+}
+
+type ReviewChunk struct {
+	Name    string `json:"name"`
+	Size    int64  `json:"size"`
+	ModTime string `json:"mod_time"`
+	PlayURL string `json:"play_url"`
 }
 
 func (s *TelemetryServer) handleDataView(c *echo.Context) error {
@@ -351,4 +455,415 @@ func (s *TelemetryServer) handleDataView(c *echo.Context) error {
 	t := DataViewer(files)
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextHTML)
 	return t.Render(c.Request().Context(), c.Response())
+}
+
+func (s *TelemetryServer) SetWhatsAppClients(clients []WhatsAppClient) {
+	s.wappClients = clients
+}
+
+func (s *TelemetryServer) SetOnAddPhone(fn func(phone string) error) {
+	s.onAddPhone = fn
+}
+
+func (s *TelemetryServer) handleAddSenderPhone(c *echo.Context) error {
+	phone := c.FormValue("phone")
+	phone = strings.TrimSpace(phone)
+	if phone == "" {
+		return c.String(http.StatusBadRequest, "Phone number is required")
+	}
+	if !strings.HasPrefix(phone, "+") {
+		phone = "+" + phone
+	}
+
+	if s.onAddPhone != nil {
+		err := s.onAddPhone(phone)
+		if err != nil {
+			return c.String(http.StatusInternalServerError, "Error adding phone: "+err.Error())
+		}
+	} else {
+		return c.String(http.StatusInternalServerError, "Add phone callback not set")
+	}
+
+	return c.String(http.StatusOK, "Phone added successfully. Connecting...")
+}
+
+func (s *TelemetryServer) handleAudioUpload(c *echo.Context) error {
+	phone := strings.TrimSpace(c.FormValue("phone"))
+	if phone == "" {
+		return c.String(http.StatusBadRequest, "Phone is required")
+	}
+	if !strings.HasPrefix(phone, "+") {
+		phone = "+" + phone
+	}
+
+	fileHeader, err := c.FormFile("audio")
+	if err != nil {
+		return c.String(http.StatusBadRequest, "Audio file is required")
+	}
+
+	filename := filepath.Base(fileHeader.Filename)
+	if filename == "." || filename == "" {
+		return c.String(http.StatusBadRequest, "Invalid filename")
+	}
+	if !strings.EqualFold(filepath.Ext(filename), ".ogg") {
+		return c.String(http.StatusBadRequest, "Only .ogg files are allowed")
+	}
+
+	audioDir := GetAudioDirForPhone(phone, s.audiosDir)
+	activePath := filepath.Join(audioDir, filename)
+	usedPath := filepath.Join(audioDir, "used", filename)
+
+	if _, err := os.Stat(activePath); err == nil {
+		return c.String(http.StatusConflict, "An active audio with that filename already exists")
+	} else if !os.IsNotExist(err) {
+		return c.String(http.StatusInternalServerError, "Failed to inspect audio pool")
+	}
+
+	if _, err := os.Stat(usedPath); err == nil {
+		return c.String(http.StatusConflict, "A used audio with that filename already exists")
+	} else if !os.IsNotExist(err) {
+		return c.String(http.StatusInternalServerError, "Failed to inspect used audio pool")
+	}
+
+	src, err := fileHeader.Open()
+	if err != nil {
+		return c.String(http.StatusBadRequest, "Failed to read uploaded file")
+	}
+	defer func() {
+		_ = src.Close()
+	}()
+
+	if err := os.MkdirAll(audioDir, 0755); err != nil {
+		return c.String(http.StatusInternalServerError, "Failed to prepare audio directory")
+	}
+
+	dst, err := os.OpenFile(activePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	if err != nil {
+		if os.IsExist(err) {
+			return c.String(http.StatusConflict, "An active audio with that filename already exists")
+		}
+		return c.String(http.StatusInternalServerError, "Failed to create destination file")
+	}
+
+	if _, err := io.Copy(dst, src); err != nil {
+		_ = dst.Close()
+		_ = os.Remove(activePath)
+		return c.String(http.StatusInternalServerError, "Failed to save uploaded file")
+	}
+	if err := dst.Close(); err != nil {
+		_ = os.Remove(activePath)
+		return c.String(http.StatusInternalServerError, "Failed to finalize uploaded file")
+	}
+
+	return c.String(http.StatusOK, "Upload successful: "+filename+" -> "+phone)
+}
+
+func dashboardUploadPhones(conns []WAConnectionState) []string {
+	seen := map[string]struct{}{
+		CanonicalSenderPhone: {},
+	}
+	phones := []string{CanonicalSenderPhone}
+
+	for _, conn := range conns {
+		phone := strings.TrimSpace(conn.Phone)
+		if phone == "" {
+			continue
+		}
+		if !strings.HasPrefix(phone, "+") {
+			phone = "+" + phone
+		}
+		if _, ok := seen[phone]; ok {
+			continue
+		}
+		seen[phone] = struct{}{}
+		phones = append(phones, phone)
+	}
+
+	sort.Slice(phones[1:], func(i, j int) bool {
+		return phones[1:][i] < phones[1:][j]
+	})
+
+	return phones
+}
+
+func isKnownDashboardPhone(phone string, conns []WAConnectionState) bool {
+	normalized := NormalizePhone(phone)
+	for _, candidate := range dashboardUploadPhones(conns) {
+		if NormalizePhone(candidate) == normalized {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *TelemetryServer) handleMockScan(c *echo.Context) error {
+	if len(s.wappClients) == 0 {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "WhatsApp clients not set"})
+	}
+	for _, client := range s.wappClients {
+		if mock, ok := client.(*MockWhatsAppClient); ok {
+			mock.SimulatePairing()
+		}
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "paired"})
+}
+
+func (s *TelemetryServer) handleToggleGathering(c *echo.Context) error {
+	nextValue := false
+	if s.stateMgr != nil {
+		nextValue = !s.stateMgr.Get().GatheringSignatures
+	}
+	if s.dbMgr != nil {
+		if err := s.dbMgr.SetGatheringSignatures(c.Request().Context(), nextValue); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to save gathering setting"})
+		}
+	}
+	s.stateMgr.Update(func(state *AppState) {
+		state.GatheringSignatures = nextValue
+	})
+	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
+}
+
+type scheduleUpdateRequest struct {
+	Date          string          `json:"date"`
+	TargetMatches json.RawMessage `json:"target_matches"`
+}
+
+func (s *TelemetryServer) handleGetSchedule(c *echo.Context) error {
+	if s.dbMgr == nil {
+		return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "database not configured"})
+	}
+
+	schedules, err := s.dbMgr.GetAllSchedules(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	resp := make(map[string][]int, len(schedules))
+	for date, raw := range schedules {
+		targetMatches, err := ParseSchedule(raw)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("invalid stored schedule for %s", date)})
+		}
+		resp[date] = targetMatches
+	}
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (s *TelemetryServer) handleSetSchedule(c *echo.Context) error {
+	if s.dbMgr == nil {
+		return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "database not configured"})
+	}
+
+	var req scheduleUpdateRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid payload"})
+	}
+
+	scheduleJSON, err := normalizeSchedulePayload(req.TargetMatches)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	if req.Date == "*" {
+		if len(s.campaigns) == 0 {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "campaigns not configured"})
+		}
+
+		updated := 0
+		for _, campaign := range s.campaigns {
+			dates, err := campaignWeekdays(campaign, bucharestLocation)
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+			for _, day := range dates {
+				if err := s.dbMgr.SetDailySchedule(c.Request().Context(), day.Format("2006-01-02"), scheduleJSON); err != nil {
+					return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				}
+				updated++
+			}
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"date":           req.Date,
+			"status":         "ok",
+			"updated_days":   updated,
+			"target_matches": json.RawMessage(scheduleJSON),
+		})
+	}
+
+	if _, err := time.Parse("2006-01-02", req.Date); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "date must be in YYYY-MM-DD format"})
+	}
+	if len(s.campaigns) > 0 {
+		allowed, err := isScheduleDateAllowed(req.Date, s.campaigns, bucharestLocation)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+		if !allowed {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "date must be a campaign weekday within the configured campaign windows"})
+		}
+	}
+
+	if err := s.dbMgr.SetDailySchedule(c.Request().Context(), req.Date, scheduleJSON); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"date":           req.Date,
+		"target_matches": json.RawMessage(scheduleJSON),
+		"status":         "ok",
+	})
+}
+
+func (s *TelemetryServer) listScheduleEntries(ctx context.Context) ([]ScheduleEntry, error) {
+	if s.dbMgr == nil {
+		return nil, nil
+	}
+
+	schedules, err := s.dbMgr.GetAllSchedules(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	entries := make([]ScheduleEntry, 0, len(schedules))
+	for date, raw := range schedules {
+		targetMatches, err := ParseSchedule(raw)
+		if err != nil {
+			return nil, fmt.Errorf("invalid stored schedule for %s: %w", date, err)
+		}
+		entries = append(entries, ScheduleEntry{
+			Date:          date,
+			TargetMatches: targetMatches,
+		})
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Date < entries[j].Date
+	})
+
+	return entries, nil
+}
+
+func (s *TelemetryServer) handleUnreviewedList(c *echo.Context) error {
+	chunks, err := s.listUnreviewedChunks()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, chunks)
+}
+
+func (s *TelemetryServer) handleUnreviewedFile(c *echo.Context) error {
+	filename := c.QueryParam("name")
+	if !isSafeFilename(filename) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid filename"})
+	}
+
+	path := filepath.Join(s.dataDir, "signatures", "unreviewed", filename)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "file not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	c.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", filename))
+	return c.Blob(http.StatusOK, audioMimeType(filename), data)
+}
+
+func (s *TelemetryServer) handleUnreviewedCrop(c *echo.Context) error {
+	filename := c.FormValue("filename")
+	if !isSafeFilename(filename) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid filename"})
+	}
+	var startBytes, endBytes int
+	_, _ = fmt.Sscanf(c.FormValue("start_bytes"), "%d", &startBytes)
+	_, _ = fmt.Sscanf(c.FormValue("end_bytes"), "%d", &endBytes)
+
+	unreviewedDir := filepath.Join(s.dataDir, "signatures", "unreviewed")
+	canonicalDir := filepath.Join(s.dataDir, "signatures", "canonical")
+
+	err := CropAndMarkCanonical(unreviewedDir, canonicalDir, filename, startBytes, endBytes)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	if s.dbMgr != nil {
+		if err := s.dbMgr.CopySignatureFile(c.Request().Context(), "unreviewed", "canonical", filename); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
+}
+
+func (s *TelemetryServer) listUnreviewedChunks() ([]ReviewChunk, error) {
+	unreviewedDir := filepath.Join(s.dataDir, "signatures", "unreviewed")
+	entries, err := os.ReadDir(unreviewedDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	chunks := make([]ReviewChunk, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		chunks = append(chunks, ReviewChunk{
+			Name:    entry.Name(),
+			Size:    info.Size(),
+			ModTime: info.ModTime().Format("2006-01-02 15:04:05"),
+			PlayURL: "/api/unreviewed/file?name=" + url.QueryEscape(entry.Name()),
+		})
+	}
+
+	sort.Slice(chunks, func(i, j int) bool {
+		return chunks[i].ModTime > chunks[j].ModTime
+	})
+	return chunks, nil
+}
+
+func isSafeFilename(name string) bool {
+	return name != "" && name != "." && filepath.Base(name) == name
+}
+
+func audioMimeType(name string) string {
+	if mimeType := mime.TypeByExtension(strings.ToLower(filepath.Ext(name))); mimeType != "" {
+		return mimeType
+	}
+	return "application/octet-stream"
+}
+
+func normalizeSchedulePayload(raw json.RawMessage) (string, error) {
+	if len(raw) == 0 {
+		return "", fmt.Errorf("target_matches must be a JSON array of unique ints within 1..6")
+	}
+
+	var direct []int
+	if err := json.Unmarshal(raw, &direct); err == nil {
+		return MarshalSchedule(direct)
+	}
+
+	var encoded string
+	if err := json.Unmarshal(raw, &encoded); err != nil {
+		return "", fmt.Errorf("target_matches must be a JSON array of unique ints within 1..6")
+	}
+
+	return NormalizeScheduleJSON(encoded)
+}
+
+func formatScheduleTargets(targets []int) string {
+	parts := make([]string, 0, len(targets))
+	for _, target := range targets {
+		parts = append(parts, fmt.Sprintf("%d", target))
+	}
+	return strings.Join(parts, ", ")
 }

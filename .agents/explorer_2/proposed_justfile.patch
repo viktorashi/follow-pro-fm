@@ -1,0 +1,16 @@
+diff --git a/justfile b/justfile
+--- a/justfile
++++ b/justfile
+@@ -20,6 +20,10 @@
+ lint:
+     ./scripts/golangci-lint-shim.sh run
+ 
+-test:
+-    go test -count=1 ./pkg/...
++build-ffmpeg:
++    @chmod +x scripts/build_ffmpeg.sh
++    @./scripts/build_ffmpeg.sh
++
++test: build-ffmpeg
++    PATH="{{invocation_directory()}}/bin:$$PATH" go test -count=1 ./pkg/...
+ 

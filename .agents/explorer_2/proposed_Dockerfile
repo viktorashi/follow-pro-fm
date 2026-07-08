@@ -1,0 +1,40 @@
+# ---- Stage 1: Build ----
+FROM golang:1.26-alpine AS builder
+
+# hadolint ignore=DL3018
+# We add make, perl, and diffutils which are required by FFmpeg's configure script.
+RUN apk add --no-cache gcc musl-dev make perl diffutils
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the submodule files and build script first to leverage Docker layer caching.
+# This prevents rebuilding FFmpeg on every application code change.
+COPY third_party/ffmpeg ./third_party/ffmpeg
+COPY scripts/build_ffmpeg.sh ./scripts/
+RUN ./scripts/build_ffmpeg.sh
+
+COPY . .
+RUN CGO_ENABLED=1 go build -ldflags "-w -s" -o /pro-fm-poller ./cmd/pro-fm-poller
+
+# ---- Stage 2: Runtime ----
+FROM alpine:3.20
+
+# hadolint ignore=DL3018
+RUN apk add --no-cache ca-certificates tzdata
+
+WORKDIR /app
+COPY --from=builder /pro-fm-poller .
+# Include our minimal compiled FFmpeg and FFprobe in the runtime PATH.
+COPY --from=builder /src/bin/ffmpeg /usr/local/bin/ffmpeg
+COPY --from=builder /src/bin/ffprobe /usr/local/bin/ffprobe
+
+# /data is where the persistent volume will be mounted for wapp.sqlite
+RUN mkdir -p /data
+
+COPY static ./static
+
+ENV TZ=Europe/Bucharest
+
+CMD ["./pro-fm-poller"]
