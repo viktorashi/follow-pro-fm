@@ -6,6 +6,7 @@ require (
 	github.com/a-h/templ v0.3.1020
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v5 v5.1.1
+	github.com/lithammer/dedent v1.1.0
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
@@ -22,7 +23,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/elliotchance/orderedmap/v3 v3.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/lithammer/dedent v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
