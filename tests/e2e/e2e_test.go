@@ -1,10 +1,13 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +18,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 var (
@@ -507,7 +512,7 @@ func TestE2E(t *testing.T) {
 			shortPath := filepath.Join(env.AudiosDir, sampleAudioName)
 			_ = os.Remove(shortPath) // remove copied full audio
 
-			cmdCrop := exec.Command("ffmpeg", "-y", "-i", sampleAudioPath, "-t", "0.5", "-c", "copy", shortPath)
+			cmdCrop := exec.Command(bundledFFmpegPath(t), "-y", "-i", sampleAudioPath, "-t", "0.5", "-c", "copy", shortPath)
 			if err := cmdCrop.Run(); err != nil {
 				t.Fatalf("failed to create extremely short audio clip: %v", err)
 			}
@@ -573,4 +578,177 @@ func TestE2E(t *testing.T) {
 		})
 
 	})
+
+	t.Run("Secondary_Uploaded_Audio_Can_Be_Sent", func(t *testing.T) {
+		env := setupTestEnv(t)
+		defer env.cleanup()
+
+		env.markPaired(t)
+		if err := os.WriteFile(filepath.Join(env.TempDir, "wapp_40111222333.sqlite"), []byte("paired"), 0o644); err != nil {
+			t.Fatalf("failed to seed secondary sender session: %v", err)
+		}
+		if err := os.Remove(filepath.Join(env.AudiosDir, sampleAudioName)); err != nil {
+			t.Fatalf("failed to clear canonical audio pool: %v", err)
+		}
+
+		_ = env.startManagedApp(t)
+		time.Sleep(1500 * time.Millisecond)
+
+		audioData, err := os.ReadFile(sampleAudioPath)
+		if err != nil {
+			t.Fatalf("failed to read upload fixture: %v", err)
+		}
+		var uploadBody bytes.Buffer
+		uploadWriter := multipart.NewWriter(&uploadBody)
+		if err := uploadWriter.WriteField("phone", "+40111222333"); err != nil {
+			t.Fatalf("failed to add upload phone: %v", err)
+		}
+		part, err := uploadWriter.CreateFormFile("audio", "fresh-upload.ogg")
+		if err != nil {
+			t.Fatalf("failed to create upload part: %v", err)
+		}
+		if _, err := part.Write(audioData); err != nil {
+			t.Fatalf("failed to write upload audio: %v", err)
+		}
+		if err := uploadWriter.Close(); err != nil {
+			t.Fatalf("failed to close upload form: %v", err)
+		}
+
+		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:%s/api/audio/upload", env.Port), &uploadBody)
+		if err != nil {
+			t.Fatalf("failed to build upload request: %v", err)
+		}
+		req.Header.Set("Content-Type", uploadWriter.FormDataContentType())
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: env.TrustedEmail, Path: "/"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("failed to upload secondary audio: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			t.Fatalf("upload failed: status=%d body=%s", resp.StatusCode, string(body))
+		}
+		_ = resp.Body.Close()
+
+		env.setMockSong("BTS", "Dynamite")
+		time.Sleep(3 * time.Second)
+
+		var sent []map[string]interface{}
+		if data, err := os.ReadFile(env.MockSentMsgPath); err == nil {
+			_ = json.Unmarshal(data, &sent)
+		}
+		if len(sent) == 0 {
+			t.Fatal("expected a sent message after uploading only secondary sender audio")
+		}
+
+		activePath := filepath.Join(env.AudiosDir, "40111222333", "fresh-upload.ogg")
+		usedPath := filepath.Join(env.AudiosDir, "40111222333", "used", "fresh-upload.ogg")
+		if _, err := os.Stat(activePath); !os.IsNotExist(err) {
+			t.Fatalf("secondary uploaded audio should leave the active pool after send: %v", err)
+		}
+		if _, err := os.Stat(usedPath); err != nil {
+			t.Fatalf("secondary uploaded audio was not moved into used/: %v", err)
+		}
+	})
+
+	t.Run("Unreviewed_List_And_Crop_Work_Through_HTTP", func(t *testing.T) {
+		env := setupTestEnv(t)
+		defer env.cleanup()
+
+		env.markPaired(t)
+		unreviewedDir := filepath.Join(env.TempDir, "signatures", "unreviewed")
+		if err := os.MkdirAll(unreviewedDir, 0o755); err != nil {
+			t.Fatalf("failed to create unreviewed dir: %v", err)
+		}
+		filename := "BTS - Butter.mp3"
+		if err := os.WriteFile(filepath.Join(unreviewedDir, filename), []byte("abcdefgh"), 0o644); err != nil {
+			t.Fatalf("failed to seed unreviewed chunk: %v", err)
+		}
+
+		_ = env.startManagedApp(t)
+		time.Sleep(1 * time.Second)
+
+		db, err := sql.Open("sqlite", env.AppDBPath)
+		if err != nil {
+			t.Fatalf("failed to open app database: %v", err)
+		}
+		defer func() { _ = db.Close() }()
+		if _, err := db.Exec(`INSERT INTO signature_files (bucket, filename, recorded_at, campaign_artist) VALUES (?, ?, ?, ?)`, "unreviewed", filename, time.Now().UTC().Format(time.RFC3339), "BTS"); err != nil {
+			t.Fatalf("failed to seed signature metadata row: %v", err)
+		}
+
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://localhost:%s/api/unreviewed", env.Port), nil)
+		if err != nil {
+			t.Fatalf("failed to build list request: %v", err)
+		}
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: env.TrustedEmail, Path: "/"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("failed to list unreviewed chunks: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			t.Fatalf("unexpected unreviewed list response: status=%d body=%s", resp.StatusCode, string(body))
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if !strings.Contains(string(body), filename) {
+			t.Fatalf("unreviewed list did not include %q: %s", filename, string(body))
+		}
+
+		var cropBody bytes.Buffer
+		cropWriter := multipart.NewWriter(&cropBody)
+		for key, value := range map[string]string{"filename": filename, "start_bytes": "2", "end_bytes": "6"} {
+			if err := cropWriter.WriteField(key, value); err != nil {
+				t.Fatalf("failed to add crop field %s: %v", key, err)
+			}
+		}
+		if err := cropWriter.Close(); err != nil {
+			t.Fatalf("failed to close crop form: %v", err)
+		}
+
+		req, err = http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:%s/unreviewed/crop", env.Port), &cropBody)
+		if err != nil {
+			t.Fatalf("failed to build crop request: %v", err)
+		}
+		req.Header.Set("Content-Type", cropWriter.FormDataContentType())
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: env.TrustedEmail, Path: "/"})
+		resp, err = http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("failed to crop unreviewed chunk: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			t.Fatalf("crop failed: status=%d body=%s", resp.StatusCode, string(body))
+		}
+		_ = resp.Body.Close()
+
+		canonicalData, err := os.ReadFile(filepath.Join(env.TempDir, "signatures", "canonical", filename))
+		if err != nil {
+			t.Fatalf("failed to read canonical crop: %v", err)
+		}
+		if string(canonicalData) != "cdef" {
+			t.Fatalf("canonical crop = %q, want %q", string(canonicalData), "cdef")
+		}
+		originalData, err := os.ReadFile(filepath.Join(unreviewedDir, filename))
+		if err != nil {
+			t.Fatalf("failed to read original unreviewed chunk: %v", err)
+		}
+		if string(originalData) != "abcdefgh" {
+			t.Fatalf("original unreviewed chunk should stay intact, got %q", string(originalData))
+		}
+	})
+}
+
+func bundledFFmpegPath(t *testing.T) string {
+	t.Helper()
+
+	path := filepath.Join("..", "..", "bin", "ffmpeg")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("bundled ffmpeg missing at %s: %v", path, err)
+	}
+	return path
 }
