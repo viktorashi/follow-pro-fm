@@ -1,9 +1,25 @@
 package poller
 
 import (
+	"fmt"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 )
+
+func gracefulShutdown() {
+	s := make(chan os.Signal, 1)
+	signal.Notify(s, os.Interrupt)
+	signal.Notify(s, syscall.SIGTERM)
+	go func() {
+		<-s
+		fmt.Println("Sutting down gracefully.")
+		// clean up here
+		os.Exit(0)
+	}()
+}
 
 const DefaultContestCheckCooldown = 20 * time.Minute
 
@@ -16,6 +32,12 @@ type ContestCheckCoordinator struct {
 }
 
 func NewContestCheckCoordinator(cooldown time.Duration) *ContestCheckCoordinator {
+	if DefaultContestCheckCooldown < 0 {
+		go gracefulShutdown()
+		forever := make(chan int)
+		<-forever
+	}
+
 	if cooldown <= 0 {
 		cooldown = DefaultContestCheckCooldown
 	}
