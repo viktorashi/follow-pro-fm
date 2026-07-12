@@ -131,6 +131,17 @@ func (sm *StateManager) UpdateConnection(phone string, fn func(conn *WAConnectio
 	}
 }
 
+func (sm *StateManager) ReplaceConnectionPhone(from, to string) {
+	sm.Update(func(state *AppState) {
+		for i := range state.Connections {
+			if state.Connections[i].Phone == from {
+				state.Connections[i].Phone = to
+				return
+			}
+		}
+	})
+}
+
 // Get returns a copy of the current state.
 func (sm *StateManager) Get() AppState {
 	sm.mu.RLock()

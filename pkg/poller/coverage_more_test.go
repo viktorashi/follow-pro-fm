@@ -71,20 +71,9 @@ func TestKillSwitchAndRadioLogAccessors(t *testing.T) {
 }
 
 func TestHandleAddSenderPhone(t *testing.T) {
-	t.Run("missing phone", func(t *testing.T) {
-		server := &TelemetryServer{}
-		ctx, rec := newFormContext(http.MethodPost, "/api/sender/add", url.Values{})
-		if err := server.handleAddSenderPhone(ctx); err != nil {
-			t.Fatalf("handleAddSenderPhone() error = %v", err)
-		}
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
-		}
-	})
-
 	t.Run("missing callback", func(t *testing.T) {
 		server := &TelemetryServer{}
-		ctx, rec := newFormContext(http.MethodPost, "/api/sender/add", url.Values{"phone": []string{"40700111222"}})
+		ctx, rec := newFormContext(http.MethodPost, "/api/sender/add", url.Values{})
 		if err := server.handleAddSenderPhone(ctx); err != nil {
 			t.Fatalf("handleAddSenderPhone() error = %v", err)
 		}
@@ -93,27 +82,23 @@ func TestHandleAddSenderPhone(t *testing.T) {
 		}
 	})
 
-	t.Run("success normalizes plus", func(t *testing.T) {
-		var got string
+	t.Run("starts QR pairing", func(t *testing.T) {
+		calls := 0
 		server := &TelemetryServer{}
-		server.SetWhatsAppClients([]WhatsAppClient{&MockWhatsAppClient{phone: "+40111222333"}})
-		if len(server.wappClients) != 1 {
-			t.Fatalf("SetWhatsAppClients() len = %d, want 1", len(server.wappClients))
-		}
-		server.SetOnAddPhone(func(phone string) error {
-			got = phone
+		server.SetOnAddPhone(func() error {
+			calls++
 			return nil
 		})
 
-		ctx, rec := newFormContext(http.MethodPost, "/api/sender/add", url.Values{"phone": []string{"40700111222"}})
+		ctx, rec := newFormContext(http.MethodPost, "/api/sender/add", url.Values{})
 		if err := server.handleAddSenderPhone(ctx); err != nil {
 			t.Fatalf("handleAddSenderPhone() error = %v", err)
 		}
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 		}
-		if got != "+40700111222" {
-			t.Fatalf("callback phone = %q, want %q", got, "+40700111222")
+		if calls != 1 {
+			t.Fatalf("pairing callback calls = %d, want 1", calls)
 		}
 	})
 }

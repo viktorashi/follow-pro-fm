@@ -18,6 +18,11 @@ type DBManager struct {
 	trustedEmailsPath string
 }
 
+type SenderSession struct {
+	Phone      string
+	DBFilename string
+}
+
 func NewDBManager(dbPath string) (*DBManager, error) {
 	dsn := "file:" + dbPath
 	if strings.Contains(dbPath, "?") {
@@ -95,6 +100,10 @@ func initSchema(db *sql.DB) error {
 			campaign_artist TEXT NOT NULL,
 			PRIMARY KEY(bucket, filename)
 		);`,
+		`CREATE TABLE IF NOT EXISTS sender_sessions (
+			phone TEXT PRIMARY KEY,
+			db_filename TEXT NOT NULL
+		);`,
 	}
 
 	for _, q := range queries {
@@ -103,6 +112,33 @@ func initSchema(db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+func (m *DBManager) SetSenderSession(ctx context.Context, phone, dbFilename string) error {
+	_, err := m.db.ExecContext(ctx,
+		`INSERT INTO sender_sessions (phone, db_filename) VALUES (?, ?)
+		 ON CONFLICT(phone) DO UPDATE SET db_filename = excluded.db_filename`,
+		phone, dbFilename,
+	)
+	return err
+}
+
+func (m *DBManager) SenderSessions(ctx context.Context) ([]SenderSession, error) {
+	rows, err := m.db.QueryContext(ctx, "SELECT phone, db_filename FROM sender_sessions ORDER BY phone")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var sessions []SenderSession
+	for rows.Next() {
+		var session SenderSession
+		if err := rows.Scan(&session.Phone, &session.DBFilename); err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, session)
+	}
+	return sessions, rows.Err()
 }
 
 func (m *DBManager) IsTrustedEmail(ctx context.Context, email string) (bool, error) {

@@ -35,7 +35,7 @@ type TelemetryServer struct {
 	audiosDir   string
 	campaigns   []Campaign
 	wappClients []WhatsAppClient
-	onAddPhone  func(phone string) error
+	onAddPhone  func() error
 	timeNow     func() time.Time
 }
 
@@ -472,30 +472,21 @@ func (s *TelemetryServer) SetWhatsAppClients(clients []WhatsAppClient) {
 	s.wappClients = clients
 }
 
-func (s *TelemetryServer) SetOnAddPhone(fn func(phone string) error) {
+func (s *TelemetryServer) SetOnAddPhone(fn func() error) {
 	s.onAddPhone = fn
 }
 
 func (s *TelemetryServer) handleAddSenderPhone(c *echo.Context) error {
-	phone := c.FormValue("phone")
-	phone = strings.TrimSpace(phone)
-	if phone == "" {
-		return c.String(http.StatusBadRequest, "Phone number is required")
-	}
-	if !strings.HasPrefix(phone, "+") {
-		phone = "+" + phone
-	}
-
 	if s.onAddPhone != nil {
-		err := s.onAddPhone(phone)
+		err := s.onAddPhone()
 		if err != nil {
-			return c.String(http.StatusInternalServerError, "Error adding phone: "+err.Error())
+			return c.String(http.StatusConflict, "Could not start QR pairing: "+err.Error())
 		}
 	} else {
 		return c.String(http.StatusInternalServerError, "Add phone callback not set")
 	}
 
-	return c.String(http.StatusOK, "Phone added successfully. Connecting...")
+	return c.String(http.StatusOK, "QR pairing started. Scan the code above.")
 }
 
 func (s *TelemetryServer) handleAudioUpload(c *echo.Context) error {

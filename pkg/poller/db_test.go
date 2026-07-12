@@ -173,3 +173,22 @@ func TestCanSendCampaignArtistBlocksFingerprintResendUntilAnotherArtistIsLogged(
 		t.Fatal("Expected fingerprint resend boundary to open once a non-campaign artist is logged")
 	}
 }
+
+func TestSenderSessionsPersistDiscoveredPhoneAndDatabase(t *testing.T) {
+	dbMgr, err := NewDBManager(":memory:")
+	if err != nil {
+		t.Fatalf("NewDBManager() error = %v", err)
+	}
+	ctx := context.Background()
+	if err := dbMgr.SetSenderSession(ctx, "+40111222333", "wapp_pairing_abc.sqlite"); err != nil {
+		t.Fatalf("SetSenderSession() error = %v", err)
+	}
+
+	sessions, err := dbMgr.SenderSessions(ctx)
+	if err != nil {
+		t.Fatalf("SenderSessions() error = %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].Phone != "+40111222333" || sessions[0].DBFilename != "wapp_pairing_abc.sqlite" {
+		t.Fatalf("SenderSessions() = %+v", sessions)
+	}
+}
