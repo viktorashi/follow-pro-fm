@@ -1,6 +1,7 @@
 package poller
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,13 +14,18 @@ import (
 )
 
 func TestHandleLogoutClearsSessionAndRedirects(t *testing.T) {
-	server := &TelemetryServer{}
+	auth, _, email := newTestAuthManager(t)
+	token, err := auth.CreateSession(context.Background(), email)
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	server := &TelemetryServer{authMgr: auth}
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/logout", nil)
 	req.AddCookie(&http.Cookie{
 		Name:  "session_token",
-		Value: "smoke@example.com",
+		Value: token,
 		Path:  "/",
 	})
 	rec := httptest.NewRecorder()
@@ -44,6 +50,9 @@ func TestHandleLogoutClearsSessionAndRedirects(t *testing.T) {
 	}
 	if !strings.Contains(setCookie, "Path=/") {
 		t.Fatalf("Set-Cookie = %q, want cookie path", setCookie)
+	}
+	if _, err := auth.SessionEmail(context.Background(), token); err == nil {
+		t.Fatal("logout must revoke the session")
 	}
 }
 
@@ -113,11 +122,11 @@ func TestMockScanPairsAuthenticatedMockClients(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/test/mock-scan", nil)
-	req.AddCookie(&http.Cookie{
-		Name:  "session_token",
-		Value: trustedEmail,
-		Path:  "/",
-	})
+	token, err := server.authMgr.CreateSession(context.Background(), trustedEmail)
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: token, Path: "/"})
 	rec := httptest.NewRecorder()
 	server.echo.ServeHTTP(rec, req)
 

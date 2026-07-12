@@ -22,6 +22,8 @@ type AuthManager struct {
 	baseURL        string
 }
 
+const sessionDuration = 7 * 24 * time.Hour
+
 func NewAuthManager(db *DBManager, sendgridKey, fromEmail, adminPass, baseURL string) *AuthManager {
 	var sc *sendgrid.Client
 	if sendgridKey != "" {
@@ -115,12 +117,52 @@ func (a *AuthManager) VerifyMagicLink(ctx context.Context, token string) (string
 		return "", fmt.Errorf("token expired")
 	}
 
-	trusted, _ := a.db.IsTrustedEmail(ctx, email)
-	if !trusted {
+	trusted, err := a.db.IsTrustedEmail(ctx, email)
+	if err != nil || !trusted {
 		return "", echo.ErrUnauthorized
 	}
 
 	return email, nil
+}
+
+func (a *AuthManager) CreateSession(ctx context.Context, email string) (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	token := hex.EncodeToString(b)
+	_, err := a.db.db.ExecContext(ctx,
+		"INSERT INTO auth_sessions (token, email, expires_at) VALUES (?, ?, ?)",
+		token, email, time.Now().Add(sessionDuration),
+	)
+	if err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+func (a *AuthManager) SessionEmail(ctx context.Context, token string) (string, error) {
+	var email string
+	var expiresAt time.Time
+	err := a.db.db.QueryRowContext(ctx, "SELECT email, expires_at FROM auth_sessions WHERE token = ?", token).Scan(&email, &expiresAt)
+	if err != nil || time.Now().After(expiresAt) {
+		_ = a.RevokeSession(ctx, token)
+		return "", echo.ErrUnauthorized
+	}
+
+	trusted, err := a.db.IsTrustedEmail(ctx, email)
+	if err != nil || !trusted {
+		return "", echo.ErrUnauthorized
+	}
+	return email, nil
+}
+
+func (a *AuthManager) RevokeSession(ctx context.Context, token string) error {
+	if token == "" {
+		return nil
+	}
+	_, err := a.db.db.ExecContext(ctx, "DELETE FROM auth_sessions WHERE token = ?", token)
+	return err
 }
 
 // Session middleware for Echo v5
@@ -137,12 +179,8 @@ func (a *AuthManager) RequireAuth() echo.MiddlewareFunc {
 				return c.Redirect(http.StatusTemporaryRedirect, "/login")
 			}
 
-			// For simplicity, we just use the email as the cookie value since it's a personal app.
-			// In a real app, this should be a signed JWT or session ID.
-			// We check if the email in the cookie is trusted.
-			email := cookie.Value
-			trusted, err := a.db.IsTrustedEmail(c.Request().Context(), email)
-			if err != nil || !trusted {
+			email, err := a.SessionEmail(c.Request().Context(), cookie.Value)
+			if err != nil {
 				return c.Redirect(http.StatusTemporaryRedirect, "/login")
 			}
 
@@ -152,14 +190,15 @@ func (a *AuthManager) RequireAuth() echo.MiddlewareFunc {
 	}
 }
 
-// SetSessionCookie helper
-func SetSessionCookie(c *echo.Context, email string) {
+func SetSessionCookie(c *echo.Context, token string) {
 	cookie := new(http.Cookie)
 	cookie.Name = "session_token"
-	cookie.Value = email
-	cookie.Expires = time.Now().Add(24 * 7 * time.Hour) // 1 week
+	cookie.Value = token
+	cookie.Expires = time.Now().Add(sessionDuration)
+	cookie.MaxAge = int(sessionDuration.Seconds())
 	cookie.Path = "/"
 	cookie.HttpOnly = true
+	cookie.SameSite = http.SameSiteLaxMode
 
 	// If running over HTTPS (like on Fly.io), set Secure
 	if os.Getenv("FLY_APP_NAME") != "" {
@@ -175,6 +214,9 @@ func ClearSessionCookie(c *echo.Context) {
 	cookie.Name = "session_token"
 	cookie.Value = ""
 	cookie.Expires = time.Now().Add(-1 * time.Hour)
+	cookie.MaxAge = -1
 	cookie.Path = "/"
+	cookie.HttpOnly = true
+	cookie.SameSite = http.SameSiteLaxMode
 	c.SetCookie(cookie)
 }
