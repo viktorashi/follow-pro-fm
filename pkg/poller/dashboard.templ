@@ -282,9 +282,8 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 
 					<div class="glass p-6">
 						<h2 class="text-sm uppercase text-muted mb-4">Add Sender Phone</h2>
-						<form hx-post="/api/sender/add" hx-target="#add-sender-result" hx-swap="innerHTML" class="flex gap-2">
-							<input type="text" name="phone" placeholder="+40..." class="input" style="flex-grow: 1;" required />
-							<button type="submit" class="btn btn-secondary">Add</button>
+						<form hx-post="/api/sender/add" hx-target="#add-sender-result" hx-swap="innerHTML">
+							<button type="submit" class="btn btn-secondary">Add phone and show QR code</button>
 						</form>
 						<div id="add-sender-result" class="mt-4 text-sm text-warning"></div>
 					</div>
