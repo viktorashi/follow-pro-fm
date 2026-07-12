@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,6 +45,7 @@ type TestEnv struct {
 	MockArtist            string
 	MockTitle             string
 	TelegramAlertCaptured bool
+	SessionToken          string
 	mu                    sync.Mutex
 }
 
@@ -215,6 +217,7 @@ func (e *TestEnv) startApp(ctx context.Context) (*exec.Cmd, error) {
 		fmt.Sprintf("MOCK_SENT_MESSAGES_PATH=%s", e.MockSentMsgPath),
 		fmt.Sprintf("BASE_URL=http://localhost:%s", e.Port),
 		"ENVIRONMENT=test",
+		"ADMIN_PASSWORD=e2e-admin",
 		"TELEGRAM_BOT_TOKEN=mock-bot-token",
 		"TELEGRAM_CHAT_ID=mock-chat-id",
 		fmt.Sprintf("HTTP_PROXY=%s", e.MockServer.URL),
@@ -226,6 +229,37 @@ func (e *TestEnv) startApp(ctx context.Context) (*exec.Cmd, error) {
 		return nil, err
 	}
 	return cmd, nil
+}
+
+func (e *TestEnv) authCookie(t *testing.T) *http.Cookie {
+	t.Helper()
+	if e.SessionToken != "" {
+		return &http.Cookie{Name: "session_token", Value: e.SessionToken, Path: "/"}
+	}
+
+	form := url.Values{"email": {e.TrustedEmail}, "password": {"e2e-admin"}}
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:%s/login", e.Port), strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatalf("failed to build login request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("failed to login: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("login status = %d, want %d", resp.StatusCode, http.StatusFound)
+	}
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == "session_token" {
+			e.SessionToken = cookie.Value
+			return cookie
+		}
+	}
+	t.Fatal("login response did not set session_token")
+	return nil
 }
 
 func TestE2E(t *testing.T) {
@@ -249,7 +283,7 @@ func TestE2E(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to build mock-scan request: %v", err)
 			}
-			req.AddCookie(&http.Cookie{Name: "session_token", Value: env.TrustedEmail, Path: "/"})
+			req.AddCookie(env.authCookie(t))
 
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
@@ -619,7 +653,7 @@ func TestE2E(t *testing.T) {
 			t.Fatalf("failed to build upload request: %v", err)
 		}
 		req.Header.Set("Content-Type", uploadWriter.FormDataContentType())
-		req.AddCookie(&http.Cookie{Name: "session_token", Value: env.TrustedEmail, Path: "/"})
+		req.AddCookie(env.authCookie(t))
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("failed to upload secondary audio: %v", err)
@@ -682,7 +716,7 @@ func TestE2E(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to build list request: %v", err)
 		}
-		req.AddCookie(&http.Cookie{Name: "session_token", Value: env.TrustedEmail, Path: "/"})
+		req.AddCookie(env.authCookie(t))
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("failed to list unreviewed chunks: %v", err)
@@ -714,7 +748,7 @@ func TestE2E(t *testing.T) {
 			t.Fatalf("failed to build crop request: %v", err)
 		}
 		req.Header.Set("Content-Type", cropWriter.FormDataContentType())
-		req.AddCookie(&http.Cookie{Name: "session_token", Value: env.TrustedEmail, Path: "/"})
+		req.AddCookie(env.authCookie(t))
 		resp, err = http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("failed to crop unreviewed chunk: %v", err)
