@@ -145,12 +145,19 @@ func (s *TelemetryServer) handleLoginSubmit(c *echo.Context) error {
 		return c.String(http.StatusUnauthorized, "Invalid credentials or email not trusted")
 	}
 
-	SetSessionCookie(c, email)
+	token, err := s.authMgr.CreateSession(c.Request().Context(), email)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Could not create session")
+	}
+	SetSessionCookie(c, token)
 	c.Response().Header().Set("HX-Redirect", "/")
 	return c.Redirect(http.StatusFound, "/")
 }
 
 func (s *TelemetryServer) handleLogout(c *echo.Context) error {
+	if cookie, err := c.Cookie("session_token"); err == nil {
+		_ = s.authMgr.RevokeSession(c.Request().Context(), cookie.Value)
+	}
 	ClearSessionCookie(c)
 	c.Response().Header().Set("HX-Redirect", "/login")
 	return c.Redirect(http.StatusFound, "/login")
@@ -173,7 +180,11 @@ func (s *TelemetryServer) handleMagicLinkVerify(c *echo.Context) error {
 		return c.String(http.StatusUnauthorized, "Invalid or expired token")
 	}
 
-	SetSessionCookie(c, email)
+	sessionToken, err := s.authMgr.CreateSession(c.Request().Context(), email)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Could not create session")
+	}
+	SetSessionCookie(c, sessionToken)
 	return c.Redirect(http.StatusFound, "/")
 }
 

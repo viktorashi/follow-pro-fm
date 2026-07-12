@@ -53,6 +53,11 @@ func initSchema(db *sql.DB) error {
 			email TEXT NOT NULL,
 			expires_at DATETIME NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS auth_sessions (
+			token TEXT PRIMARY KEY,
+			email TEXT NOT NULL,
+			expires_at DATETIME NOT NULL
+		);`,
 		`CREATE TABLE IF NOT EXISTS played_songs (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			artist TEXT NOT NULL,
