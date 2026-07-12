@@ -95,20 +95,21 @@ func shouldBypassCampaignTimeChecks() bool {
 }
 
 type Poller struct {
-	APIURL             string
-	PollInterval       time.Duration
-	ActiveCampaigns    []Campaign
-	TargetPhone        string
-	SendVoiceNote      func(senderPhone string, targetPhone string, audioPath string) error
-	DisconnectWhatsApp func()
-	ConnectWhatsApp    func() error
-	StateMgr           *StateManager
-	Alerter            Alerter
-	AudiosDir          string
-	SignaturesDir      string
-	AudioBuffer        *CircularAudioBuffer
-	DBMgr              *DBManager
-	BaseURL            string
+	APIURL               string
+	PollInterval         time.Duration
+	ActiveCampaigns      []Campaign
+	TargetPhone          string
+	SendVoiceNote        func(senderPhone string, targetPhone string, audioPath string) error
+	DisconnectWhatsApp   func()
+	ConnectWhatsApp      func() error
+	StateMgr             *StateManager
+	Alerter              Alerter
+	AudiosDir            string
+	SignaturesDir        string
+	AudioBuffer          *CircularAudioBuffer
+	DBMgr                *DBManager
+	BaseURL              string
+	ContestCheckCooldown time.Duration
 
 	matchesToday int
 	lastCheckDay int
@@ -116,6 +117,8 @@ type Poller struct {
 	ignoredTriggerMu sync.Mutex
 	ignoredTrigger   fingerprintTrigger
 	sendMu           sync.Mutex
+	checkerMu        sync.Mutex
+	checker          *ContestCheckCoordinator
 }
 
 type fingerprintTrigger struct {
@@ -132,6 +135,26 @@ const (
 func normalizeTriggerValue(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	return strings.Join(strings.Fields(value), " ")
+}
+
+// CanCheckContest lets every checker avoid repeated work during a claimed window.
+func (p *Poller) CanCheckContest(now time.Time) bool {
+	return p.contestCheckCoordinator().CanCheck(now)
+}
+
+// ClaimContestWindow lets the first checker that finds a campaign candidate
+// put all checkers to sleep for the shared cooldown.
+func (p *Poller) ClaimContestWindow(now time.Time) bool {
+	return p.contestCheckCoordinator().Claim(now)
+}
+
+func (p *Poller) contestCheckCoordinator() *ContestCheckCoordinator {
+	p.checkerMu.Lock()
+	defer p.checkerMu.Unlock()
+	if p.checker == nil {
+		p.checker = NewContestCheckCoordinator(p.ContestCheckCooldown)
+	}
+	return p.checker
 }
 
 func triggerValuesMatch(left, right string) bool {
@@ -442,6 +465,9 @@ func (p *Poller) prepareStartState() bool {
 }
 
 func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
+	if !p.CanCheckContest(now) {
+		return
+	}
 	p.resetDailyMatchesIfNeeded(now)
 
 	song, err := p.getNowPlaying()
@@ -473,6 +499,9 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 		if p.matchesToday < MaxDailyMatches {
 			campaignArtist, matchesCampaign := p.matchingCampaignArtist(now, song)
 			if matchesCampaign {
+				if !p.ClaimContestWindow(now) {
+					return
+				}
 				if p.consumeIgnoredMetadataTrigger(song) {
 					log.Printf("   [INFO] Ignoring metadata trigger for '%s - %s' because it was already triggered by fingerprint.", song.Artist, song.Title)
 				} else if !p.wasSongPlayedRecently(song.Artist, song.Title) && p.canSendCampaignArtist(campaignArtist, currentRadioLogID) {
@@ -703,6 +732,9 @@ func (p *Poller) fingerprintLoop() {
 	for {
 		<-ticker.C
 		now := time.Now()
+		if !p.CanCheckContest(now) {
+			continue
+		}
 		if p.StateMgr != nil && p.StateMgr.Get().KillSwitchActive {
 			continue
 		}
@@ -735,6 +767,9 @@ func (p *Poller) fingerprintLoop() {
 			continue
 		}
 		if !matched {
+			continue
+		}
+		if !p.ClaimContestWindow(now) {
 			continue
 		}
 

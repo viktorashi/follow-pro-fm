@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"go.mau.fi/whatsmeow/types/events"
 )
 
 func TestPoller_E2E(t *testing.T) {
@@ -24,22 +22,6 @@ func TestPoller_E2E(t *testing.T) {
 		t.Fatalf("Failed to initialize WhatsApp: %v", err)
 	}
 	defer client.Disconnect()
-
-	// Track when the message is delivered to prevent "Waiting for this message" E2E issue
-	deliveredChan := make(chan struct{}, 1)
-	client.AddEventHandler(func(evt interface{}) {
-		switch v := evt.(type) {
-		case *events.Receipt:
-			t.Logf("   📥 Received receipt: Type=%s, Chat=%s, MessageIDs=%v", v.Type, v.Chat, v.MessageIDs)
-			// Empty Type means "delivered" (types.ReceiptTypeDelivered)
-			if v.Type == "" || v.Type == "read" {
-				select {
-				case deliveredChan <- struct{}{}:
-				default:
-				}
-			}
-		}
-	})
 
 	targetPhone := E2ETargetPhoneFromEnv()
 
@@ -76,12 +58,4 @@ func TestPoller_E2E(t *testing.T) {
 		t.Fatalf("Expected 1 match to trigger message, got %d", poller.matchesToday)
 	}
 
-	t.Log("🚀 Message sent! Waiting up to 60 seconds for recipient's delivery/read receipt (unlock/open WhatsApp on your phone to receive)...")
-	select {
-	case <-deliveredChan:
-		t.Log("✅ Success! Recipient phone received/acknowledged the message. E2E keys are synchronized.")
-		time.Sleep(3 * time.Second)
-	case <-time.After(60 * time.Second):
-		t.Log("⚠️ Timeout! Recipient phone did not acknowledge the message within 60 seconds. It might be offline or locked. The message may display 'Waiting for this message' on the recipient device.")
-	}
 }

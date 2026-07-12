@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  GOLANGCI_LINT_VERSION: v2.12.2
+  GOTESTSUM_VERSION: v1.13.0
+
 jobs:
   test-and-lint:
     runs-on: ubuntu-latest
@@ -22,7 +26,9 @@ jobs:
       - name: Restore ffmpeg cache
         uses: actions/cache@v4
         with:
-          path: bin
+          path: |
+            bin/ffmpeg
+            bin/ffprobe
           key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/build_ffmpeg.sh', 'third_party/ffmpeg/configure', 'third_party/ffmpeg/fftools/ffmpeg.c', 'third_party/ffmpeg/libavcodec/allcodecs.c') }}
 
       - name: Build minimal ffmpeg
@@ -30,24 +36,42 @@ jobs:
           ./scripts/build_ffmpeg.sh
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
 
-      - name: Install golangci-lint
-        run: curl -sSfL https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz | tar -xz --strip-components=1 -C bin golangci-lint-2.12.2-linux-amd64/golangci-lint
+      - name: Restore golangci-lint binary cache
+        id: golangci-lint-bin-cache
+        uses: actions/cache@v4
+        with:
+          path: bin/golangci-lint
+          key: golangci-lint-bin-${{ runner.os }}-${{ env.GOLANGCI_LINT_VERSION }}
 
-      - name: Restore golangci-lint cache
+      - name: Install golangci-lint
+        if: steps.golangci-lint-bin-cache.outputs.cache-hit != 'true'
+        run: |
+          version="${GOLANGCI_LINT_VERSION#v}"
+          curl -sSfL "https://github.com/golangci/golangci-lint/releases/download/${GOLANGCI_LINT_VERSION}/golangci-lint-${version}-linux-amd64.tar.gz" | tar -xz --strip-components=1 -C bin "golangci-lint-${version}-linux-amd64/golangci-lint"
+
+      - name: Restore golangci-lint data cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/golangci-lint
-          key: golangci-lint-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          key: golangci-lint-data-${{ runner.os }}-${{ env.GOLANGCI_LINT_VERSION }}-${{ hashFiles('go.sum') }}
           restore-keys: |
-            golangci-lint-${{ runner.os }}-
+            golangci-lint-data-${{ runner.os }}-${{ env.GOLANGCI_LINT_VERSION }}-
 
       - name: Lint
         run: ./scripts/golangci-lint-shim.sh run
 
+      - name: Restore gotestsum binary cache
+        id: gotestsum-bin-cache
+        uses: actions/cache@v4
+        with:
+          path: bin/gotestsum
+          key: gotestsum-bin-${{ runner.os }}-${{ env.GOTESTSUM_VERSION }}
+
       - name: Install gotestsum
+        if: steps.gotestsum-bin-cache.outputs.cache-hit != 'true'
         run: |
-          mkdir -p bin
-          curl -sSL https://github.com/gotestyourself/gotestsum/releases/download/v1.13.0/gotestsum_1.13.0_linux_amd64.tar.gz | tar -xz -C bin
+          version="${GOTESTSUM_VERSION#v}"
+          curl -sSfL "https://github.com/gotestyourself/gotestsum/releases/download/${GOTESTSUM_VERSION}/gotestsum_${version}_linux_amd64.tar.gz" | tar -xz -C bin gotestsum
 
       - name: Test & coverage
         run: |
