@@ -437,54 +437,54 @@ func TestPoller_checkSong_Deduplication(t *testing.T) {
 
 	currentSong := &SongInfo{}
 	// Helper to simulate a song play
-	simulateSong := func(artist, title string) {
+	simulateSong := func(artist, title string, when time.Time) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = fmt.Fprintf(w, `{"data":{"epg":{"playerExtendedSongTitle":"%s","playerExtendedSongSubtitle":"%s"}}}`, artist, title)
 		}))
 		defer server.Close()
 		poller.APIURL = server.URL
-		poller.checkSong(currentSong, activeTime)
+		poller.checkSong(currentSong, when)
 	}
 
 	// 1. Play BTS - Dynamite (should trigger, voiceCalls = 1)
-	simulateSong("BTS", "Dynamite")
+	simulateSong("BTS", "Dynamite", activeTime)
 	if voiceCalls != 1 {
 		t.Errorf("Expected 1 voice call for BTS Dynamite, got %d", voiceCalls)
 	}
 
 	// 2. Play Kamrad - BE MINE (No campaign, voiceCalls = 1)
-	simulateSong("Kamrad", "BE MINE")
+	simulateSong("Kamrad", "BE MINE", activeTime.Add(21*time.Minute))
 	if voiceCalls != 1 {
 		t.Errorf("Expected 1 voice call, got %d", voiceCalls)
 	}
 
 	// 3. Play BTS - Dynamite again (It was 1 song ago, so it's in the last 2 plays, should SKIP, voiceCalls = 1)
-	simulateSong("BTS", "Dynamite")
+	simulateSong("BTS", "Dynamite", activeTime.Add(42*time.Minute))
 	if voiceCalls != 1 {
 		t.Errorf("Expected BTS Dynamite to be deduplicated! Voice calls should still be 1, got %d", voiceCalls)
 	}
 
 	// 4. Play Ed Sheeran - Shape of You (No campaign, voiceCalls = 1)
-	simulateSong("Ed Sheeran", "Shape of You")
+	simulateSong("Ed Sheeran", "Shape of You", activeTime.Add(63*time.Minute))
 
 	// 5. Play BTS - Dynamite again.
 	// Now the history is:
 	// Ed Sheeran - Shape of You (1 play ago)
 	// BTS - Dynamite (2 plays ago)
 	// It's still in the last 2 plays! Should SKIP!
-	simulateSong("BTS", "Dynamite")
+	simulateSong("BTS", "Dynamite", activeTime.Add(84*time.Minute))
 	if voiceCalls != 1 {
 		t.Errorf("Expected BTS Dynamite to be deduplicated again (2 plays ago)! Voice calls got %d", voiceCalls)
 	}
 
 	// 6. Play another song to push BTS out of top 2
-	simulateSong("The Weeknd", "Blinding Lights")
-	simulateSong("Bruno Mars", "Leave the Door Open")
+	simulateSong("The Weeknd", "Blinding Lights", activeTime.Add(105*time.Minute))
+	simulateSong("Bruno Mars", "Leave the Door Open", activeTime.Add(126*time.Minute))
 
 	// History: Bruno Mars (1), The Weeknd (2).
 	// 7. Play BTS - Dynamite. Should trigger again once it is out of the
 	// previous 2-song window and there is still globally unused audio left.
-	simulateSong("BTS", "Dynamite")
+	simulateSong("BTS", "Dynamite", activeTime.Add(147*time.Minute))
 	if voiceCalls != 2 {
 		t.Errorf("Expected BTS Dynamite to trigger again since it's out of last 2 plays! Voice calls got %d", voiceCalls)
 	}
@@ -581,13 +581,13 @@ func TestPoller_checkSong_RequiresDifferentArtistBetweenCampaignSends(t *testing
 		t.Fatalf("Expected first BTS detection to send once, got %d", voiceCalls)
 	}
 
-	simulateSong("BTS", "Butter", activeTime.Add(time.Minute))
+	simulateSong("BTS", "Butter", activeTime.Add(21*time.Minute))
 	if voiceCalls != 1 {
 		t.Fatalf("Expected BTS resend without another artist in between to be blocked, got %d", voiceCalls)
 	}
 
-	simulateSong("Kamrad", "BE MINE", activeTime.Add(2*time.Minute))
-	simulateSong("BTS", "Permission to Dance", activeTime.Add(3*time.Minute))
+	simulateSong("Kamrad", "BE MINE", activeTime.Add(42*time.Minute))
+	simulateSong("BTS", "Permission to Dance", activeTime.Add(63*time.Minute))
 	if voiceCalls != 2 {
 		t.Fatalf("Expected BTS resend after another artist to be allowed, got %d", voiceCalls)
 	}

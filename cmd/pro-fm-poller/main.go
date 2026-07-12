@@ -304,20 +304,30 @@ func main() {
 	// Keep roughly 3 minutes of MP3 pre-roll in memory for dashcam captures.
 	audioBuffer := poller.NewCircularAudioBuffer(streamURL, 3*60*128000/8)
 	defer audioBuffer.Stop()
+	contestCheckCooldown := poller.DefaultContestCheckCooldown
+	if configured := os.Getenv("CONTEST_CHECK_COOLDOWN"); configured != "" {
+		parsed, err := time.ParseDuration(configured)
+		if err != nil || parsed <= 0 {
+			log.Printf("Invalid CONTEST_CHECK_COOLDOWN %q; using %s", configured, contestCheckCooldown)
+		} else {
+			contestCheckCooldown = parsed
+		}
+	}
 
 	// 10. Start Poller
 	p := &poller.Poller{
-		APIURL:          profmAPIURL,
-		PollInterval:    2 * time.Second,
-		ActiveCampaigns: activeCampaigns,
-		TargetPhone:     targetPhone,
-		StateMgr:        stateMgr,
-		Alerter:         alerter,
-		AudiosDir:       audiosDir,
-		SignaturesDir:   filepath.Join(filepath.Dir(audiosDir), "signatures"),
-		AudioBuffer:     audioBuffer,
-		DBMgr:           dbMgr,
-		BaseURL:         baseURL,
+		APIURL:               profmAPIURL,
+		PollInterval:         2 * time.Second,
+		ActiveCampaigns:      activeCampaigns,
+		TargetPhone:          targetPhone,
+		StateMgr:             stateMgr,
+		Alerter:              alerter,
+		AudiosDir:            audiosDir,
+		SignaturesDir:        filepath.Join(filepath.Dir(audiosDir), "signatures"),
+		AudioBuffer:          audioBuffer,
+		DBMgr:                dbMgr,
+		BaseURL:              baseURL,
+		ContestCheckCooldown: contestCheckCooldown,
 		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
 			wappMutex.RLock()
 			c, ok := wappClients[senderPhone]
