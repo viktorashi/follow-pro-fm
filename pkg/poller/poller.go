@@ -23,6 +23,7 @@ const (
 	followProFMKeyword   = "follow profm"
 	dashcamAfterDuration = 4 * time.Minute
 	fingerprintTailBytes = 768 * 1024
+	contestCaptureWindow = 2 * time.Second
 )
 
 var bucharestLocation = loadBucharestLocation()
@@ -199,7 +200,7 @@ func (p *Poller) captureContestAudio(now time.Time, metadata SongInfo) *contestC
 	}
 	p.captureMu.Lock()
 	defer p.captureMu.Unlock()
-	if p.capture == nil || p.capture.Audio.Version != snapshot.Version {
+	if p.capture == nil || now.Sub(p.capture.CapturedAt) >= contestCaptureWindow {
 		p.capture = &contestCapture{Audio: snapshot, CapturedAt: now, Metadata: metadata}
 	} else if metadata != (SongInfo{}) {
 		p.capture.Metadata = metadata

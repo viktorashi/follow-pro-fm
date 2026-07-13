@@ -637,6 +637,7 @@ func TestPoller_captureContestAudioSharesOneSnapshotAndMetadata(t *testing.T) {
 	now := bucharestTime(2026, time.June, 17, 12, 0, 0)
 
 	first := poller.captureContestAudio(now, SongInfo{})
+	buffer.writeBytes([]byte(" newer"))
 	second := poller.captureContestAudio(now, SongInfo{Artist: "BTS", Title: "Butter"})
 	if first == nil || first != second {
 		t.Fatal("expected checkers to receive the same captured audio observation")
@@ -646,6 +647,9 @@ func TestPoller_captureContestAudioSharesOneSnapshotAndMetadata(t *testing.T) {
 	}
 	if second.Metadata != (SongInfo{Artist: "BTS", Title: "Butter"}) {
 		t.Fatalf("metadata = %#v, want current song", second.Metadata)
+	}
+	if next := poller.captureContestAudio(now.Add(contestCaptureWindow), SongInfo{}); next == first {
+		t.Fatal("expected the next checker window to capture fresh audio")
 	}
 }
 
