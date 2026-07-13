@@ -129,19 +129,21 @@ type fingerprintTrigger struct {
 
 type metadataContestChecker struct {
 	poller      *Poller
+	coordinator *ContestCheckCoordinator
 	currentSong *SongInfo
 }
 
 func (c *metadataContestChecker) Check(now time.Time) {
-	c.poller.checkSong(c.currentSong, now)
+	c.poller.checkSongWithCoordinator(c.currentSong, now, c.coordinator)
 }
 
 type fingerprintContestChecker struct {
-	poller *Poller
+	poller      *Poller
+	coordinator *ContestCheckCoordinator
 }
 
 func (c *fingerprintContestChecker) Check(now time.Time) {
-	c.poller.checkFingerprint(now)
+	c.poller.checkFingerprintWithCoordinator(now, c.coordinator)
 }
 
 var (
@@ -397,25 +399,41 @@ func (p *Poller) Start() {
 	log.Println(strings.Repeat("-", 40))
 
 	var currentSong SongInfo
-	// Both detectors share Poller's ContestCheckCoordinator. Metadata runs in
-	// this polling loop; fingerprinting runs independently every two seconds.
-	var metadataChecker ContestChecker = &metadataContestChecker{poller: p, currentSong: &currentSong}
+	coordinator := p.contestCheckCoordinator()
+	// Both checkers receive this exact coordinator. Its mutex makes Claim()
+	// atomic, so only one checker can enter the shared WhatsApp send window.
+	var metadataChecker ContestChecker = &metadataContestChecker{
+		poller:      p,
+		coordinator: coordinator,
+		currentSong: &currentSong,
+	}
 
+	var fingerprintChecker ContestChecker
 	if p.AudioBuffer != nil {
-		var fingerprintChecker ContestChecker = &fingerprintContestChecker{poller: p}
+		fingerprintChecker = &fingerprintContestChecker{
+			poller:      p,
+			coordinator: coordinator,
+		}
 		p.AudioBuffer.Start()
-		go runFingerprintChecker(fingerprintChecker)
 	}
 
 	shouldPoll := p.prepareStartState()
+	go p.runMetadataChecker(metadataChecker, shouldPoll)
+	if fingerprintChecker != nil {
+		go runFingerprintChecker(fingerprintChecker)
+	}
 
-	// Use a cron-like Ticker instead of an infinite sleep loop
+	select {}
+}
+
+func (p *Poller) runMetadataChecker(checker ContestChecker, checkImmediately bool) {
+	// Metadata checks have their own goroutine; this loop also owns the
+	// campaign sleep/wake transition for the application.
 	ticker := time.NewTicker(p.PollInterval)
 	defer ticker.Stop()
 
-	// Trigger immediately on start
-	if shouldPoll {
-		metadataChecker.Check(time.Now())
+	if checkImmediately {
+		checker.Check(time.Now())
 	}
 
 	var isSleeping bool
@@ -468,7 +486,7 @@ func (p *Poller) Start() {
 			}
 		}
 
-		metadataChecker.Check(now)
+		checker.Check(now)
 	}
 }
 
@@ -491,7 +509,11 @@ func (p *Poller) prepareStartState() bool {
 }
 
 func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
-	if !p.CanCheckContest(now) {
+	p.checkSongWithCoordinator(currentSong, now, p.contestCheckCoordinator())
+}
+
+func (p *Poller) checkSongWithCoordinator(currentSong *SongInfo, now time.Time, coordinator *ContestCheckCoordinator) {
+	if !coordinator.CanCheck(now) {
 		return
 	}
 	p.resetDailyMatchesIfNeeded(now)
@@ -525,7 +547,7 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 		if p.matchesToday < MaxDailyMatches {
 			campaignArtist, matchesCampaign := p.matchingCampaignArtist(now, song)
 			if matchesCampaign {
-				if !p.ClaimContestWindow(now) {
+				if !coordinator.Claim(now) {
 					return
 				}
 				if p.consumeIgnoredMetadataTrigger(song) {
@@ -760,8 +782,8 @@ func runFingerprintChecker(checker ContestChecker) {
 	}
 }
 
-func (p *Poller) checkFingerprint(now time.Time) {
-	if !p.CanCheckContest(now) {
+func (p *Poller) checkFingerprintWithCoordinator(now time.Time, coordinator *ContestCheckCoordinator) {
+	if !coordinator.CanCheck(now) {
 		return
 	}
 	if p.StateMgr != nil && p.StateMgr.Get().KillSwitchActive {
@@ -796,7 +818,7 @@ func (p *Poller) checkFingerprint(now time.Time) {
 		log.Printf("   ⚠️ Fingerprint matching failed: %v", err)
 		return
 	}
-	if !matched || !p.ClaimContestWindow(now) {
+	if !matched || !coordinator.Claim(now) {
 		return
 	}
 
