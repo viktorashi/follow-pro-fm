@@ -234,9 +234,9 @@ func main() {
 
 	// Load campaigns in memory
 	activeCampaigns := []poller.Campaign{
-		{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
-		{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana"},
-		{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd"},
+		{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS", Phrases: []string{"follow profm"}},
+		{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana", Phrases: []string{"follow profm"}},
+		{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd", Phrases: []string{"follow profm"}},
 	}
 
 	// 8. Start Web Dashboard (Telemetry Server)
@@ -392,6 +392,10 @@ func main() {
 			contestCheckCooldown = parsed
 		}
 	}
+	var transcribe func(context.Context, []byte) (string, error)
+	if transcriptionURL := os.Getenv("TRANSCRIPTION_URL"); transcriptionURL != "" {
+		transcribe = poller.NewHTTPTranscriber(transcriptionURL)
+	}
 
 	// 10. Start Poller
 	p := &poller.Poller{
@@ -407,6 +411,7 @@ func main() {
 		DBMgr:                dbMgr,
 		BaseURL:              baseURL,
 		ContestCheckCooldown: contestCheckCooldown,
+		Transcribe:           transcribe,
 		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
 			wappMutex.RLock()
 			c, ok := wappClients[senderPhone]
