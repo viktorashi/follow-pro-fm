@@ -397,11 +397,14 @@ func (p *Poller) Start() {
 	log.Println(strings.Repeat("-", 40))
 
 	var currentSong SongInfo
+	// Both detectors share Poller's ContestCheckCoordinator. Metadata runs in
+	// this polling loop; fingerprinting runs independently every two seconds.
 	var metadataChecker ContestChecker = &metadataContestChecker{poller: p, currentSong: &currentSong}
 
 	if p.AudioBuffer != nil {
+		var fingerprintChecker ContestChecker = &fingerprintContestChecker{poller: p}
 		p.AudioBuffer.Start()
-		go p.fingerprintLoop()
+		go runFingerprintChecker(fingerprintChecker)
 	}
 
 	shouldPoll := p.prepareStartState()
@@ -747,10 +750,9 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist, artist, title
 	}
 }
 
-func (p *Poller) fingerprintLoop() {
+func runFingerprintChecker(checker ContestChecker) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
-	var checker ContestChecker = &fingerprintContestChecker{poller: p}
 
 	for {
 		<-ticker.C
