@@ -127,6 +127,28 @@ type fingerprintTrigger struct {
 	title         string
 }
 
+type metadataContestChecker struct {
+	poller      *Poller
+	currentSong *SongInfo
+}
+
+func (c *metadataContestChecker) Check(now time.Time) {
+	c.poller.checkSong(c.currentSong, now)
+}
+
+type fingerprintContestChecker struct {
+	poller *Poller
+}
+
+func (c *fingerprintContestChecker) Check(now time.Time) {
+	c.poller.checkFingerprint(now)
+}
+
+var (
+	_ ContestChecker = (*metadataContestChecker)(nil)
+	_ ContestChecker = (*fingerprintContestChecker)(nil)
+)
+
 const (
 	triggerSourceMetadata    = "metadata"
 	triggerSourceFingerprint = "fingerprint"
@@ -375,6 +397,7 @@ func (p *Poller) Start() {
 	log.Println(strings.Repeat("-", 40))
 
 	var currentSong SongInfo
+	var metadataChecker ContestChecker = &metadataContestChecker{poller: p, currentSong: &currentSong}
 
 	if p.AudioBuffer != nil {
 		p.AudioBuffer.Start()
@@ -389,7 +412,7 @@ func (p *Poller) Start() {
 
 	// Trigger immediately on start
 	if shouldPoll {
-		p.checkSong(&currentSong, time.Now())
+		metadataChecker.Check(time.Now())
 	}
 
 	var isSleeping bool
@@ -442,7 +465,7 @@ func (p *Poller) Start() {
 			}
 		}
 
-		p.checkSong(&currentSong, now)
+		metadataChecker.Check(now)
 	}
 }
 
@@ -727,93 +750,92 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist, artist, title
 func (p *Poller) fingerprintLoop() {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
-	canonicalDir := filepath.Join(p.SignaturesDir, "canonical")
+	var checker ContestChecker = &fingerprintContestChecker{poller: p}
 
 	for {
 		<-ticker.C
-		now := time.Now()
-		if !p.CanCheckContest(now) {
-			continue
-		}
-		if p.StateMgr != nil && p.StateMgr.Get().KillSwitchActive {
-			continue
-		}
-		if !p.hasActiveCampaign(now) {
-			continue
-		}
-		p.resetDailyMatchesIfNeeded(now)
-		if p.matchesToday >= MaxDailyMatches {
-			continue
-		}
-		allowedNames, err := allowedCanonicalSignatureNames(context.Background(), p.DBMgr, p.ActiveCampaigns, canonicalDir, now)
+		checker.Check(time.Now())
+	}
+}
+
+func (p *Poller) checkFingerprint(now time.Time) {
+	if !p.CanCheckContest(now) {
+		return
+	}
+	if p.StateMgr != nil && p.StateMgr.Get().KillSwitchActive {
+		return
+	}
+	if !p.hasActiveCampaign(now) {
+		return
+	}
+	p.resetDailyMatchesIfNeeded(now)
+	if p.matchesToday >= MaxDailyMatches {
+		return
+	}
+	canonicalDir := filepath.Join(p.SignaturesDir, "canonical")
+	allowedNames, err := allowedCanonicalSignatureNames(context.Background(), p.DBMgr, p.ActiveCampaigns, canonicalDir, now)
+	if err != nil {
+		log.Printf("   ⚠️ Failed to load campaign-bound signatures: %v", err)
+		return
+	}
+	if len(allowedNames) == 0 {
+		return
+	}
+	buf := p.AudioBuffer.ReadCurrentBuffer()
+	if len(buf) == 0 {
+		return
+	}
+	if len(buf) > fingerprintTailBytes {
+		buf = buf[len(buf)-fingerprintTailBytes:]
+	}
+
+	matched, name, err := findMatchingCanonicalSignatureInSet(buf, defaultFingerprintFormat, canonicalDir, allowedNames)
+	if err != nil {
+		log.Printf("   ⚠️ Fingerprint matching failed: %v", err)
+		return
+	}
+	if !matched || !p.ClaimContestWindow(now) {
+		return
+	}
+
+	campaignArtist, err := signatureCampaignArtist(context.Background(), p.DBMgr, p.ActiveCampaigns, "canonical", name, canonicalDir)
+	if err != nil {
+		log.Printf("   ⚠️ Failed to resolve campaign owner for signature %q: %v", name, err)
+		return
+	}
+
+	trigger := fingerprintTrigger{signatureName: name, artist: campaignArtist, title: "Unknown"}
+	song := p.resolveFingerprintSong(trigger)
+
+	p.ignoredTriggerMu.Lock()
+	if p.ignoredTrigger.signatureName == name {
+		p.ignoredTriggerMu.Unlock()
+		return
+	}
+	p.ignoredTrigger = trigger
+	p.ignoredTriggerMu.Unlock()
+
+	log.Printf("   [FINGERPRINT MATCH] Matched signature: %s -> %s - %s", name, song.Artist, song.Title)
+	if p.wasSongPlayedRecently(song.Artist, song.Title) {
+		return
+	}
+
+	currentRadioLogID := int64(0)
+	if p.DBMgr != nil {
+		latestRadioLogID, err := p.DBMgr.GetLatestRadioLogID(context.Background())
 		if err != nil {
-			log.Printf("   ⚠️ Failed to load campaign-bound signatures: %v", err)
-			continue
+			log.Printf("   ⚠️ Failed to load latest radio log id for fingerprint match %q: %v", name, err)
+			return
 		}
-		if len(allowedNames) == 0 {
-			continue
-		}
-		buf := p.AudioBuffer.ReadCurrentBuffer()
-		if len(buf) == 0 {
-			continue
-		}
-		if len(buf) > fingerprintTailBytes {
-			buf = buf[len(buf)-fingerprintTailBytes:]
-		}
+		currentRadioLogID = latestRadioLogID + 1
+	}
 
-		matched, name, err := findMatchingCanonicalSignatureInSet(buf, defaultFingerprintFormat, canonicalDir, allowedNames)
-		if err != nil {
-			log.Printf("   ⚠️ Fingerprint matching failed: %v", err)
-			continue
-		}
-		if !matched {
-			continue
-		}
-		if !p.ClaimContestWindow(now) {
-			continue
-		}
+	if !p.canSendCampaignArtist(campaignArtist, currentRadioLogID) {
+		return
+	}
 
-		campaignArtist, err := signatureCampaignArtist(context.Background(), p.DBMgr, p.ActiveCampaigns, "canonical", name, canonicalDir)
-		if err != nil {
-			log.Printf("   ⚠️ Failed to resolve campaign owner for signature %q: %v", name, err)
-			continue
-		}
-
-		trigger := fingerprintTrigger{signatureName: name, artist: campaignArtist, title: "Unknown"}
-		song := p.resolveFingerprintSong(trigger)
-
-		p.ignoredTriggerMu.Lock()
-		if p.ignoredTrigger.signatureName != name {
-			p.ignoredTrigger = trigger
-			p.ignoredTriggerMu.Unlock()
-
-			log.Printf("   [FINGERPRINT MATCH] Matched signature: %s -> %s - %s", name, song.Artist, song.Title)
-			if p.wasSongPlayedRecently(song.Artist, song.Title) {
-				continue
-			}
-
-			currentRadioLogID := int64(0)
-			if p.DBMgr != nil {
-				latestRadioLogID, err := p.DBMgr.GetLatestRadioLogID(context.Background())
-				if err != nil {
-					log.Printf("   ⚠️ Failed to load latest radio log id for fingerprint match %q: %v", name, err)
-					continue
-				}
-				currentRadioLogID = latestRadioLogID + 1
-			}
-
-			if !p.canSendCampaignArtist(campaignArtist, currentRadioLogID) {
-				continue
-			}
-
-			matchIndex, selected := p.claimScheduledMatch(now, song.Artist, song.Title)
-			if !selected {
-				continue
-			}
-
-			p.doTriggerVoiceNote(triggerSourceFingerprint, campaignArtist, song.Artist, song.Title, now, matchIndex, currentRadioLogID)
-		} else {
-			p.ignoredTriggerMu.Unlock()
-		}
+	matchIndex, selected := p.claimScheduledMatch(now, song.Artist, song.Title)
+	if selected {
+		p.doTriggerVoiceNote(triggerSourceFingerprint, campaignArtist, song.Artist, song.Title, now, matchIndex, currentRadioLogID)
 	}
 }
