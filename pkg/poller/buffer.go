@@ -22,6 +22,12 @@ type CircularAudioBuffer struct {
 	cancel       chan struct{}
 }
 
+// AudioSnapshot is one immutable view of the shared live stream.
+type AudioSnapshot struct {
+	Data    []byte
+	Version int64
+}
+
 // NewCircularAudioBuffer creates a new circular buffer.
 // For a 128kbps stream, 3 minutes is ~2.88MB. 8MB covers >8 minutes.
 func NewCircularAudioBuffer(streamURL string, sizeBytes int) *CircularAudioBuffer {
@@ -128,16 +134,22 @@ func (cab *CircularAudioBuffer) Trigger(futureDuration time.Duration, callback f
 
 // ReadCurrentBuffer returns a copy of the current buffer contents in chronological order.
 func (cab *CircularAudioBuffer) ReadCurrentBuffer() []byte {
+	return cab.Snapshot().Data
+}
+
+// Snapshot returns the stream bytes and a monotonically increasing version.
+// Consumers can share the same snapshot instead of copying the rolling buffer each.
+func (cab *CircularAudioBuffer) Snapshot() AudioSnapshot {
 	cab.mu.Lock()
 	defer cab.mu.Unlock()
 
 	out := make([]byte, len(cab.buffer))
 	if cab.totalWritten < int64(len(cab.buffer)) {
 		copy(out, cab.buffer[:cab.writeIdx])
-		return out[:cab.writeIdx]
+		return AudioSnapshot{Data: out[:cab.writeIdx], Version: cab.totalWritten}
 	}
 
 	copy(out, cab.buffer[cab.writeIdx:])
 	copy(out[len(cab.buffer)-cab.writeIdx:], cab.buffer[:cab.writeIdx])
-	return out
+	return AudioSnapshot{Data: out, Version: cab.totalWritten}
 }
