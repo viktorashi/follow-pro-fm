@@ -328,6 +328,10 @@ func (p *Poller) hasActiveCampaign(now time.Time) bool {
 	})
 }
 
+func (p *Poller) canRunContestChecker(now time.Time) bool {
+	return p.hasActiveCampaign(now) && (p.StateMgr == nil || !p.StateMgr.Get().KillSwitchActive)
+}
+
 func (p *Poller) getNowPlaying() (SongInfo, error) {
 	req, err := http.NewRequest("GET", p.APIURL, nil)
 	if err != nil {
@@ -420,20 +424,23 @@ func (p *Poller) Start() {
 	shouldPoll := p.prepareStartState()
 	go p.runMetadataChecker(metadataChecker, shouldPoll)
 	if fingerprintChecker != nil {
-		go runFingerprintChecker(fingerprintChecker)
+		go runFingerprintChecker(p, fingerprintChecker)
 	}
 
 	select {}
 }
 
 func (p *Poller) runMetadataChecker(checker ContestChecker, checkImmediately bool) {
-	// Metadata checks have their own goroutine; this loop also owns the
-	// campaign sleep/wake transition for the application.
+	// This worker owns the application sleep/wake transition. Both checker
+	// workers skip their detector work outside an active campaign window.
 	ticker := time.NewTicker(p.PollInterval)
 	defer ticker.Stop()
 
 	if checkImmediately {
-		checker.Check(time.Now())
+		now := time.Now()
+		if p.canRunContestChecker(now) {
+			checker.Check(now)
+		}
 	}
 
 	var isSleeping bool
@@ -772,13 +779,16 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist, artist, title
 	}
 }
 
-func runFingerprintChecker(checker ContestChecker) {
+func runFingerprintChecker(p *Poller, checker ContestChecker) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		<-ticker.C
-		checker.Check(time.Now())
+		now := time.Now()
+		if p.canRunContestChecker(now) {
+			checker.Check(now)
+		}
 	}
 }
 
@@ -786,10 +796,7 @@ func (p *Poller) checkFingerprintWithCoordinator(now time.Time, coordinator *Con
 	if !coordinator.CanCheck(now) {
 		return
 	}
-	if p.StateMgr != nil && p.StateMgr.Get().KillSwitchActive {
-		return
-	}
-	if !p.hasActiveCampaign(now) {
+	if !p.canRunContestChecker(now) {
 		return
 	}
 	p.resetDailyMatchesIfNeeded(now)
