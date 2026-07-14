@@ -134,6 +134,7 @@ type contestCapture struct {
 	CapturedAt time.Time
 	Metadata   SongInfo
 	Tags       []contestTag
+	Transcript string
 }
 
 type contestTag struct {
@@ -291,7 +292,7 @@ func (p *Poller) resolveFingerprintSong(trigger fingerprintTrigger) SongInfo {
 	return song
 }
 
-func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte) {
+func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte, transcript string) {
 	recordedAt := time.Now()
 	filename := fmt.Sprintf("%s - %s - %d.mp3", song.Artist, song.Title, recordedAt.Unix())
 	unreviewedDir := filepath.Join(p.SignaturesDir, "unreviewed")
@@ -320,6 +321,9 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte) {
 				return
 			}
 			if saved {
+				if transcript != "" {
+					_ = os.WriteFile(filepath.Join(unreviewedDir, filename+".txt"), []byte(transcript), 0644)
+				}
 				p.reportSavedUnreviewedChunk(song, filename, recordedAt)
 				return
 			}
@@ -334,6 +338,9 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte) {
 				if err := SaveUnreviewedChunk(data, unreviewedDir, filename); err != nil {
 					log.Printf("   ⚠️ Failed to save unreviewed chunk %q: %v", filename, err)
 					return
+				}
+				if transcript != "" {
+					_ = os.WriteFile(filepath.Join(unreviewedDir, filename+".txt"), []byte(transcript), 0644)
 				}
 				p.reportSavedUnreviewedChunk(song, filename, recordedAt)
 				return
@@ -353,7 +360,7 @@ func (p *Poller) saveCapturedChunkForReview(capture *contestCapture, tag contest
 	if song == (SongInfo{}) {
 		song = SongInfo{Artist: tag.CampaignArtist, Title: tag.Phrase}
 	}
-	p.saveUnreviewedChunkForReview(song, capture.Audio.Data)
+	p.saveUnreviewedChunkForReview(song, capture.Audio.Data, capture.Transcript)
 }
 
 func (p *Poller) reportSavedUnreviewedChunk(song SongInfo, filename string, recordedAt time.Time) {
@@ -985,6 +992,10 @@ func (p *Poller) checkTranscriptionWithCoordinator(now time.Time, coordinator *C
 		log.Printf("   ⚠️ Transcription failed: %v", err)
 		return
 	}
+	p.captureMu.Lock()
+	capture.Transcript = transcript
+	p.captureMu.Unlock()
+
 	campaignArtist, phrase, matched := p.matchingCampaignPhrase(now, transcript)
 	if !matched || !coordinator.Claim(now) {
 		return
