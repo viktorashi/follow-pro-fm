@@ -321,10 +321,7 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte, transc
 				return
 			}
 			if saved {
-				if transcript != "" {
-					_ = os.WriteFile(filepath.Join(unreviewedDir, filename+".txt"), []byte(transcript), 0644)
-				}
-				p.reportSavedUnreviewedChunk(song, filename, recordedAt)
+				p.reportSavedUnreviewedChunk(song, filename, recordedAt, transcript)
 				return
 			}
 			matchedName = name
@@ -339,10 +336,7 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte, transc
 					log.Printf("   ⚠️ Failed to save unreviewed chunk %q: %v", filename, err)
 					return
 				}
-				if transcript != "" {
-					_ = os.WriteFile(filepath.Join(unreviewedDir, filename+".txt"), []byte(transcript), 0644)
-				}
-				p.reportSavedUnreviewedChunk(song, filename, recordedAt)
+				p.reportSavedUnreviewedChunk(song, filename, recordedAt, transcript)
 				return
 			}
 			matchedName = name
@@ -363,9 +357,9 @@ func (p *Poller) saveCapturedChunkForReview(capture *contestCapture, tag contest
 	p.saveUnreviewedChunkForReview(song, capture.Audio.Data, capture.Transcript)
 }
 
-func (p *Poller) reportSavedUnreviewedChunk(song SongInfo, filename string, recordedAt time.Time) {
+func (p *Poller) reportSavedUnreviewedChunk(song SongInfo, filename string, recordedAt time.Time, transcript string) {
 	if campaignArtist, ok := campaignArtistForTime(p.ActiveCampaigns, recordedAt); ok && p.DBMgr != nil {
-		_ = p.DBMgr.UpsertSignatureFile(context.Background(), "unreviewed", filename, recordedAt, campaignArtist)
+		_ = p.DBMgr.UpsertSignatureFile(context.Background(), "unreviewed", filename, recordedAt, campaignArtist, transcript)
 	}
 	log.Printf("   [SIGNATURE REVIEW] Saved unreviewed chunk %q for manual review", filename)
 	_ = p.Alerter.AlertInfo(AlertEvent{
@@ -1041,7 +1035,12 @@ func (p *Poller) matchingCampaignPhrase(now time.Time, transcript string) (strin
 		if !campaign.IsActive(now) {
 			continue
 		}
-		for _, phrase := range campaign.Phrases {
+		phrases := campaign.Phrases
+		if p.DBMgr != nil {
+			dbPhrases, _ := p.DBMgr.GetCampaignPhrases(context.Background(), campaign.Artist)
+			phrases = append(phrases, dbPhrases...)
+		}
+		for _, phrase := range phrases {
 			if normalized := normalizeTriggerValue(phrase); normalized != "" && strings.Contains(transcript, normalized) {
 				return campaign.Artist, phrase, true
 			}

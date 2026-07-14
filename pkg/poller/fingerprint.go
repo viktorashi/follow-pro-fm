@@ -178,7 +178,7 @@ func signatureCampaignArtist(ctx context.Context, dbMgr *DBManager, campaigns []
 		return "", fmt.Errorf("no active campaign found for %s at %s", filename, info.ModTime().Format(time.RFC3339))
 	}
 	if dbMgr != nil {
-		_ = dbMgr.UpsertSignatureFile(ctx, bucket, filename, info.ModTime(), campaignArtist)
+		_ = dbMgr.UpsertSignatureFile(ctx, bucket, filename, info.ModTime(), campaignArtist, "")
 	}
 	return campaignArtist, nil
 }
