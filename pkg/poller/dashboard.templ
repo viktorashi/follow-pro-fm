@@ -83,6 +83,39 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 				});
 				return false;
 			}
+			function addCampaignPhrase(event, form) {
+				event.preventDefault();
+				const data = new FormData(form);
+				fetch('/api/campaigns/phrases', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						campaign_artist: data.get('campaign_artist'),
+						phrase: data.get('phrase')
+					})
+				}).then(async res => {
+					if (!res.ok) {
+						const payload = await res.json().catch(() => ({}));
+						throw new Error(payload.error || 'Add phrase failed');
+					}
+					window.location.reload();
+				}).catch(err => alert(err.message));
+				return false;
+			}
+			function showTab(tabName) {
+				document.querySelectorAll('.matcher-tab-btn').forEach(btn => {
+					if (btn.dataset.target === tabName) {
+						btn.classList.add('text-primary');
+						btn.classList.remove('text-muted');
+					} else {
+						btn.classList.add('text-muted');
+						btn.classList.remove('text-primary');
+					}
+				});
+				document.querySelectorAll('.matcher-tab-content').forEach(content => {
+					content.style.display = content.id === 'tab-' + tabName ? 'block' : 'none';
+				});
+			}
 			function uploadAudio(event, form) {
 				event.preventDefault();
 				const data = new FormData(form);
@@ -226,10 +259,10 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 						@AudioStatsComponent(state.UnusedAudios, state.UsedAudios)
 					</div>
 
-					<div class="glass p-6">
+					<div class="glass p-6" id="matcher-data">
 						<div class="flex justify-between items-center mb-4">
 							<div>
-								<h2 class="text-sm uppercase text-muted mb-1">Signature Review</h2>
+								<h2 class="text-sm uppercase text-muted mb-1">Matcher-related data</h2>
 								if state.GatheringSignatures {
 									<div class="text-sm text-success">Gathering enabled</div>
 								} else {
@@ -238,39 +271,69 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 							</div>
 							<a href="/api/unreviewed" class="btn btn-secondary btn-sm" target="_blank">List JSON</a>
 						</div>
-						if len(chunks) == 0 {
-							<div class="text-sm text-muted">No unreviewed chunks waiting for manual review.</div>
-						} else {
-							<div class="space-y-4">
-								for _, chunk := range chunks {
-									<div class="border border-white/10 rounded p-4">
-										<div class="flex justify-between items-center gap-4 mb-3">
-											<div>
-												<div class="font-semibold break-all">{ chunk.Name }</div>
-												<div class="text-xs text-muted">{ fmt.Sprintf("%d bytes", chunk.Size) } · { chunk.ModTime }</div>
+
+						<div class="flex gap-4 border-b border-white/10 mb-4 pb-2">
+							<button class="matcher-tab-btn font-semibold text-primary" data-target="fingerprint" onclick="showTab('fingerprint')">Fingerprint Audios</button>
+							<button class="matcher-tab-btn font-semibold text-muted" data-target="transcription" onclick="showTab('transcription')">Transcription Phrases</button>
+						</div>
+
+						<div id="tab-fingerprint" class="matcher-tab-content">
+							if len(chunks) == 0 {
+								<div class="text-sm text-muted">No unreviewed chunks waiting for manual review.</div>
+							} else {
+								<div class="space-y-4">
+									for _, chunk := range chunks {
+										<div class="border border-white/10 rounded p-4">
+											<div class="flex justify-between items-center gap-4 mb-3">
+												<div>
+													<div class="font-semibold break-all">{ chunk.Name }</div>
+													<div class="text-xs text-muted">{ fmt.Sprintf("%d bytes", chunk.Size) } · { chunk.ModTime }</div>
+												</div>
+												<a href={ templ.URL(chunk.PlayURL) } target="_blank" class="btn btn-secondary btn-sm">Open</a>
 											</div>
-											<a href={ templ.URL(chunk.PlayURL) } target="_blank" class="btn btn-secondary btn-sm">Open</a>
+											<audio controls preload="none" class="w-full mb-3">
+												<source src={ chunk.PlayURL } type={ audioMimeType(chunk.Name) } />
+												Your browser does not support the audio element.
+											</audio>
+											<form onsubmit="return cropUnreviewed(event, this)" class="flex gap-2 items-end">
+												<input type="hidden" name="filename" value={ chunk.Name }/>
+												<div>
+													<label class="text-xs text-muted mb-1">Start byte</label>
+													<input type="number" name="start_bytes" min="0" value="0" class="input" required/>
+												</div>
+												<div>
+													<label class="text-xs text-muted mb-1">End byte</label>
+													<input type="number" name="end_bytes" min="1" value={ fmt.Sprintf("%d", chunk.Size) } class="input" required/>
+												</div>
+												<button type="submit" class="btn btn-primary btn-sm">Crop to Canonical</button>
+											</form>
 										</div>
-										<audio controls preload="none" class="w-full mb-3">
-											<source src={ chunk.PlayURL } type={ audioMimeType(chunk.Name) } />
-											Your browser does not support the audio element.
-										</audio>
-										<form onsubmit="return cropUnreviewed(event, this)" class="flex gap-2 items-end">
-											<input type="hidden" name="filename" value={ chunk.Name }/>
-											<div>
-												<label class="text-xs text-muted mb-1">Start byte</label>
-												<input type="number" name="start_bytes" min="0" value="0" class="input" required/>
+									}
+								</div>
+							}
+						</div>
+
+						<div id="tab-transcription" class="matcher-tab-content" style="display: none;">
+							if len(chunks) == 0 {
+								<div class="text-sm text-muted">No transcriptions waiting for manual review.</div>
+							} else {
+								<div class="space-y-4">
+									for _, chunk := range chunks {
+										if chunk.Transcript != "" {
+											<div class="border border-white/10 rounded p-4 mb-3">
+												<div class="font-semibold text-sm mb-2">Audio: { chunk.Name }</div>
+												<div class="bg-black/20 p-3 rounded font-mono text-sm mb-3">"{ chunk.Transcript }"</div>
+												<form onsubmit="return addCampaignPhrase(event, this)" class="flex gap-2 items-end">
+													<input type="hidden" name="campaign_artist" value={ chunk.CampaignArtist } />
+													<input type="text" name="phrase" value={ chunk.Transcript } class="input flex-grow" required />
+													<button type="submit" class="btn btn-primary btn-sm">Add Phrase</button>
+												</form>
 											</div>
-											<div>
-												<label class="text-xs text-muted mb-1">End byte</label>
-												<input type="number" name="end_bytes" min="1" value={ fmt.Sprintf("%d", chunk.Size) } class="input" required/>
-											</div>
-											<button type="submit" class="btn btn-primary btn-sm">Crop to Canonical</button>
-										</form>
-									</div>
-								}
-							</div>
-						}
+										}
+									}
+								</div>
+							}
+						</div>
 					</div>
 				</div>
 
@@ -282,9 +345,8 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 
 					<div class="glass p-6">
 						<h2 class="text-sm uppercase text-muted mb-4">Add Sender Phone</h2>
-						<form hx-post="/api/sender/add" hx-target="#add-sender-result" hx-swap="innerHTML" class="flex gap-2">
-							<input type="text" name="phone" placeholder="+40..." class="input" style="flex-grow: 1;" required />
-							<button type="submit" class="btn btn-secondary">Add</button>
+						<form hx-post="/api/sender/add" hx-target="#add-sender-result" hx-swap="innerHTML">
+							<button type="submit" class="btn btn-secondary">Add phone and show QR code</button>
 						</form>
 						<div id="add-sender-result" class="mt-4 text-sm text-warning"></div>
 					</div>

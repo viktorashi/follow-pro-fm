@@ -630,6 +630,44 @@ func TestPoller_consumeIgnoredMetadataTrigger(t *testing.T) {
 	}
 }
 
+func TestPoller_captureContestAudioSharesOneSnapshotAndMetadata(t *testing.T) {
+	buffer := NewCircularAudioBuffer("", 16)
+	buffer.writeBytes([]byte("live audio"))
+	poller := &Poller{AudioBuffer: buffer}
+	now := bucharestTime(2026, time.June, 17, 12, 0, 0)
+
+	first := poller.captureContestAudio(now, SongInfo{})
+	buffer.writeBytes([]byte(" newer"))
+	second := poller.captureContestAudio(now, SongInfo{Artist: "BTS", Title: "Butter"})
+	if first == nil || first != second {
+		t.Fatal("expected checkers to receive the same captured audio observation")
+	}
+	if got, want := string(second.Audio.Data), "live audio"; got != want {
+		t.Fatalf("captured audio = %q, want %q", got, want)
+	}
+	if second.Metadata != (SongInfo{Artist: "BTS", Title: "Butter"}) {
+		t.Fatalf("metadata = %#v, want current song", second.Metadata)
+	}
+	if next := poller.captureContestAudio(now.Add(contestCaptureWindow), SongInfo{}); next == first {
+		t.Fatal("expected the next checker window to capture fresh audio")
+	}
+}
+
+func TestPoller_matchingCampaignPhraseRequiresAnActiveCampaignPhrase(t *testing.T) {
+	poller := &Poller{ActiveCampaigns: []Campaign{{
+		StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS",
+		Phrases: []string{"follow profm"},
+	}}}
+	now := bucharestTime(2026, time.June, 17, 12, 0, 0)
+	artist, phrase, matched := poller.matchingCampaignPhrase(now, "Acum asculta follow profm si castiga cu noi")
+	if !matched || artist != "BTS" || phrase != "follow profm" {
+		t.Fatalf("matchingCampaignPhrase() = (%q, %q, %v), want BTS phrase match", artist, phrase, matched)
+	}
+	if _, _, matched := poller.matchingCampaignPhrase(now, "unrelated radio chat"); matched {
+		t.Fatal("unrelated transcription must not trigger a contest")
+	}
+}
+
 func TestPoller_checkSongFingerprintTriggeredTurnSkipsMetadataDashcamSave(t *testing.T) {
 	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -714,7 +752,7 @@ func TestPoller_saveUnreviewedChunkForReviewAlertsOnceWhenSaved(t *testing.T) {
 		BaseURL:       "http://localhost:8080",
 	}
 
-	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"))
+	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"), "")
 
 	if len(alerter.infoEvents) != 1 {
 		t.Fatalf("AlertInfo() calls = %d, want 1", len(alerter.infoEvents))
@@ -747,7 +785,7 @@ func TestPoller_saveUnreviewedChunkForReviewStoresCampaignOwnership(t *testing.T
 	}
 
 	t.Setenv("BYPASS_CAMPAIGN_TIME_CHECKS", "true")
-	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"))
+	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"), "")
 
 	files, err := os.ReadDir(filepath.Join(signaturesDir, "unreviewed"))
 	if err != nil {

@@ -7,6 +7,16 @@ import (
 
 const DefaultContestCheckCooldown = 20 * time.Minute
 
+// Compile-time assertion: if anyone ever makes DefaultContestCheckCooldown
+// negative this line will refuse to compile (uint cannot hold a negative value).
+const _ = uint(DefaultContestCheckCooldown)
+
+// ContestChecker is a detection source that may try to claim the shared
+// contest window after it finds a campaign candidate.
+type ContestChecker interface {
+	Check(time.Time)
+}
+
 // ContestCheckCoordinator gives every detection source one shared cooldown.
 // A checker claims it only after finding a campaign candidate.
 type ContestCheckCoordinator struct {

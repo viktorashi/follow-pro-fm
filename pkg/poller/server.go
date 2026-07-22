@@ -35,7 +35,7 @@ type TelemetryServer struct {
 	audiosDir   string
 	campaigns   []Campaign
 	wappClients []WhatsAppClient
-	onAddPhone  func(phone string) error
+	onAddPhone  func() error
 	timeNow     func() time.Time
 }
 
@@ -79,6 +79,8 @@ func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaste
 	}
 
 	ts.registerRoutes()
+	e.POST("/api/campaigns/phrases", ts.handleAddCampaignPhrase, ts.authMgr.RequireAuth())
+
 	return ts
 }
 
@@ -424,10 +426,12 @@ type FileInfo struct {
 }
 
 type ReviewChunk struct {
-	Name    string `json:"name"`
-	Size    int64  `json:"size"`
-	ModTime string `json:"mod_time"`
-	PlayURL string `json:"play_url"`
+	Name           string `json:"name"`
+	Size           int64  `json:"size"`
+	ModTime        string `json:"mod_time"`
+	PlayURL        string `json:"play_url"`
+	Transcript     string `json:"transcript"`
+	CampaignArtist string `json:"campaign_artist"`
 }
 
 func (s *TelemetryServer) handleDataView(c *echo.Context) error {
@@ -472,30 +476,21 @@ func (s *TelemetryServer) SetWhatsAppClients(clients []WhatsAppClient) {
 	s.wappClients = clients
 }
 
-func (s *TelemetryServer) SetOnAddPhone(fn func(phone string) error) {
+func (s *TelemetryServer) SetOnAddPhone(fn func() error) {
 	s.onAddPhone = fn
 }
 
 func (s *TelemetryServer) handleAddSenderPhone(c *echo.Context) error {
-	phone := c.FormValue("phone")
-	phone = strings.TrimSpace(phone)
-	if phone == "" {
-		return c.String(http.StatusBadRequest, "Phone number is required")
-	}
-	if !strings.HasPrefix(phone, "+") {
-		phone = "+" + phone
-	}
-
 	if s.onAddPhone != nil {
-		err := s.onAddPhone(phone)
+		err := s.onAddPhone()
 		if err != nil {
-			return c.String(http.StatusInternalServerError, "Error adding phone: "+err.Error())
+			return c.String(http.StatusConflict, "Could not start QR pairing: "+err.Error())
 		}
 	} else {
 		return c.String(http.StatusInternalServerError, "Add phone callback not set")
 	}
 
-	return c.String(http.StatusOK, "Phone added successfully. Connecting...")
+	return c.String(http.StatusOK, "QR pairing started. Scan the code above.")
 }
 
 func (s *TelemetryServer) handleAudioUpload(c *echo.Context) error {
@@ -821,18 +816,31 @@ func (s *TelemetryServer) listUnreviewedChunks() ([]ReviewChunk, error) {
 
 	chunks := make([]ReviewChunk, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() || (!strings.HasSuffix(entry.Name(), ".mp3") && !strings.HasSuffix(entry.Name(), ".ogg")) {
 			continue
 		}
 		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
+
+		var transcript string
+		var campaignArtist string
+		if s.dbMgr != nil {
+			meta, err := s.dbMgr.GetSignatureFile(context.Background(), "unreviewed", entry.Name())
+			if err == nil {
+				transcript = meta.Transcript
+				campaignArtist = meta.CampaignArtist
+			}
+		}
+
 		chunks = append(chunks, ReviewChunk{
-			Name:    entry.Name(),
-			Size:    info.Size(),
-			ModTime: info.ModTime().Format("2006-01-02 15:04:05"),
-			PlayURL: "/api/unreviewed/file?name=" + url.QueryEscape(entry.Name()),
+			Name:           entry.Name(),
+			Size:           info.Size(),
+			ModTime:        info.ModTime().Format("2006-01-02 15:04:05"),
+			PlayURL:        "/api/unreviewed/file?name=" + url.QueryEscape(entry.Name()),
+			Transcript:     transcript,
+			CampaignArtist: campaignArtist,
 		})
 	}
 
@@ -840,6 +848,29 @@ func (s *TelemetryServer) listUnreviewedChunks() ([]ReviewChunk, error) {
 		return chunks[i].ModTime > chunks[j].ModTime
 	})
 	return chunks, nil
+}
+
+func (s *TelemetryServer) handleAddCampaignPhrase(c *echo.Context) error {
+	type reqBody struct {
+		CampaignArtist string `json:"campaign_artist"`
+		Phrase         string `json:"phrase"`
+	}
+	var req reqBody
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+	req.Phrase = strings.TrimSpace(req.Phrase)
+	req.CampaignArtist = strings.TrimSpace(req.CampaignArtist)
+	if req.Phrase == "" || req.CampaignArtist == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "artist and phrase required"})
+	}
+	if s.dbMgr == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "no db config"})
+	}
+	if err := s.dbMgr.AddCampaignPhrase(c.Request().Context(), req.CampaignArtist, req.Phrase); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.NoContent(http.StatusOK)
 }
 
 func isSafeFilename(name string) bool {

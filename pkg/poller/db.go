@@ -18,6 +18,11 @@ type DBManager struct {
 	trustedEmailsPath string
 }
 
+type SenderSession struct {
+	Phone      string
+	DBFilename string
+}
+
 func NewDBManager(dbPath string) (*DBManager, error) {
 	dsn := "file:" + dbPath
 	if strings.Contains(dbPath, "?") {
@@ -93,7 +98,17 @@ func initSchema(db *sql.DB) error {
 			filename TEXT NOT NULL,
 			recorded_at TEXT NOT NULL,
 			campaign_artist TEXT NOT NULL,
+			transcript TEXT DEFAULT '',
 			PRIMARY KEY(bucket, filename)
+		);`,
+		`CREATE TABLE IF NOT EXISTS campaign_phrases (
+			campaign_artist TEXT NOT NULL,
+			phrase TEXT NOT NULL,
+			PRIMARY KEY(campaign_artist, phrase)
+		);`,
+		`CREATE TABLE IF NOT EXISTS sender_sessions (
+			phone TEXT PRIMARY KEY,
+			db_filename TEXT NOT NULL
 		);`,
 	}
 
@@ -103,6 +118,33 @@ func initSchema(db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+func (m *DBManager) SetSenderSession(ctx context.Context, phone, dbFilename string) error {
+	_, err := m.db.ExecContext(ctx,
+		`INSERT INTO sender_sessions (phone, db_filename) VALUES (?, ?)
+		 ON CONFLICT(phone) DO UPDATE SET db_filename = excluded.db_filename`,
+		phone, dbFilename,
+	)
+	return err
+}
+
+func (m *DBManager) SenderSessions(ctx context.Context) ([]SenderSession, error) {
+	rows, err := m.db.QueryContext(ctx, "SELECT phone, db_filename FROM sender_sessions ORDER BY phone")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var sessions []SenderSession
+	for rows.Next() {
+		var session SenderSession
+		if err := rows.Scan(&session.Phone, &session.DBFilename); err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, session)
+	}
+	return sessions, rows.Err()
 }
 
 func (m *DBManager) IsTrustedEmail(ctx context.Context, email string) (bool, error) {
@@ -402,20 +444,23 @@ type SignatureFile struct {
 	Filename       string
 	RecordedAt     time.Time
 	CampaignArtist string
+	Transcript     string
 }
 
-func (m *DBManager) UpsertSignatureFile(ctx context.Context, bucket, filename string, recordedAt time.Time, campaignArtist string) error {
+func (m *DBManager) UpsertSignatureFile(ctx context.Context, bucket, filename string, recordedAt time.Time, campaignArtist, transcript string) error {
 	_, err := m.db.ExecContext(
 		ctx,
-		`INSERT INTO signature_files (bucket, filename, recorded_at, campaign_artist)
-		 VALUES (?, ?, ?, ?)
+		`INSERT INTO signature_files (bucket, filename, recorded_at, campaign_artist, transcript)
+		 VALUES (?, ?, ?, ?, ?)
 		 ON CONFLICT(bucket, filename) DO UPDATE SET
 		   recorded_at = excluded.recorded_at,
-		   campaign_artist = excluded.campaign_artist`,
+		   campaign_artist = excluded.campaign_artist,
+		   transcript = excluded.transcript`,
 		bucket,
 		filename,
 		recordedAt.Format(time.RFC3339),
 		campaignArtist,
+		transcript,
 	)
 	return err
 }
@@ -425,12 +470,12 @@ func (m *DBManager) GetSignatureFile(ctx context.Context, bucket, filename strin
 	var recordedAt string
 	err := m.db.QueryRowContext(
 		ctx,
-		`SELECT bucket, filename, recorded_at, campaign_artist
+		`SELECT bucket, filename, recorded_at, campaign_artist, transcript
 		 FROM signature_files
 		 WHERE bucket = ? AND filename = ?`,
 		bucket,
 		filename,
-	).Scan(&meta.Bucket, &meta.Filename, &recordedAt, &meta.CampaignArtist)
+	).Scan(&meta.Bucket, &meta.Filename, &recordedAt, &meta.CampaignArtist, &meta.Transcript)
 	if err != nil {
 		return SignatureFile{}, err
 	}
@@ -447,5 +492,28 @@ func (m *DBManager) CopySignatureFile(ctx context.Context, fromBucket, toBucket,
 	if err != nil {
 		return err
 	}
-	return m.UpsertSignatureFile(ctx, toBucket, filename, meta.RecordedAt, meta.CampaignArtist)
+	return m.UpsertSignatureFile(ctx, toBucket, filename, meta.RecordedAt, meta.CampaignArtist, meta.Transcript)
+}
+
+func (m *DBManager) AddCampaignPhrase(ctx context.Context, campaignArtist, phrase string) error {
+	_, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO campaign_phrases (campaign_artist, phrase) VALUES (?, ?)", normalizeCampaignArtistKey(campaignArtist), strings.ToLower(strings.TrimSpace(phrase)))
+	return err
+}
+
+func (m *DBManager) GetCampaignPhrases(ctx context.Context, campaignArtist string) ([]string, error) {
+	rows, err := m.db.QueryContext(ctx, "SELECT phrase FROM campaign_phrases WHERE campaign_artist = ?", normalizeCampaignArtistKey(campaignArtist))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var phrases []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, err
+		}
+		phrases = append(phrases, p)
+	}
+	return phrases, rows.Err()
 }
