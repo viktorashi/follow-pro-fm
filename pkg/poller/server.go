@@ -859,6 +859,8 @@ func (s *TelemetryServer) handleAddCampaignPhrase(c *echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
+	req.Phrase = strings.TrimSpace(req.Phrase)
+	req.CampaignArtist = strings.TrimSpace(req.CampaignArtist)
 	if req.Phrase == "" || req.CampaignArtist == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "artist and phrase required"})
 	}
