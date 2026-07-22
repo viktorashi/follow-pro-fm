@@ -280,11 +280,23 @@ func GetAudioDirForPhone(phone string, rootDir string) string {
 func GetTotalAudioStats(conns []WAConnectionState, rootDir string) (int, int) {
 	totalUnused := 0
 	totalUsed := 0
-	for _, conn := range conns {
-		dir := GetAudioDirForPhone(conn.Phone, rootDir)
-		u, us := GetAudioStats(dir)
-		totalUnused += u
-		totalUsed += us
-	}
+
+	_ = filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(strings.ToLower(d.Name()), ".ogg") {
+			if filepath.Base(filepath.Dir(path)) == "used" {
+				totalUsed++
+			} else {
+				totalUnused++
+			}
+		}
+		return nil
+	})
+
 	return totalUnused, totalUsed
 }
