@@ -32,6 +32,20 @@ const (
 	ConnectionRetryAttempts = 30
 )
 
+var (
+	pairingCancelsMutex sync.Mutex
+	pairingCancels      = make(map[string]context.CancelFunc)
+)
+
+func CancelPairing(phone string) {
+	pairingCancelsMutex.Lock()
+	defer pairingCancelsMutex.Unlock()
+	if cancel, ok := pairingCancels[phone]; ok {
+		cancel()
+		delete(pairingCancels, phone)
+	}
+}
+
 func init() {
 	sqlite.RegisterConnectionHook(func(conn sqlite.ExecQuerierContext, dsn string) error {
 		_, err := conn.ExecContext(context.Background(), "PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;", nil)
@@ -110,16 +124,18 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 			if client.Store.ID == nil {
 				// No session exists, perform login
 				ctx, cancel := context.WithCancel(context.Background())
-				handlerID := client.AddEventHandler(func(evt interface{}) {
-					if _, ok := evt.(*events.Disconnected); ok {
-						cancel()
-					}
-				})
+
+				pairingCancelsMutex.Lock()
+				pairingCancels[phone] = cancel
+				pairingCancelsMutex.Unlock()
 
 				qrChan, _ := client.GetQRChannel(ctx)
 				err = client.Connect()
 				if err != nil {
-					client.RemoveEventHandler(handlerID)
+					pairingCancelsMutex.Lock()
+					delete(pairingCancels, phone)
+					pairingCancelsMutex.Unlock()
+
 					cancel()
 					if stateMgr != nil {
 						stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
@@ -185,7 +201,9 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 						}
 					}
 				}
-				client.RemoveEventHandler(handlerID)
+				pairingCancelsMutex.Lock()
+				delete(pairingCancels, phone)
+				pairingCancelsMutex.Unlock()
 				cancel()
 
 				if !paired {
