@@ -80,7 +80,7 @@ func TestTelemetryServer_HandleUnreviewedCropCopiesRecordedMetadataToCanonical(t
 	}
 
 	recordedAt := bucharestTime(2026, time.June, 17, 12, 0, 0)
-	if err := dbMgr.UpsertSignatureFile(context.Background(), "unreviewed", filename, recordedAt, "BTS"); err != nil {
+	if err := dbMgr.UpsertSignatureFile(context.Background(), "unreviewed", filename, recordedAt, "BTS", ""); err != nil {
 		t.Fatalf("UpsertSignatureFile() error = %v", err)
 	}
 

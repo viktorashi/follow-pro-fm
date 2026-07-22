@@ -53,7 +53,7 @@ type WhatsAppClient interface {
 }
 
 // InitWhatsApp initializes the WhatsApp client and handles connection/pairing
-func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter Alerter, baseURL string) (WhatsAppClient, error) {
+func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter Alerter, baseURL string, onPaired ...func(string)) (WhatsAppClient, error) {
 	if os.Getenv("MOCK_WHATSAPP") == "true" {
 		client := &MockWhatsAppClient{
 			phone:    phone,
@@ -163,6 +163,9 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 									s.QRCodeData = ""
 									s.WhatsAppConnected = true
 								})
+							}
+							if len(onPaired) > 0 && client.Store.ID != nil && client.Store.ID.User != "" {
+								onPaired[0]("+" + client.Store.ID.User)
 							}
 						case "timeout":
 							fmt.Println("⏳ QR code scan timed out. Retrying connection...")

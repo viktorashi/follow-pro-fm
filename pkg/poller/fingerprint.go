@@ -60,8 +60,8 @@ func GetCanonicalSignatures(canonicalDir string) (map[string][]byte, error) {
 
 // SaveUnreviewedChunk saves an audio chunk for manual review.
 func SaveUnreviewedChunk(data []byte, unreviewedDir string, filename string) error {
-	_ = os.MkdirAll(unreviewedDir, 0755)
-	return os.WriteFile(filepath.Join(unreviewedDir, filename), data, 0644)
+	_ = os.MkdirAll(unreviewedDir, 0o755)
+	return os.WriteFile(filepath.Join(unreviewedDir, filename), data, 0o644)
 }
 
 // SaveUnreviewedChunkIfDistinct skips saving when the captured chunk already contains
@@ -135,9 +135,9 @@ func CropAndMarkCanonical(unreviewedDir, canonicalDir, filename string, startByt
 
 	cropped := data[startBytes:endBytes]
 
-	_ = os.MkdirAll(canonicalDir, 0755)
+	_ = os.MkdirAll(canonicalDir, 0o755)
 	targetPath := filepath.Join(canonicalDir, filename)
-	if err := os.WriteFile(targetPath, cropped, 0644); err != nil {
+	if err := os.WriteFile(targetPath, cropped, 0o644); err != nil {
 		return err
 	}
 
@@ -178,7 +178,7 @@ func signatureCampaignArtist(ctx context.Context, dbMgr *DBManager, campaigns []
 		return "", fmt.Errorf("no active campaign found for %s at %s", filename, info.ModTime().Format(time.RFC3339))
 	}
 	if dbMgr != nil {
-		_ = dbMgr.UpsertSignatureFile(ctx, bucket, filename, info.ModTime(), campaignArtist)
+		_ = dbMgr.UpsertSignatureFile(ctx, bucket, filename, info.ModTime(), campaignArtist, "")
 	}
 	return campaignArtist, nil
 }

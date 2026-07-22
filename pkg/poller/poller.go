@@ -23,6 +23,7 @@ const (
 	followProFMKeyword   = "follow profm"
 	dashcamAfterDuration = 4 * time.Minute
 	fingerprintTailBytes = 768 * 1024
+	contestCaptureWindow = 2 * time.Second
 )
 
 var bucharestLocation = loadBucharestLocation()
@@ -56,6 +57,7 @@ type Campaign struct {
 	StartDate string // Format: "02-01-2006"
 	EndDate   string // Format: "02-01-2006"
 	Artist    string
+	Phrases   []string // Spoken contest phrases accepted for this campaign.
 }
 
 // IsActive checks if the current time falls within the campaign date period
@@ -110,6 +112,7 @@ type Poller struct {
 	DBMgr                *DBManager
 	BaseURL              string
 	ContestCheckCooldown time.Duration
+	Transcribe           func(context.Context, []byte) (string, error)
 
 	matchesToday int
 	lastCheckDay int
@@ -119,6 +122,26 @@ type Poller struct {
 	sendMu           sync.Mutex
 	checkerMu        sync.Mutex
 	checker          *ContestCheckCoordinator
+	captureMu        sync.Mutex
+	capture          *contestCapture
+}
+
+// contestCapture is the one shared observation of a live audio window. A tag
+// can only exist on this captured evidence, and every tag is consumed by a
+// checker before it can affect sending or signature review.
+type contestCapture struct {
+	Audio      AudioSnapshot
+	CapturedAt time.Time
+	Metadata   SongInfo
+	Tags       []contestTag
+	Transcript string
+}
+
+type contestTag struct {
+	Source         string
+	CampaignArtist string
+	Phrase         string
+	SignatureName  string
 }
 
 type fingerprintTrigger struct {
@@ -127,10 +150,81 @@ type fingerprintTrigger struct {
 	title         string
 }
 
-const (
-	triggerSourceMetadata    = "metadata"
-	triggerSourceFingerprint = "fingerprint"
+type metadataContestChecker struct {
+	poller      *Poller
+	coordinator *ContestCheckCoordinator
+	currentSong *SongInfo
+}
+
+func (c *metadataContestChecker) Check(now time.Time) {
+	c.poller.checkSongWithCoordinator(c.currentSong, now, c.coordinator)
+}
+
+type fingerprintContestChecker struct {
+	poller      *Poller
+	coordinator *ContestCheckCoordinator
+}
+
+func (c *fingerprintContestChecker) Check(now time.Time) {
+	c.poller.checkFingerprintWithCoordinator(now, c.coordinator)
+}
+
+type transcriptionContestChecker struct {
+	poller      *Poller
+	coordinator *ContestCheckCoordinator
+	lastVersion int64
+}
+
+func (c *transcriptionContestChecker) Check(now time.Time) {
+	c.poller.checkTranscriptionWithCoordinator(now, c.coordinator, c)
+}
+
+var (
+	_ ContestChecker = (*metadataContestChecker)(nil)
+	_ ContestChecker = (*fingerprintContestChecker)(nil)
+	_ ContestChecker = (*transcriptionContestChecker)(nil)
 )
+
+const (
+	triggerSourceMetadata      = "metadata"
+	triggerSourceFingerprint   = "fingerprint"
+	triggerSourceTranscription = "transcription"
+)
+
+func (p *Poller) captureContestAudio(now time.Time, metadata SongInfo) *contestCapture {
+	if p.AudioBuffer == nil {
+		return nil
+	}
+	snapshot := p.AudioBuffer.Snapshot()
+	if len(snapshot.Data) == 0 {
+		return nil
+	}
+	p.captureMu.Lock()
+	defer p.captureMu.Unlock()
+	if p.capture == nil || now.Sub(p.capture.CapturedAt) >= contestCaptureWindow {
+		p.capture = &contestCapture{Audio: snapshot, CapturedAt: now, Metadata: metadata}
+	} else if metadata != (SongInfo{}) {
+		p.capture.Metadata = metadata
+	}
+	return p.capture
+}
+
+func (p *Poller) tagCapture(capture *contestCapture, tag contestTag) {
+	if capture == nil {
+		return
+	}
+	p.captureMu.Lock()
+	defer p.captureMu.Unlock()
+	if p.capture == capture {
+		p.capture.Tags = append(p.capture.Tags, tag)
+	}
+}
+
+func captureHasTag(capture *contestCapture, tag contestTag) bool {
+	return slices.ContainsFunc(capture.Tags, func(candidate contestTag) bool {
+		return candidate == tag
+	})
+}
 
 func normalizeTriggerValue(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
@@ -198,7 +292,7 @@ func (p *Poller) resolveFingerprintSong(trigger fingerprintTrigger) SongInfo {
 	return song
 }
 
-func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte) {
+func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte, transcript string) {
 	recordedAt := time.Now()
 	filename := fmt.Sprintf("%s - %s - %d.mp3", song.Artist, song.Title, recordedAt.Unix())
 	unreviewedDir := filepath.Join(p.SignaturesDir, "unreviewed")
@@ -227,7 +321,7 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte) {
 				return
 			}
 			if saved {
-				p.reportSavedUnreviewedChunk(song, filename, recordedAt)
+				p.reportSavedUnreviewedChunk(song, filename, recordedAt, transcript)
 				return
 			}
 			matchedName = name
@@ -242,7 +336,7 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte) {
 					log.Printf("   ⚠️ Failed to save unreviewed chunk %q: %v", filename, err)
 					return
 				}
-				p.reportSavedUnreviewedChunk(song, filename, recordedAt)
+				p.reportSavedUnreviewedChunk(song, filename, recordedAt, transcript)
 				return
 			}
 			matchedName = name
@@ -252,9 +346,20 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte) {
 	log.Printf("   [SIGNATURE REVIEW] Skipped saving %q because it matches canonical signature %q", filename, matchedName)
 }
 
-func (p *Poller) reportSavedUnreviewedChunk(song SongInfo, filename string, recordedAt time.Time) {
+func (p *Poller) saveCapturedChunkForReview(capture *contestCapture, tag contestTag) {
+	if capture == nil || !captureHasTag(capture, tag) {
+		return
+	}
+	song := capture.Metadata
+	if song == (SongInfo{}) {
+		song = SongInfo{Artist: tag.CampaignArtist, Title: tag.Phrase}
+	}
+	p.saveUnreviewedChunkForReview(song, capture.Audio.Data, capture.Transcript)
+}
+
+func (p *Poller) reportSavedUnreviewedChunk(song SongInfo, filename string, recordedAt time.Time, transcript string) {
 	if campaignArtist, ok := campaignArtistForTime(p.ActiveCampaigns, recordedAt); ok && p.DBMgr != nil {
-		_ = p.DBMgr.UpsertSignatureFile(context.Background(), "unreviewed", filename, recordedAt, campaignArtist)
+		_ = p.DBMgr.UpsertSignatureFile(context.Background(), "unreviewed", filename, recordedAt, campaignArtist, transcript)
 	}
 	log.Printf("   [SIGNATURE REVIEW] Saved unreviewed chunk %q for manual review", filename)
 	_ = p.Alerter.AlertInfo(AlertEvent{
@@ -302,6 +407,10 @@ func (p *Poller) hasActiveCampaign(now time.Time) bool {
 	return slices.ContainsFunc(p.ActiveCampaigns, func(c Campaign) bool {
 		return c.IsActive(now)
 	})
+}
+
+func (p *Poller) canRunContestChecker(now time.Time) bool {
+	return p.hasActiveCampaign(now) && (p.StateMgr == nil || !p.StateMgr.Get().KillSwitchActive)
 }
 
 func (p *Poller) getNowPlaying() (SongInfo, error) {
@@ -375,21 +484,51 @@ func (p *Poller) Start() {
 	log.Println(strings.Repeat("-", 40))
 
 	var currentSong SongInfo
+	coordinator := p.contestCheckCoordinator()
+	// Both checkers receive this exact coordinator. Its mutex makes Claim()
+	// atomic, so only one checker can enter the shared WhatsApp send window.
+	var metadataChecker ContestChecker = &metadataContestChecker{
+		poller:      p,
+		coordinator: coordinator,
+		currentSong: &currentSong,
+	}
 
+	var fingerprintChecker ContestChecker
+	var transcriptionChecker ContestChecker
 	if p.AudioBuffer != nil {
+		fingerprintChecker = &fingerprintContestChecker{
+			poller:      p,
+			coordinator: coordinator,
+		}
 		p.AudioBuffer.Start()
-		go p.fingerprintLoop()
+		if p.Transcribe != nil {
+			transcriptionChecker = &transcriptionContestChecker{poller: p, coordinator: coordinator}
+		}
 	}
 
 	shouldPoll := p.prepareStartState()
+	go p.runMetadataChecker(metadataChecker, shouldPoll)
+	if fingerprintChecker != nil {
+		go runFingerprintChecker(p, fingerprintChecker)
+	}
+	if transcriptionChecker != nil {
+		go runFingerprintChecker(p, transcriptionChecker)
+	}
 
-	// Use a cron-like Ticker instead of an infinite sleep loop
+	select {}
+}
+
+func (p *Poller) runMetadataChecker(checker ContestChecker, checkImmediately bool) {
+	// This worker owns the application sleep/wake transition. Both checker
+	// workers skip their detector work outside an active campaign window.
 	ticker := time.NewTicker(p.PollInterval)
 	defer ticker.Stop()
 
-	// Trigger immediately on start
-	if shouldPoll {
-		p.checkSong(&currentSong, time.Now())
+	if checkImmediately {
+		now := time.Now()
+		if p.canRunContestChecker(now) {
+			checker.Check(now)
+		}
 	}
 
 	var isSleeping bool
@@ -442,7 +581,7 @@ func (p *Poller) Start() {
 			}
 		}
 
-		p.checkSong(&currentSong, now)
+		checker.Check(now)
 	}
 }
 
@@ -465,7 +604,11 @@ func (p *Poller) prepareStartState() bool {
 }
 
 func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
-	if !p.CanCheckContest(now) {
+	p.checkSongWithCoordinator(currentSong, now, p.contestCheckCoordinator())
+}
+
+func (p *Poller) checkSongWithCoordinator(currentSong *SongInfo, now time.Time, coordinator *ContestCheckCoordinator) {
+	if !coordinator.CanCheck(now) {
 		return
 	}
 	p.resetDailyMatchesIfNeeded(now)
@@ -479,6 +622,7 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 	if song != *currentSong {
 		log.Printf("[%s] %s - %s", now.Format("15:04:05"), song.Artist, song.Title)
 
+		capture := p.captureContestAudio(now, song)
 		currentRadioLogID := int64(0)
 		if p.DBMgr != nil {
 			radioLogID, err := p.DBMgr.LogRadioSong(context.Background(), song.Artist, song.Title, now)
@@ -499,7 +643,7 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 		if p.matchesToday < MaxDailyMatches {
 			campaignArtist, matchesCampaign := p.matchingCampaignArtist(now, song)
 			if matchesCampaign {
-				if !p.ClaimContestWindow(now) {
+				if !coordinator.Claim(now) {
 					return
 				}
 				if p.consumeIgnoredMetadataTrigger(song) {
@@ -512,9 +656,11 @@ func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
 						if p.StateMgr != nil && p.StateMgr.Get().GatheringSignatures && p.AudioBuffer != nil {
 							// Metadata-only detections extend the preserved pre-roll by 4 minutes.
 							p.AudioBuffer.Trigger(dashcamAfterDuration, func(data []byte) {
-								p.saveUnreviewedChunkForReview(song, data)
+								tag := contestTag{Source: triggerSourceMetadata, CampaignArtist: campaignArtist}
+								p.saveCapturedChunkForReview(&contestCapture{Audio: AudioSnapshot{Data: data}, CapturedAt: now, Metadata: song, Tags: []contestTag{tag}}, tag)
 							})
 						}
+						p.tagCapture(capture, contestTag{Source: triggerSourceMetadata, CampaignArtist: campaignArtist})
 					}
 				}
 			}
@@ -724,96 +870,183 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist, artist, title
 	}
 }
 
-func (p *Poller) fingerprintLoop() {
+func runFingerprintChecker(p *Poller, checker ContestChecker) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
-	canonicalDir := filepath.Join(p.SignaturesDir, "canonical")
 
 	for {
 		<-ticker.C
 		now := time.Now()
-		if !p.CanCheckContest(now) {
-			continue
-		}
-		if p.StateMgr != nil && p.StateMgr.Get().KillSwitchActive {
-			continue
-		}
-		if !p.hasActiveCampaign(now) {
-			continue
-		}
-		p.resetDailyMatchesIfNeeded(now)
-		if p.matchesToday >= MaxDailyMatches {
-			continue
-		}
-		allowedNames, err := allowedCanonicalSignatureNames(context.Background(), p.DBMgr, p.ActiveCampaigns, canonicalDir, now)
-		if err != nil {
-			log.Printf("   ⚠️ Failed to load campaign-bound signatures: %v", err)
-			continue
-		}
-		if len(allowedNames) == 0 {
-			continue
-		}
-		buf := p.AudioBuffer.ReadCurrentBuffer()
-		if len(buf) == 0 {
-			continue
-		}
-		if len(buf) > fingerprintTailBytes {
-			buf = buf[len(buf)-fingerprintTailBytes:]
-		}
-
-		matched, name, err := findMatchingCanonicalSignatureInSet(buf, defaultFingerprintFormat, canonicalDir, allowedNames)
-		if err != nil {
-			log.Printf("   ⚠️ Fingerprint matching failed: %v", err)
-			continue
-		}
-		if !matched {
-			continue
-		}
-		if !p.ClaimContestWindow(now) {
-			continue
-		}
-
-		campaignArtist, err := signatureCampaignArtist(context.Background(), p.DBMgr, p.ActiveCampaigns, "canonical", name, canonicalDir)
-		if err != nil {
-			log.Printf("   ⚠️ Failed to resolve campaign owner for signature %q: %v", name, err)
-			continue
-		}
-
-		trigger := fingerprintTrigger{signatureName: name, artist: campaignArtist, title: "Unknown"}
-		song := p.resolveFingerprintSong(trigger)
-
-		p.ignoredTriggerMu.Lock()
-		if p.ignoredTrigger.signatureName != name {
-			p.ignoredTrigger = trigger
-			p.ignoredTriggerMu.Unlock()
-
-			log.Printf("   [FINGERPRINT MATCH] Matched signature: %s -> %s - %s", name, song.Artist, song.Title)
-			if p.wasSongPlayedRecently(song.Artist, song.Title) {
-				continue
-			}
-
-			currentRadioLogID := int64(0)
-			if p.DBMgr != nil {
-				latestRadioLogID, err := p.DBMgr.GetLatestRadioLogID(context.Background())
-				if err != nil {
-					log.Printf("   ⚠️ Failed to load latest radio log id for fingerprint match %q: %v", name, err)
-					continue
-				}
-				currentRadioLogID = latestRadioLogID + 1
-			}
-
-			if !p.canSendCampaignArtist(campaignArtist, currentRadioLogID) {
-				continue
-			}
-
-			matchIndex, selected := p.claimScheduledMatch(now, song.Artist, song.Title)
-			if !selected {
-				continue
-			}
-
-			p.doTriggerVoiceNote(triggerSourceFingerprint, campaignArtist, song.Artist, song.Title, now, matchIndex, currentRadioLogID)
-		} else {
-			p.ignoredTriggerMu.Unlock()
+		if p.canRunContestChecker(now) {
+			checker.Check(now)
 		}
 	}
+}
+
+func (p *Poller) checkFingerprintWithCoordinator(now time.Time, coordinator *ContestCheckCoordinator) {
+	if !coordinator.CanCheck(now) {
+		return
+	}
+	if !p.canRunContestChecker(now) {
+		return
+	}
+	p.resetDailyMatchesIfNeeded(now)
+	if p.matchesToday >= MaxDailyMatches {
+		return
+	}
+	canonicalDir := filepath.Join(p.SignaturesDir, "canonical")
+	allowedNames, err := allowedCanonicalSignatureNames(context.Background(), p.DBMgr, p.ActiveCampaigns, canonicalDir, now)
+	if err != nil {
+		log.Printf("   ⚠️ Failed to load campaign-bound signatures: %v", err)
+		return
+	}
+	if len(allowedNames) == 0 {
+		return
+	}
+	capture := p.captureContestAudio(now, SongInfo{})
+	if capture == nil {
+		return
+	}
+	buf := capture.Audio.Data
+	if len(buf) > fingerprintTailBytes {
+		buf = buf[len(buf)-fingerprintTailBytes:]
+	}
+
+	matched, name, err := findMatchingCanonicalSignatureInSet(buf, defaultFingerprintFormat, canonicalDir, allowedNames)
+	if err != nil {
+		log.Printf("   ⚠️ Fingerprint matching failed: %v", err)
+		return
+	}
+	if !matched || !coordinator.Claim(now) {
+		return
+	}
+
+	campaignArtist, err := signatureCampaignArtist(context.Background(), p.DBMgr, p.ActiveCampaigns, "canonical", name, canonicalDir)
+	if err != nil {
+		log.Printf("   ⚠️ Failed to resolve campaign owner for signature %q: %v", name, err)
+		return
+	}
+
+	trigger := fingerprintTrigger{signatureName: name, artist: campaignArtist, title: "Unknown"}
+	song := p.resolveFingerprintSong(trigger)
+	p.tagCapture(capture, contestTag{Source: triggerSourceFingerprint, CampaignArtist: campaignArtist, SignatureName: name})
+
+	p.ignoredTriggerMu.Lock()
+	if p.ignoredTrigger.signatureName == name {
+		p.ignoredTriggerMu.Unlock()
+		return
+	}
+	p.ignoredTrigger = trigger
+	p.ignoredTriggerMu.Unlock()
+
+	log.Printf("   [FINGERPRINT MATCH] Matched signature: %s -> %s - %s", name, song.Artist, song.Title)
+	if p.wasSongPlayedRecently(song.Artist, song.Title) {
+		return
+	}
+
+	currentRadioLogID := int64(0)
+	if p.DBMgr != nil {
+		latestRadioLogID, err := p.DBMgr.GetLatestRadioLogID(context.Background())
+		if err != nil {
+			log.Printf("   ⚠️ Failed to load latest radio log id for fingerprint match %q: %v", name, err)
+			return
+		}
+		currentRadioLogID = latestRadioLogID + 1
+	}
+
+	if !p.canSendCampaignArtist(campaignArtist, currentRadioLogID) {
+		return
+	}
+
+	matchIndex, selected := p.claimScheduledMatch(now, song.Artist, song.Title)
+	if selected {
+		p.doTriggerVoiceNote(triggerSourceFingerprint, campaignArtist, song.Artist, song.Title, now, matchIndex, currentRadioLogID)
+		if p.StateMgr != nil && p.StateMgr.Get().GatheringSignatures {
+			p.saveCapturedChunkForReview(capture, contestTag{Source: triggerSourceFingerprint, CampaignArtist: campaignArtist, SignatureName: name})
+		}
+	}
+}
+
+func (p *Poller) checkTranscriptionWithCoordinator(now time.Time, coordinator *ContestCheckCoordinator, checker *transcriptionContestChecker) {
+	if p.Transcribe == nil || !coordinator.CanCheck(now) || !p.canRunContestChecker(now) {
+		return
+	}
+	p.resetDailyMatchesIfNeeded(now)
+	if p.matchesToday >= MaxDailyMatches {
+		return
+	}
+	capture := p.captureContestAudio(now, SongInfo{})
+	if capture == nil || capture.Audio.Version == checker.lastVersion {
+		return
+	}
+	checker.lastVersion = capture.Audio.Version
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	transcript, err := p.Transcribe(ctx, capture.Audio.Data)
+	if err != nil {
+		log.Printf("   ⚠️ Transcription failed: %v", err)
+		return
+	}
+	p.captureMu.Lock()
+	capture.Transcript = transcript
+	p.captureMu.Unlock()
+
+	campaignArtist, phrase, matched := p.matchingCampaignPhrase(now, transcript)
+	if !matched || !coordinator.Claim(now) {
+		return
+	}
+	tag := contestTag{Source: triggerSourceTranscription, CampaignArtist: campaignArtist, Phrase: phrase}
+	p.tagCapture(capture, tag)
+	song := capture.Metadata
+	if song == (SongInfo{}) {
+		song = p.resolveFingerprintSong(fingerprintTrigger{artist: campaignArtist, title: phrase})
+	}
+	if p.wasSongPlayedRecently(song.Artist, song.Title) {
+		return
+	}
+	currentRadioLogID := int64(0)
+	if p.DBMgr != nil {
+		latestRadioLogID, err := p.DBMgr.GetLatestRadioLogID(context.Background())
+		if err != nil {
+			log.Printf("   ⚠️ Failed to load latest radio log id for transcription match: %v", err)
+			return
+		}
+		currentRadioLogID = latestRadioLogID + 1
+	}
+	if !p.canSendCampaignArtist(campaignArtist, currentRadioLogID) {
+		return
+	}
+	matchIndex, selected := p.claimScheduledMatch(now, song.Artist, song.Title)
+	if !selected {
+		return
+	}
+	log.Printf("   [TRANSCRIPTION MATCH] %q matched campaign phrase %q", transcript, phrase)
+	p.doTriggerVoiceNote(triggerSourceTranscription, campaignArtist, song.Artist, song.Title, now, matchIndex, currentRadioLogID)
+	if p.StateMgr != nil && p.StateMgr.Get().GatheringSignatures {
+		p.saveCapturedChunkForReview(capture, tag)
+	}
+}
+
+func (p *Poller) matchingCampaignPhrase(now time.Time, transcript string) (string, string, bool) {
+	transcript = normalizeTriggerValue(transcript)
+	if transcript == "" {
+		return "", "", false
+	}
+	for _, campaign := range p.ActiveCampaigns {
+		if !campaign.IsActive(now) {
+			continue
+		}
+		phrases := append([]string(nil), campaign.Phrases...)
+		if p.DBMgr != nil {
+			dbPhrases, _ := p.DBMgr.GetCampaignPhrases(context.Background(), campaign.Artist)
+			phrases = append(phrases, dbPhrases...)
+		}
+		for _, phrase := range phrases {
+			if normalized := normalizeTriggerValue(phrase); normalized != "" && strings.Contains(transcript, normalized) {
+				return campaign.Artist, phrase, true
+			}
+		}
+	}
+	return "", "", false
 }
