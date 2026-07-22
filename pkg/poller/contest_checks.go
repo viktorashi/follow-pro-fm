@@ -1,27 +1,15 @@
 package poller
 
 import (
-	"fmt"
-	"os"
-	"os/signal"
 	"sync"
-	"syscall"
 	"time"
 )
 
-func gracefulShutdown() {
-	s := make(chan os.Signal, 1)
-	signal.Notify(s, os.Interrupt)
-	signal.Notify(s, syscall.SIGTERM)
-	go func() {
-		<-s
-		fmt.Println("Shutting down gracefully.")
-		// clean up here
-		os.Exit(0)
-	}()
-}
-
 const DefaultContestCheckCooldown = 20 * time.Minute
+
+// Compile-time assertion: if anyone ever makes DefaultContestCheckCooldown
+// negative this line will refuse to compile (uint cannot hold a negative value).
+const _ = uint(DefaultContestCheckCooldown)
 
 // ContestChecker is a detection source that may try to claim the shared
 // contest window after it finds a campaign candidate.
@@ -38,12 +26,6 @@ type ContestCheckCoordinator struct {
 }
 
 func NewContestCheckCoordinator(cooldown time.Duration) *ContestCheckCoordinator {
-	if DefaultContestCheckCooldown < 0 {
-		go gracefulShutdown()
-		forever := make(chan int)
-		<-forever
-	}
-
 	if cooldown <= 0 {
 		cooldown = DefaultContestCheckCooldown
 	}
