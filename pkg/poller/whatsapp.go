@@ -102,8 +102,21 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 			// Tell WhatsApp servers we are online.
 			// Crucial for E2E prekey setups and for avoiding "Waiting for this message".
 			_ = client.SendPresence(context.Background(), types.PresenceAvailable)
-		case *events.OfflineSyncCompleted:
-			// You could log or wait on this specifically, but PresenceAvailable is usually enough.
+		case *events.Disconnected:
+			fmt.Println("🔌 Disconnected from WhatsApp servers")
+			if stateMgr != nil {
+				isSleeping := stateMgr.Get().Status == StatusSleeping
+				stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
+					s.WhatsAppConnected = false
+					if s.Status != StatusPairingRequired {
+						if isSleeping {
+							s.Status = StatusSleeping
+						} else {
+							s.Status = StatusError
+						}
+					}
+				})
+			}
 		case *events.LoggedOut:
 			if stateMgr != nil {
 				stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
