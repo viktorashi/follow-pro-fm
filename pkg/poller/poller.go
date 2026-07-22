@@ -1035,7 +1035,7 @@ func (p *Poller) matchingCampaignPhrase(now time.Time, transcript string) (strin
 		if !campaign.IsActive(now) {
 			continue
 		}
-		phrases := campaign.Phrases
+		phrases := append([]string(nil), campaign.Phrases...)
 		if p.DBMgr != nil {
 			dbPhrases, _ := p.DBMgr.GetCampaignPhrases(context.Background(), campaign.Artist)
 			phrases = append(phrases, dbPhrases...)
