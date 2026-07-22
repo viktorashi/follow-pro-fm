@@ -66,7 +66,7 @@ func TestMockScanRequiresAuth(t *testing.T) {
 	}
 
 	server := NewTelemetryServer(
-		NewAuthManager(dbMgr, "", "", "admin-pass", ""),
+		NewAuthManager(dbMgr, nil, "", "admin-pass", ""),
 		NewStateManager(),
 		nil,
 		nil,
@@ -107,7 +107,7 @@ func TestMockScanPairsAuthenticatedMockClients(t *testing.T) {
 	stateMgr := NewStateManager()
 	mockDBPath := filepath.Join(tempDir, "mock-wa.sqlite")
 	server := NewTelemetryServer(
-		NewAuthManager(dbMgr, "", "", "admin-pass", ""),
+		NewAuthManager(dbMgr, nil, "", "admin-pass", ""),
 		stateMgr,
 		nil,
 		nil,

@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
 
@@ -70,16 +69,12 @@ func (m *MultiAlerter) AlertSuccess(event AlertEvent) error {
 type TelegramAlerter struct {
 	BotToken string
 	ChatID   string
-	Env      string
-	BaseURL  string
 }
 
-func NewTelegramAlerter(token, chatID, env, baseURL string) *TelegramAlerter {
+func NewTelegramAlerter(token, chatID string) *TelegramAlerter {
 	return &TelegramAlerter{
 		BotToken: token,
 		ChatID:   chatID,
-		Env:      env,
-		BaseURL:  baseURL,
 	}
 }
 
@@ -91,8 +86,12 @@ func (t *TelegramAlerter) send(prefix string, event AlertEvent) error {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", t.BotToken)
 
 	envPrefix := ""
-	if t.Env != "prod" && t.Env != "production" && t.Env != "" {
-		envPrefix = fmt.Sprintf("[%s] ", strings.ToUpper(t.Env))
+	envName := os.Getenv("ENVIRONMENT")
+	if envName == "" {
+		envName = "production"
+	}
+	if envName != "prod" && envName != "production" {
+		envPrefix = fmt.Sprintf("[%s] ", strings.ToUpper(envName))
 	}
 
 	// Format Telegram message
@@ -105,8 +104,21 @@ func (t *TelegramAlerter) send(prefix string, event AlertEvent) error {
 		msg += fmt.Sprintf("\n\n<a href=\"%s\">%s</a>", event.ActionURL, label)
 	}
 
-	if t.BaseURL != "" && event.ActionURL != t.BaseURL {
-		msg += fmt.Sprintf("\n\n<a href=\"%s\">Live Dashboard</a>", t.BaseURL)
+	baseURL := os.Getenv("BASE_URL")
+	if baseURL == "" {
+		if appName := os.Getenv("FLY_APP_NAME"); appName != "" {
+			baseURL = fmt.Sprintf("https://%s.fly.dev", appName)
+		} else {
+			port := os.Getenv("PORT")
+			if port == "" {
+				port = "8080"
+			}
+			baseURL = "http://localhost:" + port
+		}
+	}
+
+	if baseURL != "" && event.ActionURL != baseURL {
+		msg += fmt.Sprintf("\n\n<a href=\"%s\">Live Dashboard</a>", baseURL)
 	}
 
 	payload := map[string]string{
@@ -142,25 +154,16 @@ func (t *TelegramAlerter) AlertSuccess(event AlertEvent) error {
 
 // EmailAlerter sends notifications via SendGrid API.
 type EmailAlerter struct {
-	Client      *sendgrid.Client
+	Client      EmailSender
 	FromEmail   string
 	TargetsFile string // Path to file containing trusted emails
-	Env         string
-	BaseURL     string
 }
 
-func NewEmailAlerter(apiKey string, from string, targetsFile string, env string, baseURL string) *EmailAlerter {
-	if apiKey == "" {
-		return &EmailAlerter{} // Disabled
-	}
-	client := sendgrid.NewSendClient(apiKey)
-
+func NewEmailAlerter(client EmailSender, from string, targetsFile string) *EmailAlerter {
 	return &EmailAlerter{
 		Client:      client,
 		FromEmail:   from,
 		TargetsFile: targetsFile,
-		Env:         env,
-		BaseURL:     baseURL,
 	}
 }
 
@@ -184,8 +187,12 @@ func (e *EmailAlerter) send(prefix string, event AlertEvent) error {
 	}
 
 	envPrefix := ""
-	if e.Env != "prod" && e.Env != "production" && e.Env != "" {
-		envPrefix = fmt.Sprintf("[%s] ", strings.ToUpper(e.Env))
+	envName := os.Getenv("ENVIRONMENT")
+	if envName == "" {
+		envName = "production"
+	}
+	if envName != "prod" && envName != "production" {
+		envPrefix = fmt.Sprintf("[%s] ", strings.ToUpper(envName))
 	}
 
 	from := mail.NewEmail("ProFM Poller", e.FromEmail)
@@ -218,9 +225,22 @@ func (e *EmailAlerter) send(prefix string, event AlertEvent) error {
 		htmlContent += fmt.Sprintf("<br><br><a href=\"%s\" style=\"padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;\">%s</a>", event.ActionURL, label)
 	}
 
-	if e.BaseURL != "" && event.ActionURL != e.BaseURL {
-		plainTextContent += fmt.Sprintf("\n\nLive Dashboard: %s", e.BaseURL)
-		htmlContent += fmt.Sprintf("<br><br><a href=\"%s\" style=\"padding: 10px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 5px;\">Live Dashboard</a>", e.BaseURL)
+	baseURL := os.Getenv("BASE_URL")
+	if baseURL == "" {
+		if appName := os.Getenv("FLY_APP_NAME"); appName != "" {
+			baseURL = fmt.Sprintf("https://%s.fly.dev", appName)
+		} else {
+			port := os.Getenv("PORT")
+			if port == "" {
+				port = "8080"
+			}
+			baseURL = "http://localhost:" + port
+		}
+	}
+
+	if baseURL != "" && event.ActionURL != baseURL {
+		plainTextContent += fmt.Sprintf("\n\nLive Dashboard: %s", baseURL)
+		htmlContent += fmt.Sprintf("<br><br><a href=\"%s\" style=\"padding: 10px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 5px;\">Live Dashboard</a>", baseURL)
 	}
 
 	m := mail.NewV3Mail()

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"pro-fm-poller/pkg/poller"
+
+	"github.com/sendgrid/sendgrid-go"
 )
 
 type whatsAppInitFunc func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error)
@@ -182,16 +184,31 @@ func main() {
 	}
 
 	// 5. Initialize Alerters
-	tgAlerter := poller.NewTelegramAlerter(telegramToken, telegramChatID, envName, baseURL)
+	tgAlerter := poller.NewTelegramAlerter(telegramToken, telegramChatID)
 	emailFrom := os.Getenv("EMAIL_FROM")
 	if emailFrom == "" {
 		emailFrom = "notifications@yourdomain.com"
 	}
-	emAlerter := poller.NewEmailAlerter(sendgridKey, emailFrom, poller.TrustedEmailsFilePath(appDBPath), envName, baseURL)
+	isProd := envName == "production" || envName == "" || envName == "prod"
+	var emailClient poller.EmailSender
+	if isProd {
+		if sendgridKey != "" {
+			emailClient = sendgrid.NewSendClient(sendgridKey)
+		}
+	} else {
+		fmt.Println("🚀 Using local mailpit for emails. Watch emails at http://localhost:8025")
+		emailHost := os.Getenv("MAILPIT_HOST")
+		if emailHost == "" {
+			emailHost = "localhost:1025" // Fallback to localhost if not set in docker-compose
+		}
+		emailClient = &poller.SMTPSender{Addr: emailHost}
+	}
+
+	emAlerter := poller.NewEmailAlerter(emailClient, emailFrom, poller.TrustedEmailsFilePath(appDBPath))
 	alerter := poller.NewMultiAlerter(tgAlerter, emAlerter)
 
 	// 6. Initialize Auth Manager
-	authMgr := poller.NewAuthManager(dbMgr, sendgridKey, emailFrom, adminPass, baseURL)
+	authMgr := poller.NewAuthManager(dbMgr, emailClient, emailFrom, adminPass, baseURL)
 
 	// 7. Start the SSE Broadcaster Bridge
 	go func() {
