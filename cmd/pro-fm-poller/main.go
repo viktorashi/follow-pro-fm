@@ -445,8 +445,9 @@ func main() {
 		DisconnectWhatsApp: func() {
 			wappMutex.RLock()
 			defer wappMutex.RUnlock()
-			for _, c := range wappClients {
+			for phone, c := range wappClients {
 				c.Disconnect()
+				poller.CancelPairing(phone)
 			}
 		},
 		ConnectWhatsApp: func() error {
