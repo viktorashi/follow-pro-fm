@@ -35,7 +35,7 @@ func LoadE2EEnv(rootDir string) {
 func E2EMultiAlerter(rootDir string) Alerter {
 	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
-	appEnv := "E2E-Testing"
+
 	tgAlerter := NewTelegramAlerter(telegramToken, telegramChatID)
 
 	sendgridKey := os.Getenv("SENDGRID_API_KEY")
