@@ -15,7 +15,7 @@ func gracefulShutdown() {
 	signal.Notify(s, syscall.SIGTERM)
 	go func() {
 		<-s
-		fmt.Println("Sutting down gracefully.")
+		fmt.Println("Shutting down gracefully.")
 		// clean up here
 		os.Exit(0)
 	}()
