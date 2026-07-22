@@ -10,13 +10,12 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v5"
-	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
 
 type AuthManager struct {
 	db             *DBManager
-	sendgridClient *sendgrid.Client
+	sendgridClient EmailSender
 	fromEmail      string
 	adminPass      string
 	baseURL        string
@@ -24,14 +23,10 @@ type AuthManager struct {
 
 const sessionDuration = 7 * 24 * time.Hour
 
-func NewAuthManager(db *DBManager, sendgridKey, fromEmail, adminPass, baseURL string) *AuthManager {
-	var sc *sendgrid.Client
-	if sendgridKey != "" {
-		sc = sendgrid.NewSendClient(sendgridKey)
-	}
+func NewAuthManager(db *DBManager, client EmailSender, fromEmail, adminPass, baseURL string) *AuthManager {
 	return &AuthManager{
 		db:             db,
-		sendgridClient: sc,
+		sendgridClient: client,
 		fromEmail:      fromEmail,
 		adminPass:      adminPass,
 		baseURL:        baseURL,
