@@ -109,9 +109,18 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 		for {
 			if client.Store.ID == nil {
 				// No session exists, perform login
-				qrChan, _ := client.GetQRChannel(context.Background())
+				ctx, cancel := context.WithCancel(context.Background())
+				handlerID := client.AddEventHandler(func(evt interface{}) {
+					if _, ok := evt.(*events.Disconnected); ok {
+						cancel()
+					}
+				})
+
+				qrChan, _ := client.GetQRChannel(ctx)
 				err = client.Connect()
 				if err != nil {
+					client.RemoveEventHandler(handlerID)
+					cancel()
 					if stateMgr != nil {
 						stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
 							s.Status = StatusError
@@ -176,6 +185,8 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 						}
 					}
 				}
+				client.RemoveEventHandler(handlerID)
+				cancel()
 
 				if !paired {
 					fmt.Println("❌ Login timed out or failed, retrying...")
