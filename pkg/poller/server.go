@@ -128,6 +128,7 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.GET("/api/unreviewed", s.handleUnreviewedList)
 	protected.GET("/api/unreviewed/file", s.handleUnreviewedFile)
 	protected.POST("/unreviewed/crop", s.handleUnreviewedCrop)
+	protected.POST("/api/unreviewed/remux-all", s.handleRemuxAllUnreviewed)
 }
 
 func (s *TelemetryServer) Start(addr string) error {
@@ -426,12 +427,13 @@ type FileInfo struct {
 }
 
 type ReviewChunk struct {
-	Name           string `json:"name"`
-	Size           int64  `json:"size"`
-	ModTime        string `json:"mod_time"`
-	PlayURL        string `json:"play_url"`
-	Transcript     string `json:"transcript"`
-	CampaignArtist string `json:"campaign_artist"`
+	Name            string  `json:"name"`
+	Size            int64   `json:"size"`
+	ModTime         string  `json:"mod_time"`
+	PlayURL         string  `json:"play_url"`
+	Transcript      string  `json:"transcript"`
+	CampaignArtist  string  `json:"campaign_artist"`
+	DurationSeconds float64 `json:"duration_seconds"`
 }
 
 func (s *TelemetryServer) handleDataView(c *echo.Context) error {
@@ -784,14 +786,14 @@ func (s *TelemetryServer) handleUnreviewedCrop(c *echo.Context) error {
 	if !isSafeFilename(filename) {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid filename"})
 	}
-	var startBytes, endBytes int
-	_, _ = fmt.Sscanf(c.FormValue("start_bytes"), "%d", &startBytes)
-	_, _ = fmt.Sscanf(c.FormValue("end_bytes"), "%d", &endBytes)
+	var startSeconds, endSeconds float64
+	_, _ = fmt.Sscanf(c.FormValue("start_seconds"), "%f", &startSeconds)
+	_, _ = fmt.Sscanf(c.FormValue("end_seconds"), "%f", &endSeconds)
 
 	unreviewedDir := filepath.Join(s.dataDir, "signatures", "unreviewed")
 	canonicalDir := filepath.Join(s.dataDir, "signatures", "canonical")
 
-	err := CropAndMarkCanonical(unreviewedDir, canonicalDir, filename, startBytes, endBytes)
+	err := CropAndMarkCanonical(unreviewedDir, canonicalDir, filename, startSeconds, endSeconds)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -834,13 +836,16 @@ func (s *TelemetryServer) listUnreviewedChunks() ([]ReviewChunk, error) {
 			}
 		}
 
+		duration, _ := GetAudioDuration(filepath.Join(unreviewedDir, entry.Name()))
+
 		chunks = append(chunks, ReviewChunk{
-			Name:           entry.Name(),
-			Size:           info.Size(),
-			ModTime:        info.ModTime().Format("2006-01-02 15:04:05"),
-			PlayURL:        "/api/unreviewed/file?name=" + url.QueryEscape(entry.Name()),
-			Transcript:     transcript,
-			CampaignArtist: campaignArtist,
+			Name:            entry.Name(),
+			Size:            info.Size(),
+			ModTime:         info.ModTime().Format("2006-01-02 15:04:05"),
+			PlayURL:         "/api/unreviewed/file?name=" + url.QueryEscape(entry.Name()),
+			Transcript:      transcript,
+			CampaignArtist:  campaignArtist,
+			DurationSeconds: duration.Seconds(),
 		})
 	}
 
@@ -908,4 +913,34 @@ func formatScheduleTargets(targets []int) string {
 		parts = append(parts, fmt.Sprintf("%d", target))
 	}
 	return strings.Join(parts, ", ")
+}
+
+func (s *TelemetryServer) handleRemuxAllUnreviewed(c *echo.Context) error {
+	unreviewedDir := filepath.Join(s.dataDir, "signatures", "unreviewed")
+	entries, err := os.ReadDir(unreviewedDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return c.JSON(http.StatusOK, map[string]interface{}{"status": "success", "count": 0})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	count := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".mp3") {
+			continue
+		}
+		path := filepath.Join(unreviewedDir, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		remuxed, err := RemuxToMP3(data)
+		if err == nil {
+			_ = os.WriteFile(path, remuxed, 0o644)
+			count++
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{"status": "success", "count": count})
 }
