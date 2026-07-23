@@ -1,7 +1,6 @@
 package poller
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net"
@@ -9,66 +8,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
 
-type transcriptionCaseConfig struct {
-	Language         string
-	ExpectedContains []string
-}
-
 type transcriptionTestCase struct {
-	Name             string
-	AudioBytes       []byte
-	AudioPath        string
-	ExpectedText     string
-	ExpectedContains []string
-	Language         string
-}
-
-func loadTranscriptionCaseConfig(t *testing.T, path string) transcriptionCaseConfig {
-	t.Helper()
-
-	cfg := transcriptionCaseConfig{Language: "ro"}
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatalf("Open(%s) error = %v", path, err)
-	}
-	defer func() { _ = file.Close() }()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		key = strings.TrimSpace(key)
-		value = strings.TrimSpace(value)
-
-		switch key {
-		case "language":
-			cfg.Language = strings.Trim(value, `"`)
-		case "expected_contains":
-			// parse array like ["word1", "word2"]
-			val := strings.Trim(value, "[]")
-			parts := strings.Split(val, ",")
-			for _, p := range parts {
-				p = strings.TrimSpace(p)
-				p = strings.Trim(p, `"`)
-				if p != "" {
-					cfg.ExpectedContains = append(cfg.ExpectedContains, strings.ToLower(p))
-				}
-			}
-		}
-	}
-	return cfg
+	Name              string
+	AudioBytes        []byte
+	AudioPath         string
+	TrustedTranscript string
 }
 
 func loadTranscriptionCases(t *testing.T) []transcriptionTestCase {
@@ -109,27 +58,18 @@ func loadTranscriptionCases(t *testing.T) []transcriptionTestCase {
 			t.Fatalf("no audio file found in %s", dirPath)
 		}
 
-		// Read transcript.txt if present
+		// Read trusted transcript.txt
 		txtPath := filepath.Join(dirPath, "transcript.txt")
-		var expectedText string
-		if data, err := os.ReadFile(txtPath); err == nil {
-			expectedText = strings.TrimSpace(string(data))
-		}
-
-		// Read case.toml if present
-		cfgPath := filepath.Join(dirPath, "case.toml")
-		var cfg transcriptionCaseConfig
-		if _, err := os.Stat(cfgPath); err == nil {
-			cfg = loadTranscriptionCaseConfig(t, cfgPath)
+		trustedText, err := os.ReadFile(txtPath)
+		if err != nil {
+			t.Fatalf("missing transcript.txt in %s", dirPath)
 		}
 
 		cases = append(cases, transcriptionTestCase{
-			Name:             entry.Name(),
-			AudioBytes:       audioBytes,
-			AudioPath:        audioPath,
-			ExpectedText:     expectedText,
-			ExpectedContains: cfg.ExpectedContains,
-			Language:         cfg.Language,
+			Name:              entry.Name(),
+			AudioBytes:        audioBytes,
+			AudioPath:         audioPath,
+			TrustedTranscript: strings.TrimSpace(string(trustedText)),
 		})
 	}
 	return cases
@@ -200,26 +140,20 @@ func TestWhisperContainerTranscription(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 
-			transcript, err := transcriber(ctx, tc.AudioBytes)
+			liveTranscript, err := transcriber(ctx, tc.AudioBytes)
 			if err != nil {
 				t.Fatalf("Transcribe failed for %s: %v", tc.Name, err)
 			}
-			t.Logf("[%s] Transcribed result: %q (expected: %q)", tc.Name, transcript, tc.ExpectedText)
+			t.Logf("[%s] Live transcript: %q | Trusted transcript: %q", tc.Name, liveTranscript, tc.TrustedTranscript)
 
-			if transcript == "" {
-				t.Fatalf("[%s] Got empty transcription", tc.Name)
+			if liveTranscript == "" {
+				t.Fatalf("[%s] Got empty transcription from Whisper", tc.Name)
 			}
 
-			// Verify expected_contains keywords if defined
-			lowerTranscript := strings.ToLower(transcript)
-			for _, kw := range tc.ExpectedContains {
-				if !strings.Contains(lowerTranscript, kw) {
-					t.Fatalf("[%s] Transcription %q does not contain expected phrase %q", tc.Name, transcript, kw)
-				}
+			// Use the actual application matching logic (TriggerValuesMatch)
+			if !TriggerValuesMatch(liveTranscript, tc.TrustedTranscript) {
+				t.Fatalf("[%s] App TriggerValuesMatch(%q, %q) = false, want true", tc.Name, liveTranscript, tc.TrustedTranscript)
 			}
 		})
 	}
 }
-
-// Suppress unused strconv import warning if needed
-var _ = strconv.Itoa
