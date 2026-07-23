@@ -260,3 +260,8 @@ h1, h2, h3, .title, .title-large {
 .matcher-tab-btn.text-muted:hover {
   color: var(--text-color);
 }
+
+.hidden {
+  display: none !important;
+}
+
