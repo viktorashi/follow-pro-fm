@@ -49,7 +49,7 @@ func TestTelemetryServer_UnreviewedChunkEndpointsExposeSavedChunks(t *testing.T)
 	if chunks[0].Name != filename {
 		t.Fatalf("chunk name = %q, want %q", chunks[0].Name, filename)
 	}
-	if chunks[0].PlayURL != "/api/unreviewed/file?name=BTS+-+Butter.mp3" {
+	if !strings.HasPrefix(chunks[0].PlayURL, "/api/unreviewed/file?name=BTS+-+Butter.mp3&t=") {
 		t.Fatalf("PlayURL = %q", chunks[0].PlayURL)
 	}
 
