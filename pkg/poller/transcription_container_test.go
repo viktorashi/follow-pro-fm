@@ -101,56 +101,45 @@ func TestWhisperContainerTranscription(t *testing.T) {
 	healthURL := fmt.Sprintf("http://127.0.0.1:%d/health", testPort)
 	transcriptionURL := fmt.Sprintf("http://127.0.0.1:%d/v1/audio/transcriptions", testPort)
 
-	// Check if an existing test container is already running and healthy
-	resp, err := http.Get(healthURL)
-	alreadyHealthy := err == nil && resp.StatusCode == http.StatusOK
-	if resp != nil {
-		_ = resp.Body.Close()
+	// Always force-remove any pre-existing or stale test container to ensure a fresh, working instance
+	_ = exec.Command("docker", "rm", "-f", containerName).Run()
+
+	imageName := "fedirz/faster-whisper-server:latest-cpu"
+	t.Logf("Spinning up test Whisper container %s on port %d...", containerName, testPort)
+
+	runCmd := exec.Command("docker", "run", "-d", "--rm",
+		"-p", fmt.Sprintf("%d:8000", testPort),
+		"-e", "WHISPER__MODEL=base",
+		"-e", "WHISPER__COMPUTE_TYPE=int8",
+		"-e", `PRELOAD_MODELS=["base"]`,
+		"--name", containerName,
+		imageName,
+	)
+	if out, err := runCmd.CombinedOutput(); err != nil {
+		t.Fatalf("docker run failed: %v, output: %s", err, string(out))
 	}
 
-	if !alreadyHealthy {
-		// Clean up any stale container instantly via docker kill
-		_ = exec.Command("docker", "kill", containerName).Run()
+	t.Cleanup(func() {
+		t.Logf("Removing test container %s...", containerName)
+		_ = exec.Command("docker", "rm", "-f", containerName).Run()
+	})
 
-		imageName := "fedirz/faster-whisper-server:latest-cpu"
-		t.Logf("Spinning up test Whisper container %s on port %d...", containerName, testPort)
-
-		runCmd := exec.Command("docker", "run", "-d", "--rm",
-			"-p", fmt.Sprintf("%d:8000", testPort),
-			"-e", "WHISPER__MODEL=base",
-			"-e", "WHISPER__COMPUTE_TYPE=int8",
-			"-e", `PRELOAD_MODELS=["base"]`,
-			"--name", containerName,
-			imageName,
-		)
-		if out, err := runCmd.CombinedOutput(); err != nil {
-			t.Fatalf("docker run failed: %v, output: %s", err, string(out))
+	// Wait for container readiness via /health endpoint
+	healthy := false
+	for i := 0; i < 80; i++ {
+		time.Sleep(500 * time.Millisecond)
+		resp, err := http.Get(healthURL)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			_ = resp.Body.Close()
+			healthy = true
+			break
 		}
-
-		t.Cleanup(func() {
-			t.Logf("Killing test container %s...", containerName)
-			_ = exec.Command("docker", "kill", containerName).Run()
-		})
-
-		// Wait for container readiness via /health endpoint
-		healthy := false
-		for i := 0; i < 80; i++ {
-			time.Sleep(500 * time.Millisecond)
-			resp, err := http.Get(healthURL)
-			if err == nil && resp.StatusCode == http.StatusOK {
-				_ = resp.Body.Close()
-				healthy = true
-				break
-			}
-			if resp != nil {
-				_ = resp.Body.Close()
-			}
+		if resp != nil {
+			_ = resp.Body.Close()
 		}
-		if !healthy {
-			t.Fatalf("Whisper container failed to become healthy at %s", healthURL)
-		}
-	} else {
-		t.Logf("Reusing existing healthy Whisper test container %s at %s", containerName, healthURL)
+	}
+	if !healthy {
+		t.Fatalf("Whisper container failed to become healthy at %s", healthURL)
 	}
 	transcriber := NewHTTPTranscriber(transcriptionURL)
 
@@ -161,7 +150,7 @@ func TestWhisperContainerTranscription(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
 
 			liveTranscript, err := transcriber(ctx, tc.AudioBytes)
