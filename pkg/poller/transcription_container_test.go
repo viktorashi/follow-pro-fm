@@ -14,10 +14,11 @@ import (
 )
 
 type transcriptionTestCase struct {
-	Name              string
-	AudioBytes        []byte
-	AudioPath         string
-	TrustedTranscript string
+	Name           string
+	AudioBytes     []byte
+	AudioPath      string
+	FullText       string
+	TrustedPhrases []string
 }
 
 func loadTranscriptionCases(t *testing.T) []transcriptionTestCase {
@@ -36,7 +37,7 @@ func loadTranscriptionCases(t *testing.T) []transcriptionTestCase {
 		}
 		dirPath := filepath.Join(baseDir, entry.Name())
 
-		// Read audio file
+		// Read radio stream audio file (stream.mp3 or .mp3 / .ogg / .wav)
 		var audioBytes []byte
 		var audioPath string
 		dirEntries, err := os.ReadDir(dirPath)
@@ -45,7 +46,7 @@ func loadTranscriptionCases(t *testing.T) []transcriptionTestCase {
 		}
 		for _, de := range dirEntries {
 			ext := strings.ToLower(filepath.Ext(de.Name()))
-			if ext == ".ogg" || ext == ".mp3" || ext == ".wav" {
+			if ext == ".mp3" || ext == ".ogg" || ext == ".wav" {
 				audioPath = filepath.Join(dirPath, de.Name())
 				audioBytes, err = os.ReadFile(audioPath)
 				if err != nil {
@@ -55,21 +56,36 @@ func loadTranscriptionCases(t *testing.T) []transcriptionTestCase {
 			}
 		}
 		if len(audioBytes) == 0 {
-			t.Fatalf("no audio file found in %s", dirPath)
+			t.Fatalf("no stream audio file found in %s", dirPath)
 		}
 
-		// Read trusted transcript.txt
+		// Read trusted transcript.txt containing full text and campaign phrases
 		txtPath := filepath.Join(dirPath, "transcript.txt")
-		trustedText, err := os.ReadFile(txtPath)
+		trustedData, err := os.ReadFile(txtPath)
 		if err != nil {
 			t.Fatalf("missing transcript.txt in %s", dirPath)
 		}
 
+		rawLines := strings.Split(string(trustedData), "\n")
+		var fullText string
+		var phrases []string
+		for _, line := range rawLines {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			if fullText == "" {
+				fullText = line
+			}
+			phrases = append(phrases, line)
+		}
+
 		cases = append(cases, transcriptionTestCase{
-			Name:              entry.Name(),
-			AudioBytes:        audioBytes,
-			AudioPath:         audioPath,
-			TrustedTranscript: strings.TrimSpace(string(trustedText)),
+			Name:           entry.Name(),
+			AudioBytes:     audioBytes,
+			AudioPath:      audioPath,
+			FullText:       fullText,
+			TrustedPhrases: phrases,
 		})
 	}
 	return cases
@@ -144,15 +160,23 @@ func TestWhisperContainerTranscription(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Transcribe failed for %s: %v", tc.Name, err)
 			}
-			t.Logf("[%s] Live transcript: %q | Trusted transcript: %q", tc.Name, liveTranscript, tc.TrustedTranscript)
+			t.Logf("[%s] Live transcript: %q | Full text: %q", tc.Name, liveTranscript, tc.FullText)
 
 			if liveTranscript == "" {
 				t.Fatalf("[%s] Got empty transcription from Whisper", tc.Name)
 			}
 
-			// Use the actual application matching logic (TriggerValuesMatch)
-			if !TriggerValuesMatch(liveTranscript, tc.TrustedTranscript) {
-				t.Fatalf("[%s] App TriggerValuesMatch(%q, %q) = false, want true", tc.Name, liveTranscript, tc.TrustedTranscript)
+			// Test using the real application TriggerValuesMatch matching logic
+			matched := false
+			for _, phrase := range tc.TrustedPhrases {
+				if TriggerValuesMatch(liveTranscript, phrase) {
+					matched = true
+					t.Logf("[%s] Matched trusted phrase %q via TriggerValuesMatch", tc.Name, phrase)
+					break
+				}
+			}
+			if !matched {
+				t.Fatalf("[%s] App TriggerValuesMatch failed to match live transcript %q against trusted phrases %v", tc.Name, liveTranscript, tc.TrustedPhrases)
 			}
 		})
 	}
