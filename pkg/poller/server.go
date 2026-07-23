@@ -117,6 +117,7 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.POST("/api/settings/gathering", s.handleToggleGathering)
 	protected.GET("/api/unreviewed", s.handleUnreviewedList)
 	protected.GET("/api/signatures/file", s.handleSignatureFile)
+	protected.POST("/api/signatures/transcribe", s.handleTranscribeSignature)
 	protected.POST("/unreviewed/crop", s.handleUnreviewedCrop)
 	protected.POST("/api/unreviewed/remux-all", s.handleRemuxAllUnreviewed)
 }
@@ -957,4 +958,43 @@ func (s *TelemetryServer) handleRemuxAllUnreviewed(c *echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{"status": "success", "count": count})
+}
+
+func (s *TelemetryServer) handleTranscribeSignature(c *echo.Context) error {
+	var req struct {
+		Filename string `json:"filename"`
+		Bucket   string `json:"bucket"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	}
+	if !isSafeFilename(req.Filename) || !isSafeFilename(req.Bucket) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid filename or bucket"})
+	}
+
+	if s.transcribe == nil {
+		return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "transcription service not configured"})
+	}
+
+	path := filepath.Join(s.dataDir, "signatures", req.Bucket, req.Filename)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "file not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to read file"})
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request().Context(), 120*time.Second)
+	defer cancel()
+	transcript, err := s.transcribe(ctx, data)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "transcription failed: " + err.Error()})
+	}
+
+	if s.dbMgr != nil && transcript != "" {
+		_ = s.dbMgr.UpdateSignatureTranscript(c.Request().Context(), req.Bucket, req.Filename, transcript)
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"transcript": transcript})
 }
