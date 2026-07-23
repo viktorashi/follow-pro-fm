@@ -28,25 +28,28 @@ build-ffmpeg:
     ./scripts/build_ffmpeg.sh
 
 test: build-ffmpeg generate
-    PATH="./bin:$PATH" go test -count=1 ./pkg/...
+    PATH="./bin:$PATH" go test ./pkg/...
 
 smoke-live-mock: build
     ./scripts/smoke_live_mock.sh
 
 test-cover: build-ffmpeg generate
-    PATH="./bin:$PATH" go test -count=1 -coverprofile=coverage.out ./pkg/...
+    PATH="./bin:$PATH" go test -coverprofile=coverage.out ./pkg/...
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
 
 test-cover-e2e-nowapp: build-ffmpeg generate
-    PATH="./bin:$PATH" go test -count=1 -v -coverprofile=coverage.out -tags="e2e,nowapp" ./pkg/...
+    PATH="./bin:$PATH" go test -v -coverprofile=coverage.out -tags="e2e,nowapp" ./pkg/...
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
 
 test-cover-e2e-all: build-ffmpeg generate
-    PATH="./bin:$PATH" go test -count=1 -v -coverprofile=coverage.out -tags=e2e ./pkg/...
+    PATH="./bin:$PATH" go test -v -coverprofile=coverage.out -tags=e2e ./pkg/...
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
+
+test-transcriptions:
+    go test -run TestWhisperContainerTranscription ./pkg/poller/...
 
 # ---- Docker ----
 
@@ -71,12 +74,42 @@ run:
 fly-ssh:
     flyctl ssh console
 
-# Push local data to Fly volume (explicitly EXCLUDING wapp.sqlite to prevent disconnecting real session)
-# and preventing the re-upload of already used audio files
-push-files:
-    @echo "Uploading data folder to Fly persistent volume..."
-    env COPYFILE_DISABLE=1 tar -cf - --exclude='wapp.sqlite' --exclude='._*' -C data . | flyctl ssh console -C 'sh -c '\''mkdir -p /tmp/px && tar -xf - -C /tmp/px && if [ -d /tmp/px/audios ]; then for f in /tmp/px/audios/*; do [ -e "$f" ] || continue; name="${f##*/}"; if [ -f "/data/audios/used/$name" ]; then echo "Skipping already used file: $name"; rm -f "$f"; fi; done; fi && tar -cf - -C /tmp/px . | tar -xf - -C /data && rm -rf /tmp/px'\'''
-    @echo "✅ Files uploaded."
+# Push audios to production.
+# Production code will automatically hash and skip any audios that have already been used.
+# Usage:
+#   just push-audios                        (pushes local 'data/audios' to remote '/data/audios')
+#   just push-audios ./my_audios            (pushes to canonical sender '/data/audios/')
+#   just push-audios ./my_audios 40771234567 (pushes to '/data/audios/40771234567/')
+# just push-audios ./my_audios /           (pushes to canonical sender '/data/audios/')
+push-audios LOCAL_DIR="data/audios" PHONE="":
+    #!/usr/bin/env bash
+    set -e
+    LOCAL="{{ LOCAL_DIR }}"
+    PHONE="{{ PHONE }}"
+
+    # If the user accidentally specifies 'data', forcefully correct it to 'data/audios'
+    if [ "$LOCAL" = "data" ]; then
+        LOCAL="data/audios"
+    fi
+
+    if [ "$LOCAL" = "data/audios" ]; then
+        TARGET="/data/audios"
+        echo "Uploading local 'data/audios' folder to Fly persistent volume..."
+    else
+        if [ -z "$PHONE" ] || [ "$PHONE" = "/" ]; then
+            TARGET="/data/audios"
+            echo "Pushing audios from $LOCAL to canonical sender at $TARGET..."
+        else
+            PHONE=$(echo "$PHONE" | sed 's/+//g' | sed 's/ //g')
+            TARGET="/data/audios/$PHONE"
+            echo "Pushing audios from $LOCAL to phone $PHONE at $TARGET..."
+        fi
+    fi
+
+    flyctl ssh console -C "mkdir -p $TARGET"
+    # STRICTLY forbid any database files from ever being uploaded
+    env COPYFILE_DISABLE=1 tar -cf - --exclude='*.sqlite*' --exclude='*.db' --exclude='._*' -C "$LOCAL" . | flyctl ssh console -C "tar -xf - -C $TARGET"
+    echo "✅ Audios uploaded."
 
 # Clean up accidentally uploaded macOS ._ metadata files from the Fly persistent volume
 fly-cleanup-mac-files:

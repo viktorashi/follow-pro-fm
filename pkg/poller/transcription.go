@@ -22,10 +22,13 @@ func NewHTTPTranscriber(url string) func(context.Context, []byte) (string, error
 		if _, err := part.Write(audio); err != nil {
 			return "", err
 		}
-		if err := writer.WriteField("model", "tiny"); err != nil {
+		if err := writer.WriteField("model", "base"); err != nil {
 			return "", err
 		}
 		if err := writer.WriteField("language", "ro"); err != nil {
+			return "", err
+		}
+		if err := writer.WriteField("prompt", "Follow ProFM! Ascultă hitul către Londra. Trimite acum un mesaj audio pe WhatsApp."); err != nil {
 			return "", err
 		}
 		if err := writer.Close(); err != nil {
