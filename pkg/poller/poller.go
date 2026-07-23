@@ -660,6 +660,11 @@ func (p *Poller) checkSongWithCoordinator(currentSong *SongInfo, now time.Time, 
 	if song != *currentSong {
 		log.Printf("[%s] %s - %s", now.Format("15:04:05"), song.Artist, song.Title)
 
+		*currentSong = song
+		p.StateMgr.Update(func(s *AppState) {
+			s.CurrentSong = song.Artist + " - " + song.Title
+		})
+
 		capture := p.captureContestAudio(now, song)
 		currentRadioLogID := int64(0)
 		if p.DBMgr != nil {
@@ -705,12 +710,6 @@ func (p *Poller) checkSongWithCoordinator(currentSong *SongInfo, now time.Time, 
 		} else {
 			log.Printf("   [INFO] Daily limit of %d matches reached. Ignoring further campaign matches for today.", MaxDailyMatches)
 		}
-
-		*currentSong = song
-
-		p.StateMgr.Update(func(s *AppState) {
-			s.CurrentSong = song.Artist + " - " + song.Title
-		})
 	}
 
 	// Always update audio stats on each check to keep UI fresh
