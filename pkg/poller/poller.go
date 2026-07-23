@@ -14,8 +14,12 @@ import (
 	"sync"
 	"time"
 	_ "time/tzdata"
+	"unicode"
 
 	"github.com/lithammer/dedent"
+	"golang.org/x/text/runes"
+	"golang.org/x/text/transform"
+	"golang.org/x/text/unicode/norm"
 )
 
 const (
@@ -234,7 +238,18 @@ func captureHasTag(capture *contestCapture, tag contestTag) bool {
 	})
 }
 
+var diacriticsTransformer = transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
+
+func removeDiacritics(s string) string {
+	result, _, err := transform.String(diacriticsTransformer, s)
+	if err != nil {
+		return s
+	}
+	return result
+}
+
 func normalizeTriggerValue(value string) string {
+	value = removeDiacritics(value)
 	value = strings.ToLower(strings.TrimSpace(value))
 	return strings.Join(strings.Fields(value), " ")
 }
