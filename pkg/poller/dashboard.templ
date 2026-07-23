@@ -16,6 +16,8 @@ templ Layout(title string) {
 		<!-- HTMX -->
 		<script src="/static/htmx.min.js"></script>
 		<script src="/static/sse.js"></script>
+		<script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
+		<script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
 		<link rel="stylesheet" href="/static/style.css"/>
 	</head>
 	<body class="flex flex-col">
@@ -112,6 +114,46 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 				}).catch(err => alert(err.message));
 				return false;
 			}
+			window.waveSurfers = window.waveSurfers || {};
+			window.initWaveformEditor = function(chunkName, url, duration) {
+				document.getElementById('loader-btn-' + chunkName).style.display = 'none';
+				document.getElementById('editor-container-' + chunkName).classList.remove('hidden');
+				
+				const ws = WaveSurfer.create({
+					container: '#waveform-' + chunkName,
+					waveColor: 'rgba(255, 255, 255, 0.4)',
+					progressColor: '#3b82f6',
+					url: url,
+					height: 96
+				});
+				
+				const wsRegions = ws.registerPlugin(WaveSurfer.Regions.create());
+				
+				ws.on('ready', () => {
+					const region = wsRegions.addRegion({
+						start: 0,
+						end: duration,
+						color: 'rgba(59, 130, 246, 0.3)',
+						resize: true,
+						drag: true
+					});
+					
+					region.on('update', () => {
+						document.getElementById('start-input-' + chunkName).value = region.start;
+						document.getElementById('start-val-' + chunkName).textContent = region.start.toFixed(2);
+						document.getElementById('end-input-' + chunkName).value = region.end;
+						document.getElementById('end-val-' + chunkName).textContent = region.end.toFixed(2);
+					});
+				});
+				
+				window.waveSurfers[chunkName] = ws;
+			};
+
+			window.playPauseWaveform = function(chunkName) {
+				const ws = window.waveSurfers[chunkName];
+				if (ws) ws.playPause();
+			};
+
 			function showTab(tabName) {
 				document.querySelectorAll('.matcher-tab-btn').forEach(btn => {
 					if (btn.dataset.target === tabName) {
@@ -304,23 +346,26 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 												</div>
 												<a href={ templ.URL(chunk.PlayURL) } target="_blank" class="btn btn-secondary btn-sm">Open</a>
 											</div>
-											<audio controls preload="none" class="w-full mb-3" id={ "audio-" + chunk.Name }>
-												<source src={ chunk.PlayURL } type={ audioMimeType(chunk.Name) } />
-												Your browser does not support the audio element.
-											</audio>
+											<div id={ "editor-container-" + chunk.Name } class="w-full bg-black/30 rounded p-2 mb-3 hidden">
+												<div id={ "waveform-" + chunk.Name } class="w-full h-24 mb-2"></div>
+												<div class="flex gap-2 justify-center mt-2">
+													<button type="button" class="btn btn-secondary btn-sm" onclick={ templ.JSFuncCall("window.playPauseWaveform('" + chunk.Name + "')") }>Play / Pause</button>
+												</div>
+											</div>
+											<div id={ "loader-btn-" + chunk.Name } class="flex justify-center mb-3">
+												<button type="button" class="btn btn-secondary btn-sm w-full py-4 bg-black/20" onclick={ templ.JSFuncCall("window.initWaveformEditor('" + chunk.Name + "', '" + chunk.PlayURL + "', " + fmt.Sprintf("%f", chunk.DurationSeconds) + ")") }>
+													🎙️ Load Audio Editor
+												</button>
+											</div>
+
 											<form onsubmit="return cropUnreviewed(event, this)" class="flex flex-col gap-2">
 												<input type="hidden" name="filename" value={ chunk.Name }/>
-												<div class="flex gap-4 w-full">
-													<div class="flex-grow">
-														<label class="text-xs text-muted mb-1 flex justify-between"><span>Start time (s)</span> <span id={ "start-val-" + chunk.Name }>0.0</span></label>
-														<input type="range" min="0" max={ fmt.Sprintf("%.1f", chunk.DurationSeconds) } step="0.1" value="0" class="w-full" oninput={ templ.JSFuncCall("document.getElementById('start-val-' + '"+chunk.Name+"').textContent = this.value; document.getElementById('start-input-' + '"+chunk.Name+"').value = this.value") } />
-														<input type="hidden" name="start_seconds" id={ "start-input-" + chunk.Name } value="0"/>
-													</div>
-													<div class="flex-grow">
-														<label class="text-xs text-muted mb-1 flex justify-between"><span>End time (s)</span> <span id={ "end-val-" + chunk.Name }>{ fmt.Sprintf("%.1f", chunk.DurationSeconds) }</span></label>
-														<input type="range" min="0" max={ fmt.Sprintf("%.1f", chunk.DurationSeconds) } step="0.1" value={ fmt.Sprintf("%.1f", chunk.DurationSeconds) } class="w-full" oninput={ templ.JSFuncCall("document.getElementById('end-val-' + '"+chunk.Name+"').textContent = this.value; document.getElementById('end-input-' + '"+chunk.Name+"').value = this.value") } />
-														<input type="hidden" name="end_seconds" id={ "end-input-" + chunk.Name } value={ fmt.Sprintf("%.1f", chunk.DurationSeconds) }/>
-													</div>
+												<input type="hidden" name="start_seconds" id={ "start-input-" + chunk.Name } value="0"/>
+												<input type="hidden" name="end_seconds" id={ "end-input-" + chunk.Name } value={ fmt.Sprintf("%.1f", chunk.DurationSeconds) }/>
+												
+												<div class="flex justify-between items-center text-xs text-muted">
+													<div>Start: <span id={ "start-val-" + chunk.Name }>0.00</span>s</div>
+													<div>End: <span id={ "end-val-" + chunk.Name }>{ fmt.Sprintf("%.2f", chunk.DurationSeconds) }</span>s</div>
 												</div>
 												<div class="flex justify-end mt-2">
 													<button type="submit" class="btn btn-primary btn-sm">Crop to Canonical</button>
