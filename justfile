@@ -48,6 +48,9 @@ test-cover-e2e-all: build-ffmpeg generate
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
 
+test-transcriptions:
+    go test -run TestWhisperContainerTranscription ./pkg/poller/...
+
 # ---- Docker ----
 
 run:
@@ -77,18 +80,18 @@ fly-ssh:
 #   just push-audios                        (pushes local 'data/audios' to remote '/data/audios')
 #   just push-audios ./my_audios            (pushes to canonical sender '/data/audios/')
 #   just push-audios ./my_audios 40771234567 (pushes to '/data/audios/40771234567/')
-#   just push-audios ./my_audios /           (pushes to canonical sender '/data/audios/')
+# just push-audios ./my_audios /           (pushes to canonical sender '/data/audios/')
 push-audios LOCAL_DIR="data/audios" PHONE="":
     #!/usr/bin/env bash
     set -e
-    LOCAL="{{LOCAL_DIR}}"
-    PHONE="{{PHONE}}"
-    
+    LOCAL="{{ LOCAL_DIR }}"
+    PHONE="{{ PHONE }}"
+
     # If the user accidentally specifies 'data', forcefully correct it to 'data/audios'
     if [ "$LOCAL" = "data" ]; then
         LOCAL="data/audios"
     fi
-    
+
     if [ "$LOCAL" = "data/audios" ]; then
         TARGET="/data/audios"
         echo "Uploading local 'data/audios' folder to Fly persistent volume..."
@@ -102,7 +105,7 @@ push-audios LOCAL_DIR="data/audios" PHONE="":
             echo "Pushing audios from $LOCAL to phone $PHONE at $TARGET..."
         fi
     fi
-    
+
     flyctl ssh console -C "mkdir -p $TARGET"
     # STRICTLY forbid any database files from ever being uploaded
     env COPYFILE_DISABLE=1 tar -cf - --exclude='*.sqlite*' --exclude='*.db' --exclude='._*' -C "$LOCAL" . | flyctl ssh console -C "tar -xf - -C $TARGET"
