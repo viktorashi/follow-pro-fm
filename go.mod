@@ -8,6 +8,7 @@ require (
 	github.com/labstack/echo/v5 v5.1.1
 	github.com/lithammer/dedent v1.1.0
 	github.com/mdp/qrterminal/v3 v3.2.1
+	github.com/sendgrid/rest v2.6.9+incompatible
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	go.mau.fi/whatsmeow v0.0.0-20260611094716-089932318bc2
@@ -29,7 +30,6 @@ require (
 	github.com/petermattis/goid v0.0.0-20260330135022-df67b199bc81 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rs/zerolog v1.35.1 // indirect
-	github.com/sendgrid/rest v2.6.9+incompatible // indirect
 	github.com/vektah/gqlparser/v2 v2.5.27 // indirect
 	go.mau.fi/libsignal v0.2.2 // indirect
 	go.mau.fi/util v0.9.9 // indirect
