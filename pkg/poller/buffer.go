@@ -20,6 +20,8 @@ type CircularAudioBuffer struct {
 	saveCallback func(data []byte)
 	streamURL    string
 	cancel       chan struct{}
+	listeners    map[uint64]chan []byte
+	nextListener uint64
 }
 
 // AudioSnapshot is one immutable view of the shared live stream.
@@ -35,6 +37,28 @@ func NewCircularAudioBuffer(streamURL string, sizeBytes int) *CircularAudioBuffe
 		buffer:    make([]byte, sizeBytes),
 		streamURL: streamURL,
 		cancel:    make(chan struct{}),
+		listeners: make(map[uint64]chan []byte),
+	}
+}
+
+// Subscribe receives best-effort copies of incoming stream chunks. A slow
+// consumer never blocks the radio buffer; it can reconnect from fresh audio.
+func (cab *CircularAudioBuffer) Subscribe(queueSize int) (<-chan []byte, func()) {
+	if queueSize < 1 {
+		queueSize = 1
+	}
+	listener := make(chan []byte, queueSize)
+
+	cab.mu.Lock()
+	id := cab.nextListener
+	cab.nextListener++
+	cab.listeners[id] = listener
+	cab.mu.Unlock()
+
+	return listener, func() {
+		cab.mu.Lock()
+		delete(cab.listeners, id)
+		cab.mu.Unlock()
 	}
 }
 
@@ -101,6 +125,14 @@ func (cab *CircularAudioBuffer) writeBytes(data []byte) {
 			finalData := cab.recordBuf.Bytes()
 			cab.recordBuf = nil
 			go cab.saveCallback(finalData)
+		}
+	}
+
+	for _, listener := range cab.listeners {
+		chunk := append([]byte(nil), data...)
+		select {
+		case listener <- chunk:
+		default:
 		}
 	}
 }
