@@ -60,6 +60,9 @@ jobs:
       - name: Lint
         run: ./scripts/golangci-lint-shim.sh run
 
+      - name: droast — Dockerfile linter
+        uses: immanuwell/dockerfile-roast@1.4.7
+
       - name: Restore gotestsum binary cache
         id: gotestsum-bin-cache
         uses: actions/cache@v4
