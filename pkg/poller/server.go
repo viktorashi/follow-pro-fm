@@ -293,7 +293,7 @@ func (s *TelemetryServer) streamEvents(c *echo.Context, isLogs bool) error {
 		_, _ = c.Response().Write((&SSEEvent{Event: "song", Data: songBuf.Bytes()}).Marshal())
 
 		var audioBuf bytes.Buffer
-		_ = AudioStatsComponent(state.UnusedAudios, state.UsedAudios).Render(c.Request().Context(), &audioBuf)
+		_ = AudioStatsComponent(state).Render(c.Request().Context(), &audioBuf)
 		_, _ = c.Response().Write((&SSEEvent{Event: "audio", Data: audioBuf.Bytes()}).Marshal())
 
 		var qrBuf bytes.Buffer
