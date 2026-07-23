@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
+
 	"mime"
 	"net/http"
 	"net/url"
@@ -51,23 +51,6 @@ func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaste
 		logWriter = NewSSELogWriter(os.Stdout, broadcaster) // fallback
 	}
 
-	// Use modern slog to the log writer
-	logger := slog.New(slog.NewJSONHandler(logWriter, nil))
-	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
-		LogURI:    true,
-		LogStatus: true,
-		LogValuesFunc: func(c *echo.Context, v middleware.RequestLoggerValues) error {
-			if strings.HasPrefix(v.URI, "/events/") {
-				return nil
-			}
-			logger.Info(
-				"request",
-				slog.String("URI", v.URI),
-				slog.Int("status", v.Status),
-			)
-			return nil
-		},
-	}))
 	e.Use(middleware.Recover())
 
 	ts := &TelemetryServer{
