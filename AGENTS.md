@@ -7,6 +7,8 @@ That's what's actually deploying to main through CI / CD
 For anything you're given, make atomic, structured ordered commits for each of those.
 Don't run formatting / linting / typechecks / whatever manually. Committing will do that for you.
 
+Only amend commits if they've not yet been pushed. So that you NEVER have to FORCE-PUSH.
+
 This project depends on a custom light build of ffmpeg with just what we need. Never change anything of the ffmpeg codebase, except the build args
 
 Please make sure the way it runs locally + the tests correctly reproduce exactly in the Dockerfile, of what's actually gonna be running in prod.

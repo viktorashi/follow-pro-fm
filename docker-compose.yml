@@ -7,6 +7,7 @@ services:
       - "8080:8080"
     environment:
       - TRANSCRIPTION_URL=http://whisper:8000/v1/audio/transcriptions
+      - TRANSCRIPTION_WS_URL=ws://whisper:8000/v1/audio/transcriptions
       - BASE_URL=http://localhost:8080
     volumes:
       - ./data:/data

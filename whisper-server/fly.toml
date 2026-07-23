@@ -5,12 +5,14 @@ primary_region = "fra"
   dockerfile = "Dockerfile"
 
 [env]
-  WHISPER_MODEL = "base"
+  WHISPER_MODEL = "tiny"
+  UVICORN_HOST = "::"
+  ENABLE_UI = "false"
 
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = false
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
   processes = ["app"]

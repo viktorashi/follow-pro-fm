@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -257,8 +258,15 @@ func main() {
 	}
 
 	var transcribe func(context.Context, []byte) (string, error)
-	if transcriptionURL := os.Getenv("TRANSCRIPTION_URL"); transcriptionURL != "" {
-		transcribe = poller.NewHTTPTranscriber(transcriptionURL)
+
+	transcriptionURL := os.Getenv("TRANSCRIPTION_URL")
+	if transcriptionURL == "" {
+		transcriptionURL = "http://pro-fm-whisper.internal:8000/v1/audio/transcriptions"
+	}
+	transcribe = poller.NewHTTPTranscriber(transcriptionURL)
+	streamingTranscriptionURL := os.Getenv("TRANSCRIPTION_WS_URL")
+	if streamingTranscriptionURL == "" {
+		streamingTranscriptionURL = websocketURL(transcriptionURL)
 	}
 
 	// 8. Start Web Dashboard (Telemetry Server)
@@ -405,6 +413,9 @@ func main() {
 	// Keep roughly 3 minutes of MP3 pre-roll in memory for dashcam captures.
 	audioBuffer := poller.NewCircularAudioBuffer(streamURL, 3*60*128000/8)
 	defer audioBuffer.Stop()
+	pcmInput, unsubscribePCM := audioBuffer.Subscribe(128)
+	defer unsubscribePCM()
+	var streamingTranscriber *poller.WebSocketTranscriber
 	contestCheckCooldown := poller.DefaultContestCheckCooldown
 	if configured := os.Getenv("CONTEST_CHECK_COOLDOWN"); configured != "" {
 		parsed, err := time.ParseDuration(configured)
@@ -430,6 +441,9 @@ func main() {
 		BaseURL:              baseURL,
 		ContestCheckCooldown: contestCheckCooldown,
 		Transcribe:           transcribe,
+		StreamingTranscriptionActive: func() bool {
+			return streamingTranscriber != nil && streamingTranscriber.IsConnected()
+		},
 		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
 			wappMutex.RLock()
 			c, ok := wappClients[senderPhone]
@@ -464,7 +478,25 @@ func main() {
 			return nil
 		},
 	}
+	streamingTranscriber = poller.NewWebSocketTranscriber(streamingTranscriptionURL, p.HandleStreamingTranscript)
+	pcmConverter := poller.NewPCMConverter(pcmInput, streamingTranscriber.Audio())
+	streamingTranscriber.Start(context.Background())
+	pcmConverter.Start(context.Background())
 	p.Start()
+}
+
+func websocketURL(transcriptionURL string) string {
+	u, err := url.Parse(transcriptionURL)
+	if err != nil {
+		return transcriptionURL
+	}
+	switch u.Scheme {
+	case "http":
+		u.Scheme = "ws"
+	case "https":
+		u.Scheme = "wss"
+	}
+	return u.String()
 }
 
 /// coaie de ce naiba nu vad aasta in git tracking?

@@ -800,7 +800,7 @@ func (s *TelemetryServer) handleUnreviewedCrop(c *echo.Context) error {
 	if s.transcribe != nil {
 		targetPath := filepath.Join(canonicalDir, filename)
 		if data, err := os.ReadFile(targetPath); err == nil {
-			ctx, cancel := context.WithTimeout(c.Request().Context(), 30*time.Second)
+			ctx, cancel := context.WithTimeout(c.Request().Context(), 120*time.Second)
 			defer cancel()
 			if t, err := s.transcribe(ctx, data); err == nil {
 				transcript = t
