@@ -61,7 +61,7 @@ templ Login() {
 	}
 }
 
-templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules []ScheduleEntry) {
+templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChunk, phones []string, schedules []ScheduleEntry) {
 	@Layout("Dashboard - ProFM Jaguare") {
 		<script>
 			function toggleGathering() {
@@ -328,7 +328,8 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 						</div>
 
 						<div class="flex gap-4 border-b border-white/10 mb-4 pb-2">
-							<button class="matcher-tab-btn font-semibold text-primary" data-target="fingerprint" onclick="showTab('fingerprint')">Fingerprint Audios</button>
+							<button class="matcher-tab-btn font-semibold text-primary" data-target="fingerprint" onclick="showTab('fingerprint')">Unreviewed Signatures</button>
+							<button class="matcher-tab-btn font-semibold text-muted" data-target="canonical" onclick="showTab('canonical')">Canonical Signatures</button>
 							<button class="matcher-tab-btn font-semibold text-muted" data-target="transcription" onclick="showTab('transcription')">Transcription Phrases</button>
 						</div>
 
@@ -400,6 +401,36 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 												</form>
 											</div>
 										}
+									}
+								</div>
+							}
+						</div>
+
+						<div id="tab-canonical" class="matcher-tab-content" style="display: none;">
+							if len(canonicalChunks) == 0 {
+								<div class="text-sm text-muted">No canonical signatures exist yet.</div>
+							} else {
+								<div class="space-y-4">
+									for _, chunk := range canonicalChunks {
+										<div class="border border-white/10 rounded p-4 mb-3">
+											<div class="flex justify-between items-center gap-4 mb-3">
+												<div>
+													<div class="font-semibold break-all">{ chunk.Name }</div>
+													<div class="text-xs text-muted">{ fmt.Sprintf("%.2f MB", float64(chunk.Size)/(1024*1024)) } ({ fmt.Sprintf("%.0fs", chunk.DurationSeconds) }) · { chunk.ModTime }</div>
+												</div>
+												<div class="flex gap-2">
+													<a href={ templ.URL(chunk.PlayURL) } target="_blank" class="btn btn-secondary btn-sm">Listen</a>
+												</div>
+											</div>
+											if chunk.Transcript != "" {
+												<div class="bg-black/20 p-3 rounded font-mono text-sm border-l-2 border-primary">
+													<div class="text-xs text-muted mb-1 uppercase tracking-wider">Transcription:</div>
+													"{ chunk.Transcript }"
+												</div>
+											} else {
+												<div class="text-xs text-muted italic">No transcription available.</div>
+											}
+										</div>
 									}
 								</div>
 							}

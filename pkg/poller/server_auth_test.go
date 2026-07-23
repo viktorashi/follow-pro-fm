@@ -74,6 +74,7 @@ func TestMockScanRequiresAuth(t *testing.T) {
 		t.TempDir(),
 		t.TempDir(),
 		nil,
+		nil,
 	)
 	server.wappClients = []WhatsAppClient{&MockWhatsAppClient{phone: "+40111222333", dbPath: filepath.Join(t.TempDir(), "mock-wa.sqlite"), stateMgr: server.stateMgr}}
 
@@ -114,6 +115,7 @@ func TestMockScanPairsAuthenticatedMockClients(t *testing.T) {
 		dbMgr,
 		t.TempDir(),
 		t.TempDir(),
+		nil,
 		nil,
 	)
 	server.wappClients = []WhatsAppClient{&MockWhatsAppClient{phone: "+40111222333", dbPath: mockDBPath, stateMgr: stateMgr}}
