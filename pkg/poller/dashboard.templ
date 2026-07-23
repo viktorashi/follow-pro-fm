@@ -114,6 +114,29 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 				}).catch(err => alert(err.message));
 				return false;
 			}
+			function transcribeChunk(name, bucket) {
+				const btn = event.target;
+				const origText = btn.textContent;
+				btn.textContent = 'Transcribing...';
+				btn.disabled = true;
+				
+				fetch('/api/signatures/transcribe', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ filename: name, bucket: bucket })
+				}).then(async res => {
+					if (!res.ok) {
+						const payload = await res.json().catch(() => ({}));
+						throw new Error(payload.error || 'Transcription failed');
+					}
+					window.location.reload();
+				}).catch(err => {
+					alert(err.message);
+					btn.textContent = origText;
+					btn.disabled = false;
+				});
+			}
+
 			window.waveSurfers = window.waveSurfers || {};
 			window.initWaveformEditor = function(chunkName, url, duration) {
 				document.getElementById('loader-btn-' + chunkName).style.display = 'none';
@@ -378,6 +401,21 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 													🎙️ Load Audio Editor
 												</button>
 											</div>
+
+											if chunk.Transcript != "" {
+												<div class="bg-black/20 p-3 rounded font-mono text-sm border-l-2 border-primary">
+													<div class="text-xs text-muted mb-1 uppercase tracking-wider">Transcription:</div>
+													"{ chunk.Transcript }"
+												</div>
+											} else {
+												<div class="flex items-center justify-between gap-4 bg-black/10 p-3 rounded">
+													<div class="text-xs text-muted italic">No transcription available.</div>
+													<button type="button" class="btn btn-secondary btn-sm"
+														data-name={ chunk.Name }
+														data-bucket="unreviewed"
+														onclick="window.transcribeChunk(this.dataset.name, this.dataset.bucket)">Transcribe</button>
+												</div>
+											}
 										</div>
 									}
 								</div>
@@ -385,6 +423,17 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 						</div>
 
 						<div id="tab-transcription" class="matcher-tab-content" style="display: none;">
+							<div class="border border-white/10 rounded p-4 mb-6 bg-black/20">
+								<div class="font-semibold text-sm mb-2 text-primary">Add Manual Phrase</div>
+								<form onsubmit="return addCampaignPhrase(event, this)" class="flex gap-2 items-end">
+									<div class="flex-grow flex gap-2">
+										<input type="text" name="campaign_artist" placeholder="Campaign Artist (e.g. ARIANA GRANDE)" class="input flex-grow" required />
+										<input type="text" name="phrase" placeholder="Phrase text..." class="input flex-grow" required />
+									</div>
+									<button type="submit" class="btn btn-primary btn-sm whitespace-nowrap">Add Phrase</button>
+								</form>
+							</div>
+
 							if len(chunks) == 0 {
 								<div class="text-sm text-muted">No transcriptions waiting for manual review.</div>
 							} else {
