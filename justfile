@@ -141,4 +141,5 @@ deploy-whisper:
     cd whisper-server && fly deploy
 
 restart:
-    fly apps restart pro-fm-poller pro-fm-whisper
+    fly apps restart pro-fm-poller 
+    fly apps restart pro-fm-whisper
