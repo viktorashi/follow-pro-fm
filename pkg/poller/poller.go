@@ -97,22 +97,23 @@ func shouldBypassCampaignTimeChecks() bool {
 }
 
 type Poller struct {
-	APIURL               string
-	PollInterval         time.Duration
-	ActiveCampaigns      []Campaign
-	TargetPhone          string
-	SendVoiceNote        func(senderPhone string, targetPhone string, audioPath string) error
-	DisconnectWhatsApp   func()
-	ConnectWhatsApp      func() error
-	StateMgr             *StateManager
-	Alerter              Alerter
-	AudiosDir            string
-	SignaturesDir        string
-	AudioBuffer          *CircularAudioBuffer
-	DBMgr                *DBManager
-	BaseURL              string
-	ContestCheckCooldown time.Duration
-	Transcribe           func(context.Context, []byte) (string, error)
+	APIURL                       string
+	PollInterval                 time.Duration
+	ActiveCampaigns              []Campaign
+	TargetPhone                  string
+	SendVoiceNote                func(senderPhone string, targetPhone string, audioPath string) error
+	DisconnectWhatsApp           func()
+	ConnectWhatsApp              func() error
+	StateMgr                     *StateManager
+	Alerter                      Alerter
+	AudiosDir                    string
+	SignaturesDir                string
+	AudioBuffer                  *CircularAudioBuffer
+	DBMgr                        *DBManager
+	BaseURL                      string
+	ContestCheckCooldown         time.Duration
+	Transcribe                   func(context.Context, []byte) (string, error)
+	StreamingTranscriptionActive func() bool
 
 	matchesToday int
 	lastCheckDay int
@@ -1048,7 +1049,7 @@ func (p *Poller) checkFingerprintWithCoordinator(now time.Time, coordinator *Con
 }
 
 func (p *Poller) checkTranscriptionWithCoordinator(now time.Time, coordinator *ContestCheckCoordinator, checker *transcriptionContestChecker) {
-	if p.Transcribe == nil || !coordinator.CanCheck(now) || !p.canRunContestChecker(now) {
+	if p.Transcribe == nil || (p.StreamingTranscriptionActive != nil && p.StreamingTranscriptionActive()) || !coordinator.CanCheck(now) || !p.canRunContestChecker(now) {
 		return
 	}
 	p.resetDailyMatchesIfNeeded(now)
@@ -1061,11 +1062,36 @@ func (p *Poller) checkTranscriptionWithCoordinator(now time.Time, coordinator *C
 	}
 	checker.lastVersion = capture.Audio.Version
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	transcript, err := p.Transcribe(ctx, capture.Audio.Data)
+
+	audioData := capture.Audio.Data
+	const bytesPerSec = 16000
+	if len(audioData) > 60*bytesPerSec {
+		audioData = audioData[len(audioData)-60*bytesPerSec:]
+	}
+
+	transcript, err := p.Transcribe(ctx, audioData)
 	if err != nil {
 		log.Printf("   ⚠️ Transcription failed: %v", err)
+		return
+	}
+	p.handleTranscriptWithCoordinator(now, coordinator, capture, transcript)
+}
+
+// HandleStreamingTranscript applies a live transcription through the same
+// coordinator and persistence safeguards as the batch fallback.
+func (p *Poller) HandleStreamingTranscript(transcript string) {
+	now := time.Now()
+	if !p.canRunContestChecker(now) {
+		return
+	}
+	p.resetDailyMatchesIfNeeded(now)
+	p.handleTranscriptWithCoordinator(now, p.contestCheckCoordinator(), p.captureContestAudio(now, SongInfo{}), transcript)
+}
+
+func (p *Poller) handleTranscriptWithCoordinator(now time.Time, coordinator *ContestCheckCoordinator, capture *contestCapture, transcript string) {
+	if capture == nil || !coordinator.CanCheck(now) || p.matchesToday >= MaxDailyMatches {
 		return
 	}
 	p.captureMu.Lock()

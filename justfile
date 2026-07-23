@@ -139,3 +139,7 @@ run-temp-fly-vm volume_id="vol_rkg633w5y5p0z3o4":
 
 deploy-whisper:
     cd whisper-server && fly deploy
+
+restart:
+    fly apps restart pro-fm-poller 
+    fly apps restart pro-fm-whisper

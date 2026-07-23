@@ -71,3 +71,22 @@ func TestCircularAudioBuffer_Trigger(t *testing.T) {
 		t.Errorf("expected captured to include at least the 500 bytes buffer, got %d", len(captured))
 	}
 }
+
+func TestCircularAudioBuffer_SubscribeGetsIndependentChunk(t *testing.T) {
+	cab := NewCircularAudioBuffer("", 8)
+	chunks, unsubscribe := cab.Subscribe(1)
+	defer unsubscribe()
+
+	input := []byte("radio")
+	cab.writeBytes(input)
+	input[0] = 'x'
+
+	select {
+	case chunk := <-chunks:
+		if got, want := string(chunk), "radio"; got != want {
+			t.Fatalf("chunk = %q, want %q", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for listener chunk")
+	}
+}

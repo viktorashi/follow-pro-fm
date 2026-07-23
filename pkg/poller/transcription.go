@@ -22,7 +22,10 @@ func NewHTTPTranscriber(url string) func(context.Context, []byte) (string, error
 		if _, err := part.Write(audio); err != nil {
 			return "", err
 		}
-		if err := writer.WriteField("model", "base"); err != nil {
+		if err := writer.WriteField("model", "tiny"); err != nil {
+			return "", err
+		}
+		if err := writer.WriteField("language", "ro"); err != nil {
 			return "", err
 		}
 		if err := writer.Close(); err != nil {
