@@ -190,7 +190,7 @@ func main() {
 	if emailFrom == "" {
 		emailFrom = "notifications@yourdomain.com"
 	}
-	isProd := envName == "production" || envName == "" || envName == "prod"
+	isProd := os.Getenv("FLY_APP_NAME") != "" || envName == "production" || envName == "prod"
 	var emailClient poller.EmailSender
 	if isProd {
 		if sendgridKey != "" {
@@ -261,7 +261,11 @@ func main() {
 
 	transcriptionURL := os.Getenv("TRANSCRIPTION_URL")
 	if transcriptionURL == "" {
-		transcriptionURL = "http://pro-fm-whisper.internal:8000/v1/audio/transcriptions"
+		if isProd {
+			transcriptionURL = "http://pro-fm-whisper.internal:8000/v1/audio/transcriptions"
+		} else {
+			transcriptionURL = "http://localhost:8000/v1/audio/transcriptions"
+		}
 	}
 	transcribe = poller.NewHTTPTranscriber(transcriptionURL)
 	streamingTranscriptionURL := os.Getenv("TRANSCRIPTION_WS_URL")
