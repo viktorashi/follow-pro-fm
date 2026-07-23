@@ -5,7 +5,7 @@ primary_region = "fra"
   dockerfile = "Dockerfile"
 
 [env]
-  WHISPER_MODEL = "base"
+  WHISPER_MODEL = "tiny"
   UVICORN_HOST = "::"
   ENABLE_UI = "false"
 
