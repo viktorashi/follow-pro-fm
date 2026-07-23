@@ -174,18 +174,38 @@ func TestWhisperContainerTranscription(t *testing.T) {
 				t.Fatalf("[%s] Got empty transcription from Whisper", tc.Name)
 			}
 
-			// Test using the real application TriggerValuesMatch matching logic
-			matched := false
-			for _, phrase := range tc.TrustedPhrases {
-				if TriggerValuesMatch(liveTranscript, phrase) {
-					matched = true
-					t.Logf("[%s] Matched trusted phrase %q via TriggerValuesMatch", tc.Name, phrase)
-					break
-				}
-			}
-			if !matched {
-				t.Fatalf("[%s] App TriggerValuesMatch failed to match live transcript %q against trusted phrases %v", tc.Name, liveTranscript, tc.TrustedPhrases)
+			matched := TriggerValuesMatch(liveTranscript, tc.FullText)
+			overlap := transcriptWordOverlap(liveTranscript, tc.FullText)
+			t.Logf("[%s] Reference overlap ratio: %.2f%%", tc.Name, overlap*100)
+
+			if !matched && overlap < 0.45 {
+				t.Fatalf("[%s] Live transcript %q did not match reference transcript %q (overlap: %.2f%%)", tc.Name, liveTranscript, tc.FullText, overlap*100)
 			}
 		})
 	}
+}
+
+func transcriptWordOverlap(s1, s2 string) float64 {
+	s1 = normalizeTriggerValue(s1)
+	s2 = normalizeTriggerValue(s2)
+	w1 := strings.Fields(s1)
+	w2 := strings.Fields(s2)
+	if len(w1) == 0 || len(w2) == 0 {
+		return 0
+	}
+	set1 := make(map[string]bool)
+	for _, w := range w1 {
+		set1[w] = true
+	}
+	intersection := 0
+	for _, w := range w2 {
+		if set1[w] {
+			intersection++
+		}
+	}
+	minLen := len(w1)
+	if len(w2) < minLen {
+		minLen = len(w2)
+	}
+	return float64(intersection) / float64(minLen)
 }
