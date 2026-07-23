@@ -191,12 +191,174 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 					content.style.display = content.id === 'tab-' + tabName ? 'block' : 'none';
 				});
 			}
+			let stagedAudioFiles = [];
+			let currentUploadMode = 'files';
+
+			function setUploadMode(mode) {
+				currentUploadMode = mode;
+				const filesBtn = document.getElementById('upload-mode-files');
+				const folderBtn = document.getElementById('upload-mode-folder');
+				const label = document.getElementById('dropzone-label');
+				const sublabel = document.getElementById('dropzone-sublabel');
+
+				if (mode === 'files') {
+					if (filesBtn) filesBtn.className = 'btn btn-sm btn-primary flex-1';
+					if (folderBtn) folderBtn.className = 'btn btn-sm btn-secondary flex-1';
+					if (label) label.textContent = 'Click to choose .ogg files (or drag & drop)';
+					if (sublabel) sublabel.textContent = 'Multi-file selection active (files are selectable)';
+				} else {
+					if (folderBtn) folderBtn.className = 'btn btn-sm btn-primary flex-1';
+					if (filesBtn) filesBtn.className = 'btn btn-sm btn-secondary flex-1';
+					if (label) label.textContent = 'Click to choose a Folder (or drag & drop)';
+					if (sublabel) sublabel.textContent = 'Folder mode active (all .ogg files inside folder extracted)';
+				}
+			}
+
+			function triggerFilePicker() {
+				if (currentUploadMode === 'files') {
+					document.getElementById('audio-input-files').click();
+				} else {
+					document.getElementById('audio-input-folder').click();
+				}
+			}
+
+			function handleFileSelection(event) {
+				const files = Array.from(event.target.files || []);
+				const oggs = files.filter(f => f.name.toLowerCase().endsWith('.ogg'));
+				stagedAudioFiles = stagedAudioFiles.concat(oggs);
+				updateSelectedUI();
+			}
+
+			function updateSelectedUI() {
+				const selectedDiv = document.getElementById('dropzone-selected');
+				const promptDiv = document.getElementById('dropzone-prompt');
+				if (stagedAudioFiles.length > 0) {
+					if (promptDiv) promptDiv.classList.add('hidden');
+					if (selectedDiv) {
+						selectedDiv.classList.remove('hidden');
+						selectedDiv.textContent = `✓ ${stagedAudioFiles.length} .ogg voice note(s) staged for upload`;
+					}
+				} else {
+					if (promptDiv) promptDiv.classList.remove('hidden');
+					if (selectedDiv) selectedDiv.classList.add('hidden');
+				}
+			}
+
+			function handleDragOver(event) {
+				event.preventDefault();
+				event.stopPropagation();
+				const dz = document.getElementById('dropzone-area');
+				if (dz) dz.style.borderColor = 'var(--primary)';
+			}
+
+			function handleDragLeave(event) {
+				event.preventDefault();
+				event.stopPropagation();
+				const dz = document.getElementById('dropzone-area');
+				if (dz) dz.style.borderColor = '';
+			}
+
+			async function handleDrop(event) {
+				event.preventDefault();
+				event.stopPropagation();
+				const dz = document.getElementById('dropzone-area');
+				if (dz) dz.style.borderColor = '';
+
+				const items = event.dataTransfer.items;
+				const newFiles = [];
+
+				if (items && items.length > 0) {
+					const entryPromises = [];
+					for (let i = 0; i < items.length; i++) {
+						const item = items[i];
+						if (item.webkitGetAsEntry) {
+							const entry = item.webkitGetAsEntry();
+							if (entry) {
+								entryPromises.push(traverseFileTree(entry, newFiles));
+							}
+						} else if (item.kind === 'file') {
+							const file = item.getAsFile();
+							if (file && file.name.toLowerCase().endsWith('.ogg')) {
+								newFiles.push(file);
+							}
+						}
+					}
+					await Promise.all(entryPromises);
+				} else if (event.dataTransfer.files) {
+					const files = Array.from(event.dataTransfer.files);
+					newFiles.push(...files.filter(f => f.name.toLowerCase().endsWith('.ogg')));
+				}
+
+				if (newFiles.length > 0) {
+					stagedAudioFiles = stagedAudioFiles.concat(newFiles);
+				}
+				updateSelectedUI();
+			}
+
+			async function traverseFileTree(entry, fileList) {
+				if (entry.isFile) {
+					if (entry.name.toLowerCase().endsWith('.ogg')) {
+						await new Promise(resolve => {
+							entry.file(f => {
+								fileList.push(f);
+								resolve();
+							});
+						});
+					}
+				} else if (entry.isDirectory) {
+					const dirReader = entry.createReader();
+					const entries = await readAllEntries(dirReader);
+					for (const child of entries) {
+						await traverseFileTree(child, fileList);
+					}
+				}
+			}
+
+			function readAllEntries(dirReader) {
+				return new Promise(resolve => {
+					let entries = [];
+					function read() {
+						dirReader.readEntries(results => {
+							if (!results || !results.length) {
+								resolve(entries);
+							} else {
+								entries = entries.concat(Array.from(results));
+								read();
+							}
+						}, () => resolve(entries));
+					}
+					read();
+				});
+			}
+
 			function uploadAudio(event, form) {
 				event.preventDefault();
-				const data = new FormData(form);
 				const result = document.getElementById('upload-audio-result');
-				result.textContent = 'Uploading...';
+
+				if (stagedAudioFiles.length === 0) {
+					const filesInput = document.getElementById('audio-input-files');
+					const folderInput = document.getElementById('audio-input-folder');
+					const rawFiles = [];
+					if (filesInput && filesInput.files) rawFiles.push(...Array.from(filesInput.files));
+					if (folderInput && folderInput.files) rawFiles.push(...Array.from(folderInput.files));
+					stagedAudioFiles = rawFiles.filter(f => f.name.toLowerCase().endsWith('.ogg'));
+				}
+
+				if (stagedAudioFiles.length === 0) {
+					result.textContent = 'Please select or drag & drop at least one .ogg voice note file or folder.';
+					result.className = 'mt-4 text-sm text-warning';
+					return false;
+				}
+
+				const data = new FormData();
+				data.append('phone', form.phone.value);
+				for (const file of stagedAudioFiles) {
+					data.append('audio', file, file.name);
+				}
+
+				result.textContent = `Uploading ${stagedAudioFiles.length} file(s)...`;
 				result.className = 'mt-4 text-sm text-muted';
+
 				fetch('/api/audio/upload', {
 					method: 'POST',
 					body: data
@@ -207,8 +369,17 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 					if (!res.ok) {
 						throw new Error(text || 'Upload failed');
 					}
+					stagedAudioFiles = [];
 					form.reset();
-				}).catch(() => {});
+					const filesInput = document.getElementById('audio-input-files');
+					const folderInput = document.getElementById('audio-input-folder');
+					if (filesInput) filesInput.value = '';
+					if (folderInput) folderInput.value = '';
+					updateSelectedUI();
+				}).catch(err => {
+					result.textContent = err.message || 'Upload failed';
+					result.className = 'mt-4 text-sm text-warning';
+				});
 				return false;
 			}
 			function saveSchedule(event, form) {
@@ -521,7 +692,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 
 					<div class="glass p-6">
 						<h2 class="text-sm uppercase text-muted mb-4">Upload Voice Note</h2>
-						<form onsubmit="return uploadAudio(event, this)" enctype="multipart/form-data" class="space-y-4">
+						<form onsubmit="return uploadAudio(event, this)" class="space-y-4">
 							<div>
 								<label class="text-xs text-muted mb-1">Phone pool</label>
 								<select name="phone" class="input" required>
@@ -535,13 +706,32 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 									}
 								</select>
 							</div>
+
 							<div>
 								<label class="text-xs text-muted mb-1">.ogg voice note (files or folders)</label>
-								<div class="flex gap-2">
-									<input type="file" name="audio" accept=".ogg,audio/ogg" class="input flex-1" multiple title="Select multiple files" />
-									<input type="file" name="audio" accept=".ogg,audio/ogg" class="input flex-1" multiple webkitdirectory title="Select a folder" />
+								<div class="flex gap-2 mb-2">
+									<button type="button" id="upload-mode-files" class="btn btn-sm btn-primary flex-1" onclick="setUploadMode('files')">Files Mode</button>
+									<button type="button" id="upload-mode-folder" class="btn btn-sm btn-secondary flex-1" onclick="setUploadMode('folder')">Folder Mode</button>
+								</div>
+
+								<div id="dropzone-area" 
+									 class="border-2 border-dashed border-white/20 rounded-xl p-4 text-center cursor-pointer transition-colors"
+									 onclick="triggerFilePicker()"
+									 ondragover="handleDragOver(event)"
+									 ondragleave="handleDragLeave(event)"
+									 ondrop="handleDrop(event)">
+									
+									<input type="file" id="audio-input-files" accept=".ogg,audio/ogg" class="hidden" multiple onchange="handleFileSelection(event)" />
+									<input type="file" id="audio-input-folder" class="hidden" webkitdirectory directory onchange="handleFileSelection(event)" />
+
+									<div id="dropzone-prompt" class="space-y-1">
+										<div class="text-sm font-medium" id="dropzone-label">Click to choose .ogg files (or drag & drop)</div>
+										<div class="text-xs text-muted" id="dropzone-sublabel">Multi-file selection active (files are selectable)</div>
+									</div>
+									<div id="dropzone-selected" class="hidden text-sm text-success font-medium"></div>
 								</div>
 							</div>
+
 							<button type="submit" class="btn btn-primary">Upload</button>
 						</form>
 						<div id="upload-audio-result" class="mt-4 text-sm text-muted">Uploads land in the active pool, never in <code>used/</code>.</div>
