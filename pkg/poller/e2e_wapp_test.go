@@ -5,6 +5,7 @@ package poller
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -14,6 +15,18 @@ func TestPoller_E2E(t *testing.T) {
 	rootDir := E2EProjectRoot(t)
 	dbPath := filepath.Join(rootDir, "data/wapp.sqlite")
 	appDBPath := filepath.Join(rootDir, "data/app.sqlite")
+	e2eDBPath := filepath.Join(rootDir, "data/app_e2e_test.sqlite")
+
+	// Copy the real app.sqlite to a test-specific file so we retain the WhatsApp sessions,
+	// but we don't accidentally wipe the user's real local radio_log and campaign state!
+	if data, err := os.ReadFile(appDBPath); err == nil {
+		_ = os.WriteFile(e2eDBPath, data, 0644)
+	} else {
+		// fallback to just making an empty one if it doesn't exist
+		_ = os.WriteFile(e2eDBPath, []byte(""), 0644)
+	}
+	defer os.Remove(e2eDBPath) // Cleanup after test!
+
 	audiosDir := filepath.Join(rootDir, "data/audios")
 	LoadE2EEnv(rootDir)
 	multiAlerter := E2EMultiAlerter(rootDir)
@@ -51,7 +64,7 @@ func TestPoller_E2E(t *testing.T) {
 	}
 
 	// Add others from DB
-	dbMgr, err := NewDBManager(appDBPath)
+	dbMgr, err := NewDBManager(e2eDBPath)
 	if err == nil {
 		sessions, err := dbMgr.SenderSessions(context.Background())
 		if err == nil {
