@@ -256,8 +256,13 @@ func main() {
 		{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd", Phrases: []string{"follow profm"}},
 	}
 
+	var transcribe func(context.Context, []byte) (string, error)
+	if transcriptionURL := os.Getenv("TRANSCRIPTION_URL"); transcriptionURL != "" {
+		transcribe = poller.NewHTTPTranscriber(transcriptionURL)
+	}
+
 	// 8. Start Web Dashboard (Telemetry Server)
-	telemetryServer := poller.NewTelemetryServer(authMgr, stateMgr, sseBroadcaster, logWriter, dbMgr, filepath.Dir(dbPath), audiosDir, activeCampaigns)
+	telemetryServer := poller.NewTelemetryServer(authMgr, stateMgr, sseBroadcaster, logWriter, dbMgr, filepath.Dir(dbPath), audiosDir, activeCampaigns, transcribe)
 	go func() {
 		fmt.Println("🚀 Telemetry UI available at", baseURL)
 		if err := telemetryServer.Start("0.0.0.0:" + port); err != nil {
@@ -408,10 +413,6 @@ func main() {
 		} else {
 			contestCheckCooldown = parsed
 		}
-	}
-	var transcribe func(context.Context, []byte) (string, error)
-	if transcriptionURL := os.Getenv("TRANSCRIPTION_URL"); transcriptionURL != "" {
-		transcribe = poller.NewHTTPTranscriber(transcriptionURL)
 	}
 
 	// 10. Start Poller

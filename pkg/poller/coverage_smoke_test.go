@@ -37,7 +37,7 @@ func TestRenderDashboardTemplates(t *testing.T) {
 	components := map[string]templ.Component{
 		"Layout":          Layout("T"),
 		"Login":           Login(),
-		"Dashboard":       Dashboard(state, chunks, []string{CanonicalSenderPhone}, schedules),
+		"Dashboard":       Dashboard(state, chunks, nil, []string{CanonicalSenderPhone}, schedules),
 		"StatusComponent": StatusComponent(state),
 		"SongComponent":   SongComponent(state.CurrentSong),
 		"AudioStats":      AudioStatsComponent(state),
@@ -73,7 +73,7 @@ func TestRenderDashboardTemplatesBodies(t *testing.T) {
 		{
 			name: "Dashboard",
 			render: func(buf *bytes.Buffer) error {
-				return Dashboard(state, nil, []string{CanonicalSenderPhone}, []ScheduleEntry{{Date: "2026-06-23", TargetMatches: []int{1, 3}}}).Render(context.Background(), buf)
+				return Dashboard(state, nil, nil, []string{CanonicalSenderPhone}, []ScheduleEntry{{Date: "2026-06-23", TargetMatches: []int{1, 3}}}).Render(context.Background(), buf)
 			},
 			want: "Daily RNG Schedule",
 		},
