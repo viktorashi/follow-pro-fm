@@ -769,8 +769,7 @@ func (s *TelemetryServer) handleUnreviewedFile(c *echo.Context) error {
 	}
 
 	path := filepath.Join(s.dataDir, "signatures", "unreviewed", filename)
-	data, err := os.ReadFile(path)
-	if err != nil {
+	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "file not found"})
 		}
@@ -778,7 +777,8 @@ func (s *TelemetryServer) handleUnreviewedFile(c *echo.Context) error {
 	}
 
 	c.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", filename))
-	return c.Blob(http.StatusOK, audioMimeType(filename), data)
+	http.ServeFile(c.Response(), c.Request(), path)
+	return nil
 }
 
 func (s *TelemetryServer) handleUnreviewedCrop(c *echo.Context) error {

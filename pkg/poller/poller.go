@@ -21,7 +21,7 @@ import (
 const (
 	MaxDailyMatches      = 6
 	followProFMKeyword   = "follow profm"
-	dashcamAfterDuration = 4 * time.Minute
+	dashcamAfterDuration = 2 * time.Minute
 	fingerprintTailBytes = 768 * 1024
 	contestCaptureWindow = 2 * time.Second
 )
