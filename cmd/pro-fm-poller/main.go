@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -260,13 +259,6 @@ func main() {
 	var transcribe func(context.Context, []byte) (string, error)
 	if transcriptionURL := os.Getenv("TRANSCRIPTION_URL"); transcriptionURL != "" {
 		transcribe = poller.NewHTTPTranscriber(transcriptionURL)
-	} else if _, err := exec.LookPath("whisper-cli"); err == nil {
-		modelPath := os.Getenv("WHISPER_MODEL_PATH")
-		if modelPath == "" {
-			modelPath = "/usr/local/share/whisper/ggml-base.bin"
-		}
-		transcribe = poller.NewLocalWhisperTranscriber("whisper-cli", modelPath)
-		fmt.Println("🚀 Using local whisper-cli for transcriptions")
 	}
 
 	// 8. Start Web Dashboard (Telemetry Server)
