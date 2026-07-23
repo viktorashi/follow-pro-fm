@@ -277,9 +277,19 @@ func GetAudioDirForPhone(phone string, rootDir string) string {
 	return dir
 }
 
-func GetTotalAudioStats(conns []WAConnectionState, rootDir string) (int, int) {
-	totalUnused := 0
-	totalUsed := 0
+type PhoneAudioStats struct {
+	Unused int
+	Used   int
+}
+
+func GetAudioStatsPerPhone(conns []WAConnectionState, rootDir string) map[string]PhoneAudioStats {
+	stats := make(map[string]PhoneAudioStats)
+
+	// Always ensure canonical phone has an entry
+	stats[CanonicalSenderPhone] = PhoneAudioStats{}
+	for _, conn := range conns {
+		stats[conn.Phone] = PhoneAudioStats{}
+	}
 
 	_ = filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -289,14 +299,45 @@ func GetTotalAudioStats(conns []WAConnectionState, rootDir string) (int, int) {
 			return nil
 		}
 		if strings.HasSuffix(strings.ToLower(d.Name()), ".ogg") {
-			if filepath.Base(filepath.Dir(path)) == "used" {
-				totalUsed++
-			} else {
-				totalUnused++
+			isUsed := filepath.Base(filepath.Dir(path)) == "used"
+
+			// Determine which phone this belongs to
+			rel, err := filepath.Rel(rootDir, path)
+			if err != nil {
+				return nil
 			}
+			parts := strings.Split(rel, string(os.PathSeparator))
+
+			phone := CanonicalSenderPhone
+			// If the file is in a subdirectory (other than "used" directly under rootDir), it belongs to a specific phone pool
+			if len(parts) > 1 && parts[0] != "used" {
+				normalized := parts[0]
+				// Find matching phone in conns
+				found := false
+				for _, conn := range conns {
+					if NormalizePhone(conn.Phone) == normalized {
+						phone = conn.Phone
+						found = true
+						break
+					}
+				}
+				if !found {
+					// Fallback if directory exists but phone not in conns
+					// We construct a pseudo-phone number to track it
+					phone = "+" + normalized
+				}
+			}
+
+			s := stats[phone]
+			if isUsed {
+				s.Used++
+			} else {
+				s.Unused++
+			}
+			stats[phone] = s
 		}
 		return nil
 	})
 
-	return totalUnused, totalUsed
+	return stats
 }

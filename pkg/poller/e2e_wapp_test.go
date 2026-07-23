@@ -4,6 +4,7 @@
 package poller
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -12,16 +13,66 @@ import (
 func TestPoller_E2E(t *testing.T) {
 	rootDir := E2EProjectRoot(t)
 	dbPath := filepath.Join(rootDir, "data/wapp.sqlite")
+	appDBPath := filepath.Join(rootDir, "data/app.sqlite")
 	audiosDir := filepath.Join(rootDir, "data/audios")
 	LoadE2EEnv(rootDir)
 	multiAlerter := E2EMultiAlerter(rootDir)
 
-	t.Log("Initializing real WhatsApp client...")
-	client, err := InitWhatsApp("+40734788254", dbPath, nil, multiAlerter, "")
-	if err != nil {
-		t.Fatalf("Failed to initialize WhatsApp: %v", err)
+	stateMgr := NewStateManager()
+
+	ensureConn := func(p string) {
+		stateMgr.Update(func(s *AppState) {
+			found := false
+			for _, conn := range s.Connections {
+				if conn.Phone == p {
+					found = true
+					break
+				}
+			}
+			if !found {
+				s.Connections = append(s.Connections, WAConnectionState{
+					Phone:             p,
+					Status:            StatusConnected,
+					WhatsAppConnected: true,
+				})
+			}
+		})
 	}
-	defer client.Disconnect()
+
+	t.Log("Initializing real WhatsApp clients...")
+
+	wappClients := make(map[string]WhatsAppClient)
+
+	// Add Canonical
+	canonical, err := InitWhatsApp("+40734788254", dbPath, stateMgr, multiAlerter, "")
+	if err == nil {
+		wappClients["+40734788254"] = canonical
+		ensureConn("+40734788254")
+	}
+
+	// Add others from DB
+	dbMgr, err := NewDBManager(appDBPath)
+	if err == nil {
+		sessions, err := dbMgr.SenderSessions(context.Background())
+		if err == nil {
+			for _, session := range sessions {
+				if _, exists := wappClients[session.Phone]; !exists {
+					dbForPhone := filepath.Join(filepath.Dir(dbPath), session.DBFilename)
+					client, err := InitWhatsApp(session.Phone, dbForPhone, stateMgr, multiAlerter, "")
+					if err == nil {
+						wappClients[session.Phone] = client
+						ensureConn(session.Phone)
+					}
+				}
+			}
+		}
+	}
+
+	defer func() {
+		for _, c := range wappClients {
+			c.Disconnect()
+		}
+	}()
 
 	targetPhone := E2ETargetPhoneFromEnv()
 
@@ -37,17 +88,19 @@ func TestPoller_E2E(t *testing.T) {
 			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
 		},
 		TargetPhone: targetPhone,
-		StateMgr:    NewStateManager(),
+		StateMgr:    stateMgr,
 		Alerter:     multiAlerter,
 		AudiosDir:   audiosDir,
+		DBMgr:       dbMgr,
 		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
+			client, ok := wappClients[senderPhone]
+			if !ok {
+				t.Fatalf("Sender phone %s not found in initialized clients", senderPhone)
+			}
 			t.Logf("🚀 Triggering real E2E voice note send from %s to %s...", senderPhone, targetPhone)
 			return SendVoiceNote(client, targetPhone, audioPath)
 		},
 	}
-	poller.StateMgr.Update(func(s *AppState) {
-		s.Connections = []WAConnectionState{{Phone: "+40734788254", WhatsAppConnected: true, Status: StatusConnected}}
-	})
 
 	currentSong := &SongInfo{}
 
