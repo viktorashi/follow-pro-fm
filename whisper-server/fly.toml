@@ -7,9 +7,9 @@ dockerfile = "Dockerfile"
 [env]
 UVICORN_HOST = "0.0.0.0"
 ENABLE_UI = "false"
-WHISPER__MODEL = "tiny"
+WHISPER__MODEL = "base"
 WHISPER__COMPUTE_TYPE = "int8"
-PRELOAD_MODELS = '["tiny"]'
+PRELOAD_MODELS = '["base"]'
 DEFAULT_LANGUAGE = "ro"
 OMP_NUM_THREADS = "4"
 
