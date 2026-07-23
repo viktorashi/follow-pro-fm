@@ -196,7 +196,23 @@ func (s *TelemetryServer) handleDashboardView(c *echo.Context) error {
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Error reading schedule entries: "+err.Error())
 	}
-	return Render(c, http.StatusOK, Dashboard(state, chunks, canonicalChunks, dashboardUploadPhones(state.Connections), schedules))
+	return Render(c, http.StatusOK, Dashboard(state, chunks, canonicalChunks, dashboardUploadPhones(state.Connections), schedules, s.getCampaignArtists()))
+}
+
+func (s *TelemetryServer) getCampaignArtists() []string {
+	seen := make(map[string]bool)
+	var artists []string
+	for _, c := range s.campaigns {
+		artist := strings.TrimSpace(c.Artist)
+		if artist != "" && !seen[strings.ToUpper(artist)] {
+			seen[strings.ToUpper(artist)] = true
+			artists = append(artists, artist)
+		}
+	}
+	if len(artists) == 0 {
+		artists = []string{"BTS", "Ariana", "The Weeknd"}
+	}
+	return artists
 }
 
 func (s *TelemetryServer) handleLogsView(c *echo.Context) error {
