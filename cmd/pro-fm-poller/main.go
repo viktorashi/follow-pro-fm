@@ -257,9 +257,12 @@ func main() {
 	}
 
 	var transcribe func(context.Context, []byte) (string, error)
-	if transcriptionURL := os.Getenv("TRANSCRIPTION_URL"); transcriptionURL != "" {
-		transcribe = poller.NewHTTPTranscriber(transcriptionURL)
+
+	transcriptionURL := os.Getenv("TRANSCRIPTION_URL")
+	if transcriptionURL == "" {
+		transcriptionURL = "http://pro-fm-whisper.internal:8000/v1/audio/transcriptions"
 	}
+	transcribe = poller.NewHTTPTranscriber(transcriptionURL)
 
 	// 8. Start Web Dashboard (Telemetry Server)
 	telemetryServer := poller.NewTelemetryServer(authMgr, stateMgr, sseBroadcaster, logWriter, dbMgr, filepath.Dir(dbPath), audiosDir, activeCampaigns, transcribe)
