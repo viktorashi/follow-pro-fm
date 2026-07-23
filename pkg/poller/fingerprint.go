@@ -61,6 +61,12 @@ func GetCanonicalSignatures(canonicalDir string) (map[string][]byte, error) {
 // SaveUnreviewedChunk saves an audio chunk for manual review.
 func SaveUnreviewedChunk(data []byte, unreviewedDir string, filename string) error {
 	_ = os.MkdirAll(unreviewedDir, 0o755)
+
+	remuxed, err := RemuxToMP3(data)
+	if err == nil {
+		data = remuxed
+	}
+
 	return os.WriteFile(filepath.Join(unreviewedDir, filename), data, 0o644)
 }
 
@@ -121,24 +127,42 @@ func findMatchingCanonicalSignatureInSet(stream []byte, streamFormat, canonicalD
 	return false, "", firstDecodeErr
 }
 
-// CropAndMarkCanonical crops an unreviewed chunk and saves it as a canonical signature.
-func CropAndMarkCanonical(unreviewedDir, canonicalDir, filename string, startBytes, endBytes int) error {
+// CropAndMarkCanonical crops an unreviewed chunk and saves it as a canonical signature using ffmpeg time-based cropping.
+func CropAndMarkCanonical(unreviewedDir, canonicalDir, filename string, startSeconds, endSeconds float64) error {
 	sourcePath := filepath.Join(unreviewedDir, filename)
-	data, err := os.ReadFile(sourcePath)
-	if err != nil {
-		return err
-	}
 
-	if startBytes < 0 || endBytes > len(data) || startBytes >= endBytes {
-		return fmt.Errorf("invalid crop range %d-%d for file of size %d", startBytes, endBytes, len(data))
+	if startSeconds < 0 || endSeconds <= startSeconds {
+		return fmt.Errorf("invalid crop range %.2f-%.2f", startSeconds, endSeconds)
 	}
-
-	cropped := data[startBytes:endBytes]
 
 	_ = os.MkdirAll(canonicalDir, 0o755)
 	targetPath := filepath.Join(canonicalDir, filename)
-	if err := os.WriteFile(targetPath, cropped, 0o644); err != nil {
-		return err
+
+	ffmpegPath, err := ffmpegBinaryPath()
+	if err != nil {
+		return fmt.Errorf("ffmpeg not found: %w", err)
+	}
+
+	// Create a temp file first so we don't end up with a partial file on failure
+	tmpPath := targetPath + ".tmp"
+	defer func() { _ = os.Remove(tmpPath) }()
+
+	cmd := exec.Command(ffmpegPath,
+		"-y",                                     // overwrite
+		"-ss", fmt.Sprintf("%.3f", startSeconds), // start time
+		"-to", fmt.Sprintf("%.3f", endSeconds), // end time
+		"-i", sourcePath, // input file
+		"-c", "copy", // stream copy (no re-encoding)
+		"-f", "mp3", // format
+		tmpPath,
+	)
+
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("ffmpeg crop failed: %w (output: %s)", err, output)
+	}
+
+	if err := os.Rename(tmpPath, targetPath); err != nil {
+		return fmt.Errorf("failed to move cropped file: %w", err)
 	}
 
 	info, err := os.Stat(sourcePath)

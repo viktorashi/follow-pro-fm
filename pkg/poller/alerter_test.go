@@ -6,7 +6,7 @@ import (
 
 func TestTelegramAlerter(t *testing.T) {
 	// With empty token, it should just return nil and not make HTTP requests
-	alerter := NewTelegramAlerter("", "", "production", "http://localhost")
+	alerter := NewTelegramAlerter("", "")
 
 	if err := alerter.AlertInfo(AlertEvent{Title: "Info", Message: "test info"}); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -20,7 +20,7 @@ func TestTelegramAlerter(t *testing.T) {
 }
 
 func TestEmailAlerter(t *testing.T) {
-	alerter := NewEmailAlerter("", "from@example.com", "", "production", "http://localhost")
+	alerter := NewEmailAlerter(nil, "from@example.com", "")
 
 	if err := alerter.AlertInfo(AlertEvent{Title: "Info", Message: "test info"}); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -34,8 +34,8 @@ func TestEmailAlerter(t *testing.T) {
 }
 
 func TestMultiAlerter(t *testing.T) {
-	tg := NewTelegramAlerter("", "", "production", "http://localhost")
-	em := NewEmailAlerter("", "", "", "production", "http://localhost")
+	tg := NewTelegramAlerter("", "")
+	em := NewEmailAlerter(nil, "", "")
 
 	multi := NewMultiAlerter(tg, em)
 

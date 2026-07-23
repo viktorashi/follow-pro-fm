@@ -4,5 +4,15 @@ services:
     ports:
       - "8080:8080"
     env_file: .env
+    environment:
+      - MAILPIT_HOST=mailpit:1025
     volumes:
       - ./data:/data
+    depends_on:
+      - mailpit
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "8025:8025"
+      - "1025:1025"

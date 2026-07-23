@@ -83,6 +83,16 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 				});
 				return false;
 			}
+			function remuxAllUnreviewed() {
+				fetch('/api/unreviewed/remux-all', { method: 'POST' })
+					.then(async res => {
+						const data = await res.json().catch(() => ({}));
+						if (!res.ok) throw new Error(data.error || 'Remux failed');
+						alert(`Successfully remuxed ${data.count} chunks!`);
+						window.location.reload();
+					})
+					.catch(err => alert(err.message));
+			}
 			function addCampaignPhrase(event, form) {
 				event.preventDefault();
 				const data = new FormData(form);
@@ -269,7 +279,10 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 									<div class="text-sm text-warning">Gathering disabled</div>
 								}
 							</div>
-							<a href="/api/unreviewed" class="btn btn-secondary btn-sm" target="_blank">List JSON</a>
+							<div class="flex gap-2">
+								<button onclick="remuxAllUnreviewed()" class="btn btn-primary btn-sm">Fix Infinite Audios</button>
+								<a href="/api/unreviewed" class="btn btn-secondary btn-sm" target="_blank">List JSON</a>
+							</div>
 						</div>
 
 						<div class="flex gap-4 border-b border-white/10 mb-4 pb-2">
@@ -287,25 +300,31 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 											<div class="flex justify-between items-center gap-4 mb-3">
 												<div>
 													<div class="font-semibold break-all">{ chunk.Name }</div>
-													<div class="text-xs text-muted">{ fmt.Sprintf("%d bytes", chunk.Size) } · { chunk.ModTime }</div>
+													<div class="text-xs text-muted">{ fmt.Sprintf("%.2f MB", float64(chunk.Size)/(1024*1024)) } ({ fmt.Sprintf("%.0fs", chunk.DurationSeconds) }) · { chunk.ModTime }</div>
 												</div>
 												<a href={ templ.URL(chunk.PlayURL) } target="_blank" class="btn btn-secondary btn-sm">Open</a>
 											</div>
-											<audio controls preload="none" class="w-full mb-3">
+											<audio controls preload="none" class="w-full mb-3" id={ "audio-" + chunk.Name }>
 												<source src={ chunk.PlayURL } type={ audioMimeType(chunk.Name) } />
 												Your browser does not support the audio element.
 											</audio>
-											<form onsubmit="return cropUnreviewed(event, this)" class="flex gap-2 items-end">
+											<form onsubmit="return cropUnreviewed(event, this)" class="flex flex-col gap-2">
 												<input type="hidden" name="filename" value={ chunk.Name }/>
-												<div>
-													<label class="text-xs text-muted mb-1">Start byte</label>
-													<input type="number" name="start_bytes" min="0" value="0" class="input" required/>
+												<div class="flex gap-4 w-full">
+													<div class="flex-grow">
+														<label class="text-xs text-muted mb-1 flex justify-between"><span>Start time (s)</span> <span id={ "start-val-" + chunk.Name }>0.0</span></label>
+														<input type="range" min="0" max={ fmt.Sprintf("%.1f", chunk.DurationSeconds) } step="0.1" value="0" class="w-full" oninput={ templ.JSFuncCall("document.getElementById('start-val-' + '"+chunk.Name+"').textContent = this.value; document.getElementById('start-input-' + '"+chunk.Name+"').value = this.value") } />
+														<input type="hidden" name="start_seconds" id={ "start-input-" + chunk.Name } value="0"/>
+													</div>
+													<div class="flex-grow">
+														<label class="text-xs text-muted mb-1 flex justify-between"><span>End time (s)</span> <span id={ "end-val-" + chunk.Name }>{ fmt.Sprintf("%.1f", chunk.DurationSeconds) }</span></label>
+														<input type="range" min="0" max={ fmt.Sprintf("%.1f", chunk.DurationSeconds) } step="0.1" value={ fmt.Sprintf("%.1f", chunk.DurationSeconds) } class="w-full" oninput={ templ.JSFuncCall("document.getElementById('end-val-' + '"+chunk.Name+"').textContent = this.value; document.getElementById('end-input-' + '"+chunk.Name+"').value = this.value") } />
+														<input type="hidden" name="end_seconds" id={ "end-input-" + chunk.Name } value={ fmt.Sprintf("%.1f", chunk.DurationSeconds) }/>
+													</div>
 												</div>
-												<div>
-													<label class="text-xs text-muted mb-1">End byte</label>
-													<input type="number" name="end_bytes" min="1" value={ fmt.Sprintf("%d", chunk.Size) } class="input" required/>
+												<div class="flex justify-end mt-2">
+													<button type="submit" class="btn btn-primary btn-sm">Crop to Canonical</button>
 												</div>
-												<button type="submit" class="btn btn-primary btn-sm">Crop to Canonical</button>
 											</form>
 										</div>
 									}
