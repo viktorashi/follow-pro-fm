@@ -2,7 +2,7 @@ app = "pro-fm-whisper"
 primary_region = "fra"
 
 [build]
-  image = "fedirz/faster-whisper-server:latest-cpu"
+  dockerfile = "Dockerfile"
 
 [env]
   WHISPER_MODEL = "base"
