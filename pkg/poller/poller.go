@@ -1061,7 +1061,7 @@ func (p *Poller) checkTranscriptionWithCoordinator(now time.Time, coordinator *C
 	}
 	checker.lastVersion = capture.Audio.Version
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	transcript, err := p.Transcribe(ctx, capture.Audio.Data)
 	if err != nil {
