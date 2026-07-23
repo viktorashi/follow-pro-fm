@@ -252,13 +252,23 @@ func (p *Poller) contestCheckCoordinator() *ContestCheckCoordinator {
 	return p.checker
 }
 
-func triggerValuesMatch(left, right string) bool {
+func NormalizeTriggerValue(value string) string {
+	return normalizeTriggerValue(value)
+}
+
+// TriggerValuesMatch implements the core application logic to determine if a live
+// transcription matches a trusted transcript or campaign phrase (checking if either is contained within the other).
+func TriggerValuesMatch(left, right string) bool {
 	left = normalizeTriggerValue(left)
 	right = normalizeTriggerValue(right)
 	if left == "" || right == "" {
 		return false
 	}
 	return strings.Contains(left, right) || strings.Contains(right, left)
+}
+
+func triggerValuesMatch(left, right string) bool {
+	return TriggerValuesMatch(left, right)
 }
 
 func parseFingerprintTrigger(signatureName string) fingerprintTrigger {
