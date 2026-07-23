@@ -6,6 +6,7 @@ primary_region = "fra"
 
 [env]
   WHISPER_MODEL = "base"
+  UVICORN_HOST = "::"
 
 [http_service]
   internal_port = 8000
