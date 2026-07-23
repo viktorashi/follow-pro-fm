@@ -1,0 +1,16 @@
+app = "pro-fm-whisper"
+primary_region = "fra"
+
+[build]
+  image = "fedirz/faster-whisper-server:latest-cpu"
+
+[env]
+  WHISPER_MODEL = "base"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
