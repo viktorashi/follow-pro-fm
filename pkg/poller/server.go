@@ -200,17 +200,18 @@ func (s *TelemetryServer) handleDashboardView(c *echo.Context) error {
 }
 
 func (s *TelemetryServer) getCampaignArtists() []string {
+	campaigns := s.campaigns
+	if len(campaigns) == 0 {
+		campaigns = DefaultActiveCampaigns
+	}
 	seen := make(map[string]bool)
 	var artists []string
-	for _, c := range s.campaigns {
+	for _, c := range campaigns {
 		artist := strings.TrimSpace(c.Artist)
 		if artist != "" && !seen[strings.ToUpper(artist)] {
 			seen[strings.ToUpper(artist)] = true
 			artists = append(artists, artist)
 		}
-	}
-	if len(artists) == 0 {
-		artists = []string{"BTS", "Ariana", "The Weeknd"}
 	}
 	return artists
 }

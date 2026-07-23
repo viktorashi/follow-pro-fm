@@ -251,11 +251,7 @@ func main() {
 	}()
 
 	// Load campaigns in memory
-	activeCampaigns := []poller.Campaign{
-		{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS", Phrases: []string{"follow profm"}},
-		{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana", Phrases: []string{"follow profm"}},
-		{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd", Phrases: []string{"follow profm"}},
-	}
+	activeCampaigns := poller.DefaultActiveCampaigns
 
 	var transcribe func(context.Context, []byte) (string, error)
 
