@@ -13,7 +13,7 @@ func TestNewHTTPTranscriberPostsAudioAndReadsText(t *testing.T) {
 		if err := r.ParseMultipartForm(1024); err != nil {
 			t.Fatal(err)
 		}
-		file, _, err := r.FormFile("audio")
+		file, _, err := r.FormFile("file")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -37,6 +37,7 @@ type TelemetryServer struct {
 	wappClients []WhatsAppClient
 	onAddPhone  func() error
 	timeNow     func() time.Time
+	transcribe  func(context.Context, []byte) (string, error)
 }
 
 type ScheduleEntry struct {
@@ -44,7 +45,7 @@ type ScheduleEntry struct {
 	TargetMatches []int
 }
 
-func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster, logWriter *SSELogWriter, dbMgr *DBManager, dataDir string, audiosDir string, campaigns []Campaign) *TelemetryServer {
+func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster, logWriter *SSELogWriter, dbMgr *DBManager, dataDir string, audiosDir string, campaigns []Campaign, transcribe func(context.Context, []byte) (string, error)) *TelemetryServer {
 	e := echo.New()
 
 	if logWriter == nil {
@@ -64,6 +65,7 @@ func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaste
 		audiosDir:   audiosDir,
 		campaigns:   append([]Campaign(nil), campaigns...),
 		timeNow:     time.Now,
+		transcribe:  transcribe,
 	}
 
 	ts.registerRoutes()
@@ -114,7 +116,7 @@ func (s *TelemetryServer) registerRoutes() {
 	}
 	protected.POST("/api/settings/gathering", s.handleToggleGathering)
 	protected.GET("/api/unreviewed", s.handleUnreviewedList)
-	protected.GET("/api/unreviewed/file", s.handleUnreviewedFile)
+	protected.GET("/api/signatures/file", s.handleSignatureFile)
 	protected.POST("/unreviewed/crop", s.handleUnreviewedCrop)
 	protected.POST("/api/unreviewed/remux-all", s.handleRemuxAllUnreviewed)
 }
@@ -181,15 +183,19 @@ func (s *TelemetryServer) handleMagicLinkVerify(c *echo.Context) error {
 
 func (s *TelemetryServer) handleDashboardView(c *echo.Context) error {
 	state := s.stateMgr.Get()
-	chunks, err := s.listUnreviewedChunks()
+	chunks, err := s.listChunks("unreviewed")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Error reading unreviewed signatures: "+err.Error())
+	}
+	canonicalChunks, err := s.listChunks("canonical")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error reading canonical signatures: "+err.Error())
 	}
 	schedules, err := s.listScheduleEntries(c.Request().Context())
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Error reading schedule entries: "+err.Error())
 	}
-	return Render(c, http.StatusOK, Dashboard(state, chunks, dashboardUploadPhones(state.Connections), schedules))
+	return Render(c, http.StatusOK, Dashboard(state, chunks, canonicalChunks, dashboardUploadPhones(state.Connections), schedules))
 }
 
 func (s *TelemetryServer) handleLogsView(c *echo.Context) error {
@@ -743,20 +749,24 @@ func (s *TelemetryServer) listScheduleEntries(ctx context.Context) ([]ScheduleEn
 }
 
 func (s *TelemetryServer) handleUnreviewedList(c *echo.Context) error {
-	chunks, err := s.listUnreviewedChunks()
+	chunks, err := s.listChunks("unreviewed")
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	return c.JSON(http.StatusOK, chunks)
 }
 
-func (s *TelemetryServer) handleUnreviewedFile(c *echo.Context) error {
+func (s *TelemetryServer) handleSignatureFile(c *echo.Context) error {
 	filename := c.QueryParam("name")
-	if !isSafeFilename(filename) {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid filename"})
+	bucket := c.QueryParam("bucket")
+	if bucket == "" {
+		bucket = "unreviewed"
+	}
+	if !isSafeFilename(filename) || !isSafeFilename(bucket) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid filename or bucket"})
 	}
 
-	path := filepath.Join(s.dataDir, "signatures", "unreviewed", filename)
+	path := filepath.Join(s.dataDir, "signatures", bucket, filename)
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "file not found"})
@@ -785,18 +795,34 @@ func (s *TelemetryServer) handleUnreviewedCrop(c *echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
+
+	transcript := ""
+	if s.transcribe != nil {
+		targetPath := filepath.Join(canonicalDir, filename)
+		if data, err := os.ReadFile(targetPath); err == nil {
+			ctx, cancel := context.WithTimeout(c.Request().Context(), 30*time.Second)
+			defer cancel()
+			if t, err := s.transcribe(ctx, data); err == nil {
+				transcript = t
+			}
+		}
+	}
+
 	if s.dbMgr != nil {
 		if err := s.dbMgr.CopySignatureFile(c.Request().Context(), "unreviewed", "canonical", filename); err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+		if transcript != "" {
+			_ = s.dbMgr.UpdateSignatureTranscript(c.Request().Context(), "canonical", filename, transcript)
 		}
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
 }
 
-func (s *TelemetryServer) listUnreviewedChunks() ([]ReviewChunk, error) {
-	unreviewedDir := filepath.Join(s.dataDir, "signatures", "unreviewed")
-	entries, err := os.ReadDir(unreviewedDir)
+func (s *TelemetryServer) listChunks(bucket string) ([]ReviewChunk, error) {
+	dir := filepath.Join(s.dataDir, "signatures", bucket)
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -817,20 +843,20 @@ func (s *TelemetryServer) listUnreviewedChunks() ([]ReviewChunk, error) {
 		var transcript string
 		var campaignArtist string
 		if s.dbMgr != nil {
-			meta, err := s.dbMgr.GetSignatureFile(context.Background(), "unreviewed", entry.Name())
+			meta, err := s.dbMgr.GetSignatureFile(context.Background(), bucket, entry.Name())
 			if err == nil {
 				transcript = meta.Transcript
 				campaignArtist = meta.CampaignArtist
 			}
 		}
 
-		duration, _ := GetAudioDuration(filepath.Join(unreviewedDir, entry.Name()))
+		duration, _ := GetAudioDuration(filepath.Join(dir, entry.Name()))
 
 		chunks = append(chunks, ReviewChunk{
 			Name:            entry.Name(),
 			Size:            info.Size(),
 			ModTime:         info.ModTime().Format("2006-01-02 15:04:05"),
-			PlayURL:         "/api/unreviewed/file?name=" + url.QueryEscape(entry.Name()) + "&t=" + fmt.Sprintf("%d", info.ModTime().Unix()),
+			PlayURL:         "/api/signatures/file?bucket=" + url.QueryEscape(bucket) + "&name=" + url.QueryEscape(entry.Name()) + "&t=" + fmt.Sprintf("%d", info.ModTime().Unix()),
 			Transcript:      transcript,
 			CampaignArtist:  campaignArtist,
 			DurationSeconds: duration.Seconds(),

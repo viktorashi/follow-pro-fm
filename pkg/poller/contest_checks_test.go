@@ -17,7 +17,7 @@ func TestContestCheckCoordinatorClaimsOneSharedWindow(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if coordinator.Claim(now) {
+			if coordinator.Claim(now, "test") {
 				winners.Add(1)
 			}
 		}()
@@ -37,15 +37,15 @@ func TestContestCheckCoordinatorClaimsOneSharedWindow(t *testing.T) {
 
 func TestPollerContestCheckCooldownDefaultsAndIsConfigurable(t *testing.T) {
 	now := time.Date(2026, time.July, 12, 12, 0, 0, 0, time.UTC)
-	poller := &Poller{ContestCheckCooldown: time.Minute}
+	poller := &Poller{ContestCheckCooldown: 5 * time.Minute}
 
-	if !poller.ClaimContestWindow(now) {
+	if !poller.ClaimContestWindow(now, "test") {
 		t.Fatal("first checker should claim the window")
 	}
-	if poller.CanCheckContest(now.Add(30 * time.Second)) {
-		t.Fatal("poller should share the claimed window with other checkers")
+	if poller.CanCheckContest(now.Add(2 * time.Minute)) {
+		t.Fatal("poller should share the claimed window with other checkers (after 60s telemetry window)")
 	}
-	if !poller.ClaimContestWindow(now.Add(time.Minute)) {
-		t.Fatal("configured cooldown should permit the next window after one minute")
+	if !poller.ClaimContestWindow(now.Add(5*time.Minute), "test") {
+		t.Fatal("configured cooldown should permit the next window after five minutes")
 	}
 }

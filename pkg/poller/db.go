@@ -469,6 +469,17 @@ func (m *DBManager) UpsertSignatureFile(ctx context.Context, bucket, filename st
 	return err
 }
 
+func (m *DBManager) UpdateSignatureTranscript(ctx context.Context, bucket, filename, transcript string) error {
+	_, err := m.db.ExecContext(
+		ctx,
+		`UPDATE signature_files SET transcript = ? WHERE bucket = ? AND filename = ?`,
+		transcript,
+		bucket,
+		filename,
+	)
+	return err
+}
+
 func (m *DBManager) GetSignatureFile(ctx context.Context, bucket, filename string) (SignatureFile, error) {
 	var meta SignatureFile
 	var recordedAt string
