@@ -537,10 +537,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 							</div>
 							<div>
 								<label class="text-xs text-muted mb-1">.ogg voice note (files or folders)</label>
-								<div class="flex gap-2">
-									<input type="file" name="audio" accept=".ogg,audio/ogg" class="input flex-1" multiple title="Select multiple files" />
-									<input type="file" name="audio" accept=".ogg,audio/ogg" class="input flex-1" multiple webkitdirectory title="Select a folder" />
-								</div>
+								<input type="file" name="audio" accept=".ogg,audio/ogg" class="input w-full" multiple webkitdirectory directory title="Select files or folders" />
 							</div>
 							<button type="submit" class="btn btn-primary">Upload</button>
 						</form>
