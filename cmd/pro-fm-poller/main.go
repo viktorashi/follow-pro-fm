@@ -234,7 +234,7 @@ func main() {
 			// Broadcast Audio Stats
 			if state.UnusedAudios != lastState.UnusedAudios || state.UsedAudios != lastState.UsedAudios {
 				var audioBuf bytes.Buffer
-				_ = poller.AudioStatsComponent(state.UnusedAudios, state.UsedAudios).Render(context.Background(), &audioBuf)
+				_ = poller.AudioStatsComponent(state).Render(context.Background(), &audioBuf)
 				sseBroadcaster.Broadcast("audio", audioBuf.Bytes())
 			}
 

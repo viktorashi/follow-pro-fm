@@ -40,7 +40,7 @@ func TestRenderDashboardTemplates(t *testing.T) {
 		"Dashboard":       Dashboard(state, chunks, []string{CanonicalSenderPhone}, schedules),
 		"StatusComponent": StatusComponent(state),
 		"SongComponent":   SongComponent(state.CurrentSong),
-		"AudioStats":      AudioStatsComponent(state.UnusedAudios, state.UsedAudios),
+		"AudioStats":      AudioStatsComponent(state),
 		"QRComponent":     QRComponent(state.Connections),
 		"LogsPage":        LogsPage(),
 		"DataViewer":      DataViewer(files),
