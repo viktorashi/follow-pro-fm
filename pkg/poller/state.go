@@ -25,6 +25,8 @@ type WAConnectionState struct {
 	Status            AppStatus
 	WhatsAppConnected bool
 	QRCodeData        string
+	UnusedAudios      int
+	UsedAudios        int
 }
 
 type AppState struct {
