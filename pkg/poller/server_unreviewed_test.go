@@ -49,13 +49,13 @@ func TestTelemetryServer_UnreviewedChunkEndpointsExposeSavedChunks(t *testing.T)
 	if chunks[0].Name != filename {
 		t.Fatalf("chunk name = %q, want %q", chunks[0].Name, filename)
 	}
-	if !strings.HasPrefix(chunks[0].PlayURL, "/api/unreviewed/file?name=BTS+-+Butter.mp3&t=") {
+	if !strings.HasPrefix(chunks[0].PlayURL, "/api/signatures/file?bucket=unreviewed&name=BTS+-+Butter.mp3&t=") {
 		t.Fatalf("PlayURL = %q", chunks[0].PlayURL)
 	}
 
-	fileReq := httptest.NewRequest(http.MethodGet, "/api/unreviewed/file?name=BTS+-+Butter.mp3", nil)
+	fileReq := httptest.NewRequest(http.MethodGet, "/api/signatures/file?bucket=unreviewed&name=BTS+-+Butter.mp3", nil)
 	fileRec := httptest.NewRecorder()
-	if err := server.handleUnreviewedFile(e.NewContext(fileReq, fileRec)); err != nil {
+	if err := server.handleSignatureFile(e.NewContext(fileReq, fileRec)); err != nil {
 		t.Fatalf("handleUnreviewedFile() error = %v", err)
 	}
 	if fileRec.Code != http.StatusOK {

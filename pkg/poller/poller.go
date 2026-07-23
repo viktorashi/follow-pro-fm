@@ -306,6 +306,15 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte, transc
 			log.Printf("   ⚠️ Failed to load campaign-bound canonical signatures: %v", err)
 		} else {
 			allowed = loaded
+			// User requested: don't capture "unreviewed" chunks for songs that we've already reviewed (as per metadata songname)
+			prefix := fmt.Sprintf("%s - %s", song.Artist, song.Title)
+			for canonicalFilename := range allowed {
+				if strings.HasPrefix(canonicalFilename, prefix) {
+					log.Printf("   [SIGNATURE REVIEW] Skipped saving %q because we already have a canonical signature for this song: %q", filename, canonicalFilename)
+					return
+				}
+			}
+
 			match, name, err := findMatchingCanonicalSignatureInSet(data, defaultFingerprintFormat, canonicalDir, allowed)
 			if err == nil && match {
 				matchedName = name
