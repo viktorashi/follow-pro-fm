@@ -71,22 +71,27 @@ run:
 fly-ssh:
     flyctl ssh console
 
-# Push audios or the entire data folder to production.
+# Push audios to production.
 # Production code will automatically hash and skip any audios that have already been used.
 # Usage:
-#   just push-audios                        (pushes local 'data' to remote '/data')
+#   just push-audios                        (pushes local 'data/audios' to remote '/data/audios')
 #   just push-audios ./my_audios            (pushes to canonical sender '/data/audios/')
 #   just push-audios ./my_audios 40771234567 (pushes to '/data/audios/40771234567/')
 #   just push-audios ./my_audios /           (pushes to canonical sender '/data/audios/')
-push-audios LOCAL_DIR="data" PHONE="":
+push-audios LOCAL_DIR="data/audios" PHONE="":
     #!/usr/bin/env bash
     set -e
     LOCAL="{{LOCAL_DIR}}"
     PHONE="{{PHONE}}"
     
+    # If the user accidentally specifies 'data', forcefully correct it to 'data/audios'
     if [ "$LOCAL" = "data" ]; then
-        echo "Uploading local 'data' folder to Fly persistent volume root (/data)..."
-        env COPYFILE_DISABLE=1 tar -cf - --exclude='wapp.sqlite' --exclude='._*' -C data . | flyctl ssh console -C 'tar -xf - -C /data'
+        LOCAL="data/audios"
+    fi
+    
+    if [ "$LOCAL" = "data/audios" ]; then
+        TARGET="/data/audios"
+        echo "Uploading local 'data/audios' folder to Fly persistent volume..."
     else
         if [ -z "$PHONE" ] || [ "$PHONE" = "/" ]; then
             TARGET="/data/audios"
@@ -96,11 +101,12 @@ push-audios LOCAL_DIR="data" PHONE="":
             TARGET="/data/audios/$PHONE"
             echo "Pushing audios from $LOCAL to phone $PHONE at $TARGET..."
         fi
-        
-        flyctl ssh console -C "mkdir -p $TARGET"
-        fly sftp push $LOCAL/* $TARGET/
     fi
-    echo "✅ Files uploaded."
+    
+    flyctl ssh console -C "mkdir -p $TARGET"
+    # STRICTLY forbid any database files from ever being uploaded
+    env COPYFILE_DISABLE=1 tar -cf - --exclude='*.sqlite*' --exclude='*.db' --exclude='._*' -C "$LOCAL" . | flyctl ssh console -C "tar -xf - -C $TARGET"
+    echo "✅ Audios uploaded."
 
 # Clean up accidentally uploaded macOS ._ metadata files from the Fly persistent volume
 fly-cleanup-mac-files:
