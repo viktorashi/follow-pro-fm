@@ -499,66 +499,64 @@ func (s *TelemetryServer) handleAudioUpload(c *echo.Context) error {
 		phone = "+" + phone
 	}
 
-	fileHeader, err := c.FormFile("audio")
+	form, err := c.MultipartForm()
 	if err != nil {
-		return c.String(http.StatusBadRequest, "Audio file is required")
+		return c.String(http.StatusBadRequest, "Invalid multipart form")
 	}
 
-	filename := filepath.Base(fileHeader.Filename)
-	if filename == "." || filename == "" {
-		return c.String(http.StatusBadRequest, "Invalid filename")
-	}
-	if !strings.EqualFold(filepath.Ext(filename), ".ogg") {
-		return c.String(http.StatusBadRequest, "Only .ogg files are allowed")
+	files := form.File["audio"]
+	if len(files) == 0 {
+		return c.String(http.StatusBadRequest, "At least one audio file is required")
 	}
 
 	audioDir := GetAudioDirForPhone(phone, s.audiosDir)
-	activePath := filepath.Join(audioDir, filename)
-	usedPath := filepath.Join(audioDir, "used", filename)
-
-	if _, err := os.Stat(activePath); err == nil {
-		return c.String(http.StatusConflict, "An active audio with that filename already exists")
-	} else if !os.IsNotExist(err) {
-		return c.String(http.StatusInternalServerError, "Failed to inspect audio pool")
-	}
-
-	if _, err := os.Stat(usedPath); err == nil {
-		return c.String(http.StatusConflict, "A used audio with that filename already exists")
-	} else if !os.IsNotExist(err) {
-		return c.String(http.StatusInternalServerError, "Failed to inspect used audio pool")
-	}
-
-	src, err := fileHeader.Open()
-	if err != nil {
-		return c.String(http.StatusBadRequest, "Failed to read uploaded file")
-	}
-	defer func() {
-		_ = src.Close()
-	}()
-
 	if err := os.MkdirAll(audioDir, 0755); err != nil {
 		return c.String(http.StatusInternalServerError, "Failed to prepare audio directory")
 	}
 
-	dst, err := os.OpenFile(activePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-	if err != nil {
-		if os.IsExist(err) {
-			return c.String(http.StatusConflict, "An active audio with that filename already exists")
+	var saved []string
+	for _, fileHeader := range files {
+		filename := filepath.Base(fileHeader.Filename)
+		if filename == "." || filename == "" || !strings.EqualFold(filepath.Ext(filename), ".ogg") {
+			continue // Skip invalid files when uploading multiple
 		}
-		return c.String(http.StatusInternalServerError, "Failed to create destination file")
+
+		activePath := filepath.Join(audioDir, filename)
+		usedPath := filepath.Join(audioDir, "used", filename)
+
+		if _, err := os.Stat(activePath); err == nil {
+			continue // Skip if already active
+		}
+		if _, err := os.Stat(usedPath); err == nil {
+			continue // Skip if already used
+		}
+
+		src, err := fileHeader.Open()
+		if err != nil {
+			continue
+		}
+
+		dst, err := os.OpenFile(activePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+		if err != nil {
+			_ = src.Close()
+			continue
+		}
+
+		if _, err := io.Copy(dst, src); err == nil {
+			_ = dst.Close()
+			saved = append(saved, filename)
+		} else {
+			_ = dst.Close()
+			_ = os.Remove(activePath)
+		}
+		_ = src.Close()
 	}
 
-	if _, err := io.Copy(dst, src); err != nil {
-		_ = dst.Close()
-		_ = os.Remove(activePath)
-		return c.String(http.StatusInternalServerError, "Failed to save uploaded file")
-	}
-	if err := dst.Close(); err != nil {
-		_ = os.Remove(activePath)
-		return c.String(http.StatusInternalServerError, "Failed to finalize uploaded file")
+	if len(saved) == 0 {
+		return c.String(http.StatusBadRequest, "No new valid .ogg files were uploaded")
 	}
 
-	return c.String(http.StatusOK, "Upload successful: "+filename+" -> "+phone)
+	return c.String(http.StatusOK, fmt.Sprintf("Successfully uploaded %d files to %s", len(saved), phone))
 }
 
 func dashboardUploadPhones(conns []WAConnectionState) []string {
