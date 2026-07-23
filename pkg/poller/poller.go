@@ -252,10 +252,6 @@ func (p *Poller) contestCheckCoordinator() *ContestCheckCoordinator {
 	return p.checker
 }
 
-func NormalizeTriggerValue(value string) string {
-	return normalizeTriggerValue(value)
-}
-
 // TriggerValuesMatch implements the core application logic to determine if a live
 // transcription matches a trusted transcript or campaign phrase (checking if either is contained within the other).
 func TriggerValuesMatch(left, right string) bool {
@@ -265,10 +261,6 @@ func TriggerValuesMatch(left, right string) bool {
 		return false
 	}
 	return strings.Contains(left, right) || strings.Contains(right, left)
-}
-
-func triggerValuesMatch(left, right string) bool {
-	return TriggerValuesMatch(left, right)
 }
 
 func parseFingerprintTrigger(signatureName string) fingerprintTrigger {
@@ -416,7 +408,7 @@ func (p *Poller) consumeIgnoredMetadataTrigger(song SongInfo) bool {
 		return false
 	}
 
-	ignored := triggerValuesMatch(p.ignoredTrigger.artist, song.Artist) || triggerValuesMatch(p.ignoredTrigger.title, song.Title)
+	ignored := TriggerValuesMatch(p.ignoredTrigger.artist, song.Artist) || TriggerValuesMatch(p.ignoredTrigger.title, song.Title)
 	if ignored {
 		p.ignoredTrigger = fingerprintTrigger{}
 	}
