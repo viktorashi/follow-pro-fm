@@ -238,8 +238,8 @@ func (p *Poller) CanCheckContest(now time.Time) bool {
 
 // ClaimContestWindow lets the first checker that finds a campaign candidate
 // put all checkers to sleep for the shared cooldown.
-func (p *Poller) ClaimContestWindow(now time.Time) bool {
-	return p.contestCheckCoordinator().Claim(now)
+func (p *Poller) ClaimContestWindow(now time.Time, source string) bool {
+	return p.contestCheckCoordinator().Claim(now, source)
 }
 
 func (p *Poller) contestCheckCoordinator() *ContestCheckCoordinator {
@@ -518,10 +518,10 @@ func (p *Poller) Start() {
 	shouldPoll := p.prepareStartState()
 	go p.runMetadataChecker(metadataChecker, shouldPoll)
 	if fingerprintChecker != nil {
-		go runFingerprintChecker(p, fingerprintChecker)
+		go runPeriodicChecker(p, fingerprintChecker)
 	}
 	if transcriptionChecker != nil {
-		go runFingerprintChecker(p, transcriptionChecker)
+		go runPeriodicChecker(p, transcriptionChecker)
 	}
 
 	select {}
@@ -680,7 +680,7 @@ func (p *Poller) checkSongWithCoordinator(currentSong *SongInfo, now time.Time, 
 		if p.matchesToday < MaxDailyMatches {
 			campaignArtist, matchesCampaign := p.matchingCampaignArtist(now, song)
 			if matchesCampaign {
-				if !coordinator.Claim(now) {
+				if !coordinator.Claim(now, triggerSourceMetadata) {
 					return
 				}
 				if p.consumeIgnoredMetadataTrigger(song) {
@@ -950,7 +950,7 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist, artist, title
 	}
 }
 
-func runFingerprintChecker(p *Poller, checker ContestChecker) {
+func runPeriodicChecker(p *Poller, checker ContestChecker) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
@@ -997,7 +997,7 @@ func (p *Poller) checkFingerprintWithCoordinator(now time.Time, coordinator *Con
 		log.Printf("   ⚠️ Fingerprint matching failed: %v", err)
 		return
 	}
-	if !matched || !coordinator.Claim(now) {
+	if !matched || !coordinator.Claim(now, triggerSourceFingerprint) {
 		return
 	}
 
@@ -1073,7 +1073,7 @@ func (p *Poller) checkTranscriptionWithCoordinator(now time.Time, coordinator *C
 	p.captureMu.Unlock()
 
 	campaignArtist, phrase, matched := p.matchingCampaignPhrase(now, transcript)
-	if !matched || !coordinator.Claim(now) {
+	if !matched || !coordinator.Claim(now, triggerSourceTranscription) {
 		return
 	}
 	tag := contestTag{Source: triggerSourceTranscription, CampaignArtist: campaignArtist, Phrase: phrase}
