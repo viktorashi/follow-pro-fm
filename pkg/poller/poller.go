@@ -1063,7 +1063,14 @@ func (p *Poller) checkTranscriptionWithCoordinator(now time.Time, coordinator *C
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	transcript, err := p.Transcribe(ctx, capture.Audio.Data)
+
+	audioData := capture.Audio.Data
+	const bytesPerSec = 16000
+	if len(audioData) > 60*bytesPerSec {
+		audioData = audioData[len(audioData)-60*bytesPerSec:]
+	}
+
+	transcript, err := p.Transcribe(ctx, audioData)
 	if err != nil {
 		log.Printf("   ⚠️ Transcription failed: %v", err)
 		return
