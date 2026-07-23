@@ -5,7 +5,6 @@ package poller
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -13,19 +12,7 @@ import (
 
 func TestPoller_E2E(t *testing.T) {
 	rootDir := E2EProjectRoot(t)
-	dbPath := filepath.Join(rootDir, "data/wapp.sqlite")
 	appDBPath := filepath.Join(rootDir, "data/app.sqlite")
-	e2eDBPath := filepath.Join(rootDir, "data/app_e2e_test.sqlite")
-
-	// Copy the real app.sqlite to a test-specific file so we retain the WhatsApp sessions,
-	// but we don't accidentally wipe the user's real local radio_log and campaign state!
-	if data, err := os.ReadFile(appDBPath); err == nil {
-		_ = os.WriteFile(e2eDBPath, data, 0644)
-	} else {
-		// fallback to just making an empty one if it doesn't exist
-		_ = os.WriteFile(e2eDBPath, []byte(""), 0644)
-	}
-	defer os.Remove(e2eDBPath) // Cleanup after test!
 
 	audiosDir := filepath.Join(rootDir, "data/audios")
 	LoadE2EEnv(rootDir)
@@ -52,6 +39,8 @@ func TestPoller_E2E(t *testing.T) {
 		})
 	}
 
+	dbPath := filepath.Join(rootDir, "data/wapp.sqlite")
+
 	t.Log("Initializing real WhatsApp clients...")
 
 	wappClients := make(map[string]WhatsAppClient)
@@ -63,8 +52,19 @@ func TestPoller_E2E(t *testing.T) {
 		ensureConn("+40734788254")
 	}
 
-	// Add others from DB
-	dbMgr, err := NewDBManager(e2eDBPath)
+	// Make an in-memory DB for the rest of the app state for blazing fast tests
+	dbMgr, err := NewDBManager(":memory:")
+
+	// Open the physical DB exclusively to harvest the WhatsApp session paths
+	importDbMgr, err2 := NewDBManager(appDBPath)
+	if err == nil && err2 == nil {
+		sessions, err := importDbMgr.SenderSessions(context.Background())
+		if err == nil {
+			for _, session := range sessions {
+				_, _ = dbMgr.db.Exec("INSERT INTO sender_sessions (phone, db_filename) VALUES (?, ?)", session.Phone, session.DBFilename)
+			}
+		}
+	}
 	if err == nil {
 		sessions, err := dbMgr.SenderSessions(context.Background())
 		if err == nil {
@@ -86,14 +86,6 @@ func TestPoller_E2E(t *testing.T) {
 			c.Disconnect()
 		}
 	}()
-
-	// Wipe tables to ensure clean E2E run
-	if dbMgr != nil {
-		_, _ = dbMgr.db.Exec("DELETE FROM radio_log")
-		_, _ = dbMgr.db.Exec("DELETE FROM played_songs")
-		_, _ = dbMgr.db.Exec("DELETE FROM used_audio_hashes")
-		_, _ = dbMgr.db.Exec("DELETE FROM campaign_send_state")
-	}
 
 	targetPhone := E2ETargetPhoneFromEnv()
 
