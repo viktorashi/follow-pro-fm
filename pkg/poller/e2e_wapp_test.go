@@ -74,6 +74,14 @@ func TestPoller_E2E(t *testing.T) {
 		}
 	}()
 
+	// Wipe tables to ensure clean E2E run
+	if dbMgr != nil {
+		_, _ = dbMgr.db.Exec("DELETE FROM radio_log")
+		_, _ = dbMgr.db.Exec("DELETE FROM played_songs")
+		_, _ = dbMgr.db.Exec("DELETE FROM used_audio_hashes")
+		_, _ = dbMgr.db.Exec("DELETE FROM campaign_send_state")
+	}
+
 	targetPhone := E2ETargetPhoneFromEnv()
 
 	activeTime := time.Date(2026, time.June, 17, 12, 0, 0, 0, time.UTC)
@@ -81,6 +89,7 @@ func TestPoller_E2E(t *testing.T) {
 	server := NewCampaignHitServer(t)
 	defer server.Close()
 
+	var sentCount int
 	poller := &Poller{
 		APIURL:       server.URL,
 		PollInterval: 1 * time.Millisecond,
@@ -98,6 +107,7 @@ func TestPoller_E2E(t *testing.T) {
 				t.Fatalf("Sender phone %s not found in initialized clients", senderPhone)
 			}
 			t.Logf("🚀 Triggering real E2E voice note send from %s to %s...", senderPhone, targetPhone)
+			sentCount++
 			return SendVoiceNote(client, targetPhone, audioPath)
 		},
 	}
@@ -111,4 +121,5 @@ func TestPoller_E2E(t *testing.T) {
 		t.Fatalf("Expected 1 match to trigger message, got %d", poller.matchesToday)
 	}
 
+	t.Logf("✅ E2E Test finished successfully. Sent %d voice notes across %d connected clients.", sentCount, len(wappClients))
 }
