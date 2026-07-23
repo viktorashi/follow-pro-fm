@@ -117,6 +117,9 @@ func TestWhisperContainerTranscription(t *testing.T) {
 
 		runCmd := exec.Command("docker", "run", "-d", "--rm",
 			"-p", fmt.Sprintf("%d:8000", testPort),
+			"-e", "WHISPER__MODEL=base",
+			"-e", "WHISPER__COMPUTE_TYPE=int8",
+			"-e", `PRELOAD_MODELS=["base"]`,
 			"--name", containerName,
 			imageName,
 		)
@@ -131,7 +134,7 @@ func TestWhisperContainerTranscription(t *testing.T) {
 
 		// Wait for container readiness via /health endpoint
 		healthy := false
-		for i := 0; i < 40; i++ {
+		for i := 0; i < 80; i++ {
 			time.Sleep(500 * time.Millisecond)
 			resp, err := http.Get(healthURL)
 			if err == nil && resp.StatusCode == http.StatusOK {
