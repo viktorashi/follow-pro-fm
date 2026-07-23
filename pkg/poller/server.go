@@ -777,7 +777,8 @@ func (s *TelemetryServer) handleUnreviewedFile(c *echo.Context) error {
 	}
 
 	c.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", filename))
-	return c.File(path)
+	http.ServeFile(c.Response(), c.Request(), path)
+	return nil
 }
 
 func (s *TelemetryServer) handleUnreviewedCrop(c *echo.Context) error {
