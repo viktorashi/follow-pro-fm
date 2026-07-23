@@ -842,7 +842,7 @@ func (s *TelemetryServer) listUnreviewedChunks() ([]ReviewChunk, error) {
 			Name:            entry.Name(),
 			Size:            info.Size(),
 			ModTime:         info.ModTime().Format("2006-01-02 15:04:05"),
-			PlayURL:         "/api/unreviewed/file?name=" + url.QueryEscape(entry.Name()),
+			PlayURL:         "/api/unreviewed/file?name=" + url.QueryEscape(entry.Name()) + "&t=" + fmt.Sprintf("%d", info.ModTime().Unix()),
 			Transcript:      transcript,
 			CampaignArtist:  campaignArtist,
 			DurationSeconds: duration.Seconds(),
