@@ -25,6 +25,9 @@ func NewHTTPTranscriber(url string) func(context.Context, []byte) (string, error
 		if err := writer.WriteField("model", "tiny"); err != nil {
 			return "", err
 		}
+		if err := writer.WriteField("language", "ro"); err != nil {
+			return "", err
+		}
 		if err := writer.Close(); err != nil {
 			return "", err
 		}
