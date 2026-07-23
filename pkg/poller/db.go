@@ -112,11 +112,15 @@ func initSchema(db *sql.DB) error {
 		);`,
 	}
 
-	for _, q := range queries {
-		if _, err := db.Exec(q); err != nil {
-			return fmt.Errorf("failed to init schema: %w", err)
+	for _, query := range queries {
+		if _, err := db.Exec(query); err != nil {
+			return err
 		}
 	}
+
+	// Migrations
+	_, _ = db.Exec(`ALTER TABLE signature_files ADD COLUMN transcript TEXT DEFAULT '';`)
+
 	return nil
 }
 
