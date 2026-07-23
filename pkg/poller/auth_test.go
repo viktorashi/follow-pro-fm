@@ -24,7 +24,7 @@ func newTestAuthManager(t *testing.T) (*AuthManager, *DBManager, string) {
 	if err := os.WriteFile(TrustedEmailsFilePath(dbPath), []byte(email+"\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(trusted emails) error = %v", err)
 	}
-	return NewAuthManager(dbMgr, "", "", "admin-pass", ""), dbMgr, email
+	return NewAuthManager(dbMgr, nil, "", "admin-pass", ""), dbMgr, email
 }
 
 func TestAuthSessionsRejectForgedEmailAndHonorExpiryAndRevocation(t *testing.T) {

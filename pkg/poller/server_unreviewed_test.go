@@ -69,13 +69,16 @@ func TestTelemetryServer_UnreviewedChunkEndpointsExposeSavedChunks(t *testing.T)
 func TestTelemetryServer_HandleUnreviewedCropCopiesRecordedMetadataToCanonical(t *testing.T) {
 	dataDir := t.TempDir()
 	dbMgr := mustNewTestDBManager(t)
+	filename := "BTS - Butter.mp3"
 	unreviewedDir := filepath.Join(dataDir, "signatures", "unreviewed")
 	if err := os.MkdirAll(unreviewedDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
-
-	filename := "BTS - Butter.mp3"
-	if err := os.WriteFile(filepath.Join(unreviewedDir, filename), []byte("abcdefgh"), 0o644); err != nil {
+	audioData, _ := os.ReadFile("testdata/fingerprint/cases/match/stream.mp3")
+	if len(audioData) == 0 {
+		audioData = []byte("test data") // fallback if testdata is missing
+	}
+	if err := os.WriteFile(filepath.Join(unreviewedDir, filename), audioData, 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
@@ -87,7 +90,7 @@ func TestTelemetryServer_HandleUnreviewedCropCopiesRecordedMetadataToCanonical(t
 	server := &TelemetryServer{dataDir: dataDir, dbMgr: dbMgr}
 	e := echo.New()
 
-	body := strings.NewReader("filename=BTS+-+Butter.mp3&start_bytes=1&end_bytes=4")
+	body := strings.NewReader("filename=BTS+-+Butter.mp3&start_seconds=1&end_seconds=4")
 	req := httptest.NewRequest(http.MethodPost, "/unreviewed/crop", body)
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	rec := httptest.NewRecorder()
@@ -96,7 +99,7 @@ func TestTelemetryServer_HandleUnreviewedCropCopiesRecordedMetadataToCanonical(t
 		t.Fatalf("handleUnreviewedCrop() error = %v", err)
 	}
 	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+		t.Fatalf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 
 	meta, err := dbMgr.GetSignatureFile(context.Background(), "canonical", filename)

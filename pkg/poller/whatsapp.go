@@ -32,6 +32,20 @@ const (
 	ConnectionRetryAttempts = 30
 )
 
+var (
+	pairingCancelsMutex sync.Mutex
+	pairingCancels      = make(map[string]context.CancelFunc)
+)
+
+func CancelPairing(phone string) {
+	pairingCancelsMutex.Lock()
+	defer pairingCancelsMutex.Unlock()
+	if cancel, ok := pairingCancels[phone]; ok {
+		cancel()
+		delete(pairingCancels, phone)
+	}
+}
+
 func init() {
 	sqlite.RegisterConnectionHook(func(conn sqlite.ExecQuerierContext, dsn string) error {
 		_, err := conn.ExecContext(context.Background(), "PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;", nil)
@@ -88,8 +102,21 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 			// Tell WhatsApp servers we are online.
 			// Crucial for E2E prekey setups and for avoiding "Waiting for this message".
 			_ = client.SendPresence(context.Background(), types.PresenceAvailable)
-		case *events.OfflineSyncCompleted:
-			// You could log or wait on this specifically, but PresenceAvailable is usually enough.
+		case *events.Disconnected:
+			fmt.Println("🔌 Disconnected from WhatsApp servers")
+			if stateMgr != nil {
+				isSleeping := stateMgr.Get().Status == StatusSleeping
+				stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
+					s.WhatsAppConnected = false
+					if s.Status != StatusPairingRequired {
+						if isSleeping {
+							s.Status = StatusSleeping
+						} else {
+							s.Status = StatusError
+						}
+					}
+				})
+			}
 		case *events.LoggedOut:
 			if stateMgr != nil {
 				stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
@@ -109,9 +136,20 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 		for {
 			if client.Store.ID == nil {
 				// No session exists, perform login
-				qrChan, _ := client.GetQRChannel(context.Background())
+				ctx, cancel := context.WithCancel(context.Background())
+
+				pairingCancelsMutex.Lock()
+				pairingCancels[phone] = cancel
+				pairingCancelsMutex.Unlock()
+
+				qrChan, _ := client.GetQRChannel(ctx)
 				err = client.Connect()
 				if err != nil {
+					pairingCancelsMutex.Lock()
+					delete(pairingCancels, phone)
+					pairingCancelsMutex.Unlock()
+
+					cancel()
 					if stateMgr != nil {
 						stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
 							s.Status = StatusError
@@ -176,6 +214,10 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 						}
 					}
 				}
+				pairingCancelsMutex.Lock()
+				delete(pairingCancels, phone)
+				pairingCancelsMutex.Unlock()
+				cancel()
 
 				if !paired {
 					fmt.Println("❌ Login timed out or failed, retrying...")

@@ -590,6 +590,12 @@ func (p *Poller) prepareStartState() bool {
 		return true
 	}
 
+	unused, used := GetTotalAudioStats(p.StateMgr.Get().Connections, p.AudiosDir)
+	p.StateMgr.Update(func(s *AppState) {
+		s.UnusedAudios = unused
+		s.UsedAudios = used
+	})
+
 	if p.StateMgr.Get().KillSwitchActive {
 		p.StateMgr.Update(func(s *AppState) {
 			s.Status = StatusKilled

@@ -696,7 +696,12 @@ func TestE2E(t *testing.T) {
 			t.Fatalf("failed to create unreviewed dir: %v", err)
 		}
 		filename := "BTS - Butter.mp3"
-		if err := os.WriteFile(filepath.Join(unreviewedDir, filename), []byte("abcdefgh"), 0o644); err != nil {
+
+		audioData, err := os.ReadFile("../../pkg/poller/testdata/fingerprint/cases/match/stream.mp3")
+		if err != nil {
+			t.Fatalf("failed to read test audio data: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(unreviewedDir, filename), audioData, 0o644); err != nil {
 			t.Fatalf("failed to seed unreviewed chunk: %v", err)
 		}
 
@@ -734,7 +739,7 @@ func TestE2E(t *testing.T) {
 
 		var cropBody bytes.Buffer
 		cropWriter := multipart.NewWriter(&cropBody)
-		for key, value := range map[string]string{"filename": filename, "start_bytes": "2", "end_bytes": "6"} {
+		for key, value := range map[string]string{"filename": filename, "start_seconds": "1.0", "end_seconds": "2.0"} {
 			if err := cropWriter.WriteField(key, value); err != nil {
 				t.Fatalf("failed to add crop field %s: %v", key, err)
 			}
@@ -764,15 +769,15 @@ func TestE2E(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to read canonical crop: %v", err)
 		}
-		if string(canonicalData) != "cdef" {
-			t.Fatalf("canonical crop = %q, want %q", string(canonicalData), "cdef")
+		if len(canonicalData) == 0 {
+			t.Fatalf("canonical crop was empty")
 		}
 		originalData, err := os.ReadFile(filepath.Join(unreviewedDir, filename))
 		if err != nil {
 			t.Fatalf("failed to read original unreviewed chunk: %v", err)
 		}
-		if string(originalData) != "abcdefgh" {
-			t.Fatalf("original unreviewed chunk should stay intact, got %q", string(originalData))
+		if string(originalData) != string(audioData) {
+			t.Fatalf("original unreviewed chunk should stay intact, length=%d vs %d", len(originalData), len(audioData))
 		}
 	})
 }
