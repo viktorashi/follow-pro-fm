@@ -120,7 +120,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, phones []string, schedules
 				document.getElementById('editor-container-' + chunkName).classList.remove('hidden');
 				
 				const ws = WaveSurfer.create({
-					container: '#waveform-' + chunkName,
+					container: document.getElementById('waveform-' + chunkName),
 					waveColor: 'rgba(255, 255, 255, 0.4)',
 					progressColor: '#3b82f6',
 					url: url,
