@@ -75,12 +75,14 @@ fly-ssh:
     flyctl ssh console
 
 # Push audios to production.
-# Production code will automatically hash and skip any audios that have already been used.
+# Audio files in local 'used/' directories will be published to the root of their respective remote pool.
+# Production code will automatically hash and skip any audios that have already been used in prod.
 # Usage:
 #   just push-audios                        (pushes local 'data/audios' to remote '/data/audios')
+#   just push-files                         (alias for push-audios)
 #   just push-audios ./my_audios            (pushes to canonical sender '/data/audios/')
 #   just push-audios ./my_audios 40771234567 (pushes to '/data/audios/40771234567/')
-# just push-audios ./my_audios /           (pushes to canonical sender '/data/audios/')
+#   just push-audios ./my_audios /           (pushes to canonical sender '/data/audios/')
 push-audios LOCAL_DIR="data/audios" PHONE="":
     #!/usr/bin/env bash
     set -e
@@ -90,6 +92,11 @@ push-audios LOCAL_DIR="data/audios" PHONE="":
     # If the user accidentally specifies 'data', forcefully correct it to 'data/audios'
     if [ "$LOCAL" = "data" ]; then
         LOCAL="data/audios"
+    fi
+
+    if [ ! -d "$LOCAL" ]; then
+        echo "❌ Local directory '$LOCAL' does not exist."
+        exit 1
     fi
 
     if [ "$LOCAL" = "data/audios" ]; then
@@ -106,10 +113,28 @@ push-audios LOCAL_DIR="data/audios" PHONE="":
         fi
     fi
 
+    TMP_STAGING=$(mktemp -d)
+    trap 'rm -rf "$TMP_STAGING"' EXIT
+
+    # Copy files into temporary staging directory
+    cp -R "$LOCAL/." "$TMP_STAGING/"
+
+    # Publish files inside any local 'used/' directories to the root of their respective parent pool
+    find "$TMP_STAGING" -type d -name "used" | while read -r used_dir; do
+        parent_dir=$(dirname "$used_dir")
+        find "$used_dir" -maxdepth 1 -type f \( -name "*.ogg" -o -name "*.mp3" -o -name "*.wav" \) | while read -r audio_file; do
+            filename=$(basename "$audio_file")
+            mv -f "$audio_file" "$parent_dir/$filename"
+        done
+        rm -rf "$used_dir"
+    done
+
     flyctl ssh console -C "mkdir -p $TARGET"
     # STRICTLY forbid any database files from ever being uploaded
-    env COPYFILE_DISABLE=1 tar -cf - --exclude='*.sqlite*' --exclude='*.db' --exclude='._*' -C "$LOCAL" . | flyctl ssh console -C "tar -xf - -C $TARGET"
-    echo "✅ Audios uploaded."
+    env COPYFILE_DISABLE=1 tar -cf - --exclude='*.sqlite*' --exclude='*.db' --exclude='._*' -C "$TMP_STAGING" . | flyctl ssh console -C "tar -xf - -C $TARGET"
+    echo "✅ Audios uploaded (locally used files published to root pool)."
+
+alias push-files := push-audios
 
 # Clean up accidentally uploaded macOS ._ metadata files from the Fly persistent volume
 fly-cleanup-mac-files:
