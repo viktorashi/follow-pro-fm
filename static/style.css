@@ -230,3 +230,33 @@ h1, h2, h3, .title, .title-large {
 }
 
 .svg-icon { width: 4rem; height: 4rem; margin: 0 auto 1rem auto; color: #94a3b8; opacity: 0.5; }
+
+.matcher-tab-btn {
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0.75rem 1.5rem;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1rem;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.matcher-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.matcher-tab-btn.text-primary {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  text-shadow: 0 0 10px var(--primary-glow);
+}
+
+.matcher-tab-btn.text-muted {
+  color: var(--text-muted);
+}
+.matcher-tab-btn.text-muted:hover {
+  color: var(--text-color);
+}

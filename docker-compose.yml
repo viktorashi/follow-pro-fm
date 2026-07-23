@@ -6,20 +6,26 @@ services:
     ports:
       - "8080:8080"
     environment:
+      - ENVIRONMENT=dev
       - TRANSCRIPTION_URL=http://whisper:8000/v1/audio/transcriptions
       - TRANSCRIPTION_WS_URL=ws://whisper:8000/v1/audio/transcriptions
       - BASE_URL=http://localhost:8080
     volumes:
       - ./data:/data
     depends_on:
-      - whisper
+      whisper:
+        condition: service_healthy
 
   whisper:
-    image: fedirz/faster-whisper-server:latest-cpu
+    build: ./whisper-server
     ports:
       - "8000:8000"
-    environment:
-      - WHISPER_MODEL=base
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
     volumes:
       - whisper_models:/root/.cache/huggingface
 

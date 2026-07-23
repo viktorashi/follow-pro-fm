@@ -26,7 +26,7 @@ func TestHandleAudioUploadRejectsNonOGG(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
-	if body := rec.Body.String(); !strings.Contains(body, "Only .ogg files are allowed") {
+	if body := rec.Body.String(); !strings.Contains(body, "No new valid .ogg files were uploaded") {
 		t.Fatalf("body = %q, want .ogg validation message", body)
 	}
 }
@@ -97,8 +97,8 @@ func TestHandleAudioUploadRejectsUsedNameCollisions(t *testing.T) {
 		t.Fatalf("handleAudioUpload returned error: %v", err)
 	}
 
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusConflict)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
 

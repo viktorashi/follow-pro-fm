@@ -61,7 +61,7 @@ templ Login() {
 	}
 }
 
-templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChunk, phones []string, schedules []ScheduleEntry) {
+templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChunk, phones []string, schedules []ScheduleEntry, campaignArtists []string) {
 	@Layout("Dashboard - ProFM Jaguare") {
 		<script>
 			function toggleGathering() {
@@ -350,7 +350,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 							</div>
 						</div>
 
-						<div class="flex gap-4 border-b border-white/10 mb-4 pb-2">
+						<div class="flex gap-2 border-b border-white/10 mb-6 pb-0">
 							<button class="matcher-tab-btn font-semibold text-primary" data-target="fingerprint" onclick="showTab('fingerprint')">Unreviewed Signatures</button>
 							<button class="matcher-tab-btn font-semibold text-muted" data-target="canonical" onclick="showTab('canonical')">Canonical Signatures</button>
 							<button class="matcher-tab-btn font-semibold text-muted" data-target="transcription" onclick="showTab('transcription')">Transcription Phrases</button>
@@ -427,7 +427,12 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 								<div class="font-semibold text-sm mb-2 text-primary">Add Manual Phrase</div>
 								<form onsubmit="return addCampaignPhrase(event, this)" class="flex gap-2 items-end">
 									<div class="flex-grow flex gap-2">
-										<input type="text" name="campaign_artist" placeholder="Campaign Artist (e.g. ARIANA GRANDE)" class="input flex-grow" required />
+										<select name="campaign_artist" class="input flex-grow" required>
+											<option value="" disabled selected>Select Campaign Artist...</option>
+											for _, artist := range campaignArtists {
+												<option value={ artist }>{ artist }</option>
+											}
+										</select>
 										<input type="text" name="phrase" placeholder="Phrase text..." class="input flex-grow" required />
 									</div>
 									<button type="submit" class="btn btn-primary btn-sm whitespace-nowrap">Add Phrase</button>
@@ -444,7 +449,14 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 												<div class="font-semibold text-sm mb-2">Audio: { chunk.Name }</div>
 												<div class="bg-black/20 p-3 rounded font-mono text-sm mb-3">"{ chunk.Transcript }"</div>
 												<form onsubmit="return addCampaignPhrase(event, this)" class="flex gap-2 items-end">
-													<input type="hidden" name="campaign_artist" value={ chunk.CampaignArtist } />
+													<select name="campaign_artist" class="input flex-grow" required>
+														if chunk.CampaignArtist == "" {
+															<option value="" disabled selected>Select Campaign Artist...</option>
+														}
+														for _, artist := range campaignArtists {
+															<option value={ artist } selected?={ strings.EqualFold(artist, chunk.CampaignArtist) }>{ artist }</option>
+														}
+													</select>
 													<input type="text" name="phrase" value={ chunk.Transcript } class="input flex-grow" required />
 													<button type="submit" class="btn btn-primary btn-sm">Add Phrase</button>
 												</form>
@@ -477,7 +489,13 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 													"{ chunk.Transcript }"
 												</div>
 											} else {
-												<div class="text-xs text-muted italic">No transcription available.</div>
+												<div class="flex items-center justify-between gap-4 bg-black/10 p-3 rounded">
+													<div class="text-xs text-muted italic">No transcription available.</div>
+													<button type="button" class="btn btn-secondary btn-sm"
+														data-name={ chunk.Name }
+														data-bucket="canonical"
+														onclick="window.transcribeChunk(this.dataset.name, this.dataset.bucket)">Transcribe</button>
+												</div>
 											}
 										</div>
 									}
@@ -518,8 +536,11 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 								</select>
 							</div>
 							<div>
-								<label class="text-xs text-muted mb-1">.ogg voice note</label>
-								<input type="file" name="audio" accept=".ogg,audio/ogg" class="input" required />
+								<label class="text-xs text-muted mb-1">.ogg voice note (files or folders)</label>
+								<div class="flex gap-2">
+									<input type="file" name="audio" accept=".ogg,audio/ogg" class="input flex-1" multiple title="Select multiple files" />
+									<input type="file" name="audio" accept=".ogg,audio/ogg" class="input flex-1" multiple webkitdirectory title="Select a folder" />
+								</div>
 							</div>
 							<button type="submit" class="btn btn-primary">Upload</button>
 						</form>

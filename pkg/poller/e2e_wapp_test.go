@@ -12,8 +12,8 @@ import (
 
 func TestPoller_E2E(t *testing.T) {
 	rootDir := E2EProjectRoot(t)
-	dbPath := filepath.Join(rootDir, "data/wapp.sqlite")
 	appDBPath := filepath.Join(rootDir, "data/app.sqlite")
+
 	audiosDir := filepath.Join(rootDir, "data/audios")
 	LoadE2EEnv(rootDir)
 	multiAlerter := E2EMultiAlerter(rootDir)
@@ -39,6 +39,8 @@ func TestPoller_E2E(t *testing.T) {
 		})
 	}
 
+	dbPath := filepath.Join(rootDir, "data/wapp.sqlite")
+
 	t.Log("Initializing real WhatsApp clients...")
 
 	wappClients := make(map[string]WhatsAppClient)
@@ -50,8 +52,19 @@ func TestPoller_E2E(t *testing.T) {
 		ensureConn("+40734788254")
 	}
 
-	// Add others from DB
-	dbMgr, err := NewDBManager(appDBPath)
+	// Make an in-memory DB for the rest of the app state for blazing fast tests
+	dbMgr, err := NewDBManager(":memory:")
+
+	// Open the physical DB exclusively to harvest the WhatsApp session paths
+	importDbMgr, err2 := NewDBManager(appDBPath)
+	if err == nil && err2 == nil {
+		sessions, err := importDbMgr.SenderSessions(context.Background())
+		if err == nil {
+			for _, session := range sessions {
+				_, _ = dbMgr.db.Exec("INSERT INTO sender_sessions (phone, db_filename) VALUES (?, ?)", session.Phone, session.DBFilename)
+			}
+		}
+	}
 	if err == nil {
 		sessions, err := dbMgr.SenderSessions(context.Background())
 		if err == nil {
@@ -81,6 +94,7 @@ func TestPoller_E2E(t *testing.T) {
 	server := NewCampaignHitServer(t)
 	defer server.Close()
 
+	var sentCount int
 	poller := &Poller{
 		APIURL:       server.URL,
 		PollInterval: 1 * time.Millisecond,
@@ -98,6 +112,7 @@ func TestPoller_E2E(t *testing.T) {
 				t.Fatalf("Sender phone %s not found in initialized clients", senderPhone)
 			}
 			t.Logf("🚀 Triggering real E2E voice note send from %s to %s...", senderPhone, targetPhone)
+			sentCount++
 			return SendVoiceNote(client, targetPhone, audioPath)
 		},
 	}
@@ -111,4 +126,5 @@ func TestPoller_E2E(t *testing.T) {
 		t.Fatalf("Expected 1 match to trigger message, got %d", poller.matchesToday)
 	}
 
+	t.Logf("✅ E2E Test finished successfully. Sent %d voice notes across %d connected clients.", sentCount, len(wappClients))
 }

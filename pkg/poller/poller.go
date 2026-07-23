@@ -14,8 +14,12 @@ import (
 	"sync"
 	"time"
 	_ "time/tzdata"
+	"unicode"
 
 	"github.com/lithammer/dedent"
+	"golang.org/x/text/runes"
+	"golang.org/x/text/transform"
+	"golang.org/x/text/unicode/norm"
 )
 
 const (
@@ -58,6 +62,13 @@ type Campaign struct {
 	EndDate   string // Format: "02-01-2006"
 	Artist    string
 	Phrases   []string // Spoken contest phrases accepted for this campaign.
+}
+
+// DefaultActiveCampaigns defines the active campaign dates, artists, and phrases.
+var DefaultActiveCampaigns = []Campaign{
+	{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS", Phrases: []string{"follow profm"}},
+	{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana", Phrases: []string{"follow profm"}},
+	{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd", Phrases: []string{"follow profm"}},
 }
 
 // IsActive checks if the current time falls within the campaign date period
@@ -227,7 +238,18 @@ func captureHasTag(capture *contestCapture, tag contestTag) bool {
 	})
 }
 
+var diacriticsTransformer = transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
+
+func removeDiacritics(s string) string {
+	result, _, err := transform.String(diacriticsTransformer, s)
+	if err != nil {
+		return s
+	}
+	return result
+}
+
 func normalizeTriggerValue(value string) string {
+	value = removeDiacritics(value)
 	value = strings.ToLower(strings.TrimSpace(value))
 	return strings.Join(strings.Fields(value), " ")
 }
@@ -252,7 +274,9 @@ func (p *Poller) contestCheckCoordinator() *ContestCheckCoordinator {
 	return p.checker
 }
 
-func triggerValuesMatch(left, right string) bool {
+// TriggerValuesMatch implements the core application logic to determine if a live
+// transcription matches a trusted transcript or campaign phrase (checking if either is contained within the other).
+func TriggerValuesMatch(left, right string) bool {
 	left = normalizeTriggerValue(left)
 	right = normalizeTriggerValue(right)
 	if left == "" || right == "" {
@@ -406,7 +430,7 @@ func (p *Poller) consumeIgnoredMetadataTrigger(song SongInfo) bool {
 		return false
 	}
 
-	ignored := triggerValuesMatch(p.ignoredTrigger.artist, song.Artist) || triggerValuesMatch(p.ignoredTrigger.title, song.Title)
+	ignored := TriggerValuesMatch(p.ignoredTrigger.artist, song.Artist) || TriggerValuesMatch(p.ignoredTrigger.title, song.Title)
 	if ignored {
 		p.ignoredTrigger = fingerprintTrigger{}
 	}
@@ -855,11 +879,14 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist, artist, title
 		s.Status = StatusCampaignTriggered
 	})
 
-	var audioFile string
-	var audioHash string
-	var chosenSender string
+	type SendJob struct {
+		Phone     string
+		AudioFile string
+		AudioHash string
+	}
+	var jobs []SendJob
+
 	for _, conn := range p.StateMgr.Get().Connections {
-		// Try to find a connected sender that has audios
 		dir := GetAudioDirForPhone(conn.Phone, p.AudiosDir)
 		f, hash, err := GetRandomAvailableAudio(dir, func(contentHash string) (bool, error) {
 			if p.DBMgr == nil {
@@ -868,14 +895,11 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist, artist, title
 			return p.DBMgr.IsAudioHashUsed(context.Background(), contentHash)
 		})
 		if err == nil {
-			chosenSender = conn.Phone
-			audioFile = f
-			audioHash = hash
-			break
+			jobs = append(jobs, SendJob{Phone: conn.Phone, AudioFile: f, AudioHash: hash})
 		}
 	}
 
-	if audioFile == "" {
+	if len(jobs) == 0 {
 		p.StateMgr.Update(func(s *AppState) {
 			s.Status = StatusAudioExhausted
 			s.LastError = "No unused audios available!"
@@ -894,78 +918,89 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist, artist, title
 		s.Status = StatusSendingAudio
 	})
 
-	log.Printf("   Sending WhatsApp voice note using: %s (trigger=%s)", audioFile, triggerSource)
-	err := p.SendVoiceNote(chosenSender, p.TargetPhone, audioFile)
-	if err != nil {
-		log.Printf("   ❌ Error sending voice note: %v\n", err)
-		p.StateMgr.Update(func(s *AppState) {
-			s.Status = StatusError
-			s.LastError = fmt.Sprintf("Voice note failed: %v", err)
-		})
-		_ = p.Alerter.AlertCritical(AlertEvent{
-			Title:       "Voice Note Failed",
-			Message:     fmt.Sprintf("Could not send voice note to %s\nTrigger: %s\nArtist: %s\nPiesa: %s\nEroare: %v", p.TargetPhone, triggerSource, artist, title, err),
-			ActionLabel: "View Dashboard",
-			ActionURL:   p.BaseURL,
-		})
-	} else {
-		if p.DBMgr != nil {
-			if err := p.DBMgr.RecordSuccessfulSend(context.Background(), campaignArtist, artist, title, audioHash, currentRadioLogID, now); err != nil {
-				log.Printf("   ❌ Voice note sent but persistence update failed: %v\n", err)
-				p.StateMgr.Update(func(s *AppState) {
-					s.Status = StatusError
-					s.LastError = fmt.Sprintf("Voice note sent but persistence failed: %v", err)
-				})
-				return
+	var sentFiles []string
+	var lastErr error
+	for _, job := range jobs {
+		log.Printf("   Sending WhatsApp voice note using: %s (trigger=%s) from sender %s", job.AudioFile, triggerSource, job.Phone)
+		err := p.SendVoiceNote(job.Phone, p.TargetPhone, job.AudioFile)
+		if err != nil {
+			log.Printf("   ❌ Error sending voice note from %s: %v\n", job.Phone, err)
+			lastErr = err
+			_ = p.Alerter.AlertCritical(AlertEvent{
+				Title:       "Voice Note Failed",
+				Message:     fmt.Sprintf("Could not send voice note to %s from %s\nTrigger: %s\nArtist: %s\nPiesa: %s\nEroare: %v", p.TargetPhone, job.Phone, triggerSource, artist, title, err),
+				ActionLabel: "View Dashboard",
+				ActionURL:   p.BaseURL,
+			})
+		} else {
+			if p.DBMgr != nil {
+				if err := p.DBMgr.RecordSuccessfulSend(context.Background(), campaignArtist, artist, title, job.AudioHash, currentRadioLogID, now); err != nil {
+					log.Printf("   ❌ Voice note sent from %s but persistence update failed: %v\n", job.Phone, err)
+					lastErr = err
+					continue
+				}
 			}
+			if err := MarkAudioUsedByHash(p.AudiosDir, job.AudioFile, job.AudioHash); err != nil {
+				log.Printf("   ⚠️ Voice note sent but audio file rotation failed: %v\n", err)
+			}
+			sentFiles = append(sentFiles, job.AudioFile)
 		}
-		if err := MarkAudioUsedByHash(p.AudiosDir, audioFile, audioHash); err != nil {
-			log.Printf("   ⚠️ Voice note sent but audio file rotation failed: %v\n", err)
-		}
+	}
+
+	if len(sentFiles) > 0 {
+		filesStr := strings.Join(sentFiles, "\n\t\t\t")
 		msg := dedent.Dedent(fmt.Sprintf(`
-			S-a trimis vocalu pe Wapp la nr: %s
+			S-au trimis %d vocal(uri) pe Wapp la nr: %s
 			Trigger: %s
 			Artist: %s
 			Piesa: %s
-			Fisieru audio trimis: %s
-			`, p.TargetPhone, triggerSource, artist, title, audioFile))
+			Fisiere audio trimise:
+			%s
+			`, len(sentFiles), p.TargetPhone, triggerSource, artist, title, filesStr))
 		log.Println("✅", msg)
 		_ = p.Alerter.AlertSuccess(AlertEvent{
-			Title:       "Voice Note Sent",
+			Title:       "Voice Note(s) Sent",
 			Message:     msg,
 			ActionLabel: "View Dashboard",
 			ActionURL:   p.BaseURL,
 		})
-		stats := GetAudioStatsPerPhone(p.StateMgr.Get().Connections, p.AudiosDir)
-		p.StateMgr.Update(func(s *AppState) {
-			s.Status = StatusPolling
-			s.LastError = ""
-			s.LastVoiceNoteSentAt = time.Now()
-
-			var totalUnused, totalUsed int
-			for i, conn := range s.Connections {
-				phoneStats := stats[conn.Phone]
-				s.Connections[i].UnusedAudios = phoneStats.Unused
-				s.Connections[i].UsedAudios = phoneStats.Used
-				totalUnused += phoneStats.Unused
-				totalUsed += phoneStats.Used
-			}
-			canonicalStats := stats[CanonicalSenderPhone]
-			canonicalInConns := false
-			for _, conn := range s.Connections {
-				if conn.Phone == CanonicalSenderPhone {
-					canonicalInConns = true
-					break
-				}
-			}
-			if !canonicalInConns {
-				totalUnused += canonicalStats.Unused
-				totalUsed += canonicalStats.Used
-			}
-			s.UnusedAudios = totalUnused
-			s.UsedAudios = totalUsed
-		})
 	}
+
+	stats := GetAudioStatsPerPhone(p.StateMgr.Get().Connections, p.AudiosDir)
+	p.StateMgr.Update(func(s *AppState) {
+		s.Status = StatusPolling
+		if lastErr != nil {
+			s.LastError = fmt.Sprintf("Some errors occurred: %v", lastErr)
+		} else {
+			s.LastError = ""
+		}
+		if len(sentFiles) > 0 {
+			s.LastVoiceNoteSentAt = time.Now()
+		}
+
+		var totalUnused, totalUsed int
+		for i, conn := range s.Connections {
+			phoneStats := stats[conn.Phone]
+			s.Connections[i].UnusedAudios = phoneStats.Unused
+			s.Connections[i].UsedAudios = phoneStats.Used
+			totalUnused += phoneStats.Unused
+			totalUsed += phoneStats.Used
+		}
+		canonicalStats := stats[CanonicalSenderPhone]
+		canonicalInConns := false
+		for _, conn := range s.Connections {
+			if conn.Phone == CanonicalSenderPhone {
+				canonicalInConns = true
+				break
+			}
+		}
+		if !canonicalInConns {
+			totalUnused += canonicalStats.Unused
+			totalUsed += canonicalStats.Used
+		}
+		s.UnusedAudios = totalUnused
+		s.UsedAudios = totalUsed
+	})
 }
 
 func runPeriodicChecker(p *Poller, checker ContestChecker) {

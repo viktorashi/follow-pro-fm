@@ -950,6 +950,40 @@ func TestNormalizePhoneNumber(t *testing.T) {
 	}
 }
 
+func TestNormalizeTriggerValueDiacritics(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{
+			input: "Ascultă ProFM în fiecare zi pentru muzică bună și concursuri",
+			want:  "asculta profm in fiecare zi pentru muzica buna si concursuri",
+		},
+		{
+			input: "ĂÂÎȘȚ  ăâîșț  ŞŢ şţ",
+			want:  "aaist aaist st st",
+		},
+		{
+			input: "  Muzică   &  Concursuri:   Ștefan  ",
+			want:  "muzica & concursuri: stefan",
+		},
+	}
+
+	for _, tt := range tests {
+		got := normalizeTriggerValue(tt.input)
+		if got != tt.want {
+			t.Errorf("normalizeTriggerValue(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+
+	if !TriggerValuesMatch("Ascultă hitul către Londra", "asculta hitul catre londra") {
+		t.Error("TriggerValuesMatch should match regardless of diacritics")
+	}
+	if !TriggerValuesMatch("Muzică bună și concursuri", "muzica buna si concursuri") {
+		t.Error("TriggerValuesMatch should match regardless of diacritics and special characters")
+	}
+}
+
 func createMockStateMgr() *StateManager {
 	sm := NewStateManager()
 	sm.Update(func(s *AppState) {

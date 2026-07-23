@@ -133,6 +133,10 @@ func GetRandomAvailableAudio(audiosDir string, isHashUsed func(string) (bool, er
 		if !used {
 			return candidate, contentHash, nil
 		}
+
+		// If it was pushed to the active pool but was already sent previously (hash exists),
+		// we skip it for broadcasting and immediately toss it into used/ so we don't hash it again next time.
+		_ = MarkAudioUsed(candidate)
 	}
 
 	return "", "", fmt.Errorf("audio pool exhausted")
