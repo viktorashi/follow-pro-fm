@@ -332,6 +332,15 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte, transc
 			}
 			if saved {
 				p.reportSavedUnreviewedChunk(song, filename, recordedAt, transcript)
+				if transcript == "" && p.Transcribe != nil {
+					go func(audioData []byte, f string) {
+						ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+						defer cancel()
+						if t, err := p.Transcribe(ctx, audioData); err == nil && t != "" && p.DBMgr != nil {
+							_ = p.DBMgr.UpdateSignatureTranscript(context.Background(), "unreviewed", f, t)
+						}
+					}(data, filename)
+				}
 				return
 			}
 			matchedName = name
@@ -347,6 +356,15 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte, transc
 					return
 				}
 				p.reportSavedUnreviewedChunk(song, filename, recordedAt, transcript)
+				if transcript == "" && p.Transcribe != nil {
+					go func(audioData []byte, f string) {
+						ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+						defer cancel()
+						if t, err := p.Transcribe(ctx, audioData); err == nil && t != "" && p.DBMgr != nil {
+							_ = p.DBMgr.UpdateSignatureTranscript(context.Background(), "unreviewed", f, t)
+						}
+					}(data, filename)
+				}
 				return
 			}
 			matchedName = name
