@@ -13,15 +13,7 @@ COPY third_party/ffmpeg ./third_party/ffmpeg
 # Compile minimal ffmpeg
 RUN ./scripts/build_ffmpeg.sh
 
-# Compile whisper.cpp
-RUN git clone https://github.com/ggerganov/whisper.cpp.git /src/whisper.cpp && \
-    cd /src/whisper.cpp && \
-    git checkout master && \
-    cmake -B build && \
-    cmake --build build --config Release -j4
 
-# Download whisper model
-RUN cd /src/whisper.cpp/models && ./download-ggml-model.sh base
 
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
@@ -42,10 +34,7 @@ WORKDIR /app
 COPY --from=builder /pro-fm-poller .
 COPY --from=builder /src/bin/ffmpeg /src/bin/ffprobe /usr/local/bin/
 
-# Copy whisper-cli and model
-COPY --from=builder /src/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper-cli
-RUN mkdir -p /usr/local/share/whisper
-COPY --from=builder /src/whisper.cpp/models/ggml-base.bin /usr/local/share/whisper/ggml-base.bin
+
 
 # /data is where the persistent volume will be mounted for wapp.sqlite
 RUN mkdir -p /data

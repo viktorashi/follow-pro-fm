@@ -15,11 +15,14 @@ func NewHTTPTranscriber(url string) func(context.Context, []byte) (string, error
 	return func(ctx context.Context, audio []byte) (string, error) {
 		var body bytes.Buffer
 		writer := multipart.NewWriter(&body)
-		part, err := writer.CreateFormFile("audio", "stream.mp3")
+		part, err := writer.CreateFormFile("file", "stream.mp3")
 		if err != nil {
 			return "", err
 		}
 		if _, err := part.Write(audio); err != nil {
+			return "", err
+		}
+		if err := writer.WriteField("model", "base"); err != nil {
 			return "", err
 		}
 		if err := writer.Close(); err != nil {
