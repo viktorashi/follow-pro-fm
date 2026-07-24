@@ -232,7 +232,6 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 					}
 					time.Sleep(500 * time.Millisecond)
 				}
-				break // Successfully paired and connected
 			} else {
 				// Session exists, connect automatically
 				err := client.Connect()
@@ -254,8 +253,24 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 						s.WhatsAppConnected = true
 					})
 				}
-				break // Successfully connected
 			}
+
+			// Wait for LoggedOut event to restart the connection/pairing loop.
+			// Network reconnects are handled automatically by whatsmeow in the background,
+			// but we need to wait for a full LoggedOut event to generate a new QR code.
+			logoutChan := make(chan struct{})
+			handlerID := client.AddEventHandler(func(evt interface{}) {
+				if _, ok := evt.(*events.LoggedOut); ok {
+					select {
+					case <-logoutChan:
+					default:
+						close(logoutChan)
+					}
+				}
+			})
+			<-logoutChan
+			client.RemoveEventHandler(handlerID)
+			client.Disconnect() // Ensure we're cleanly disconnected before restarting loop
 		}
 	}()
 
