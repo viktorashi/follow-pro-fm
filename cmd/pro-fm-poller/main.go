@@ -206,7 +206,8 @@ func main() {
 	}
 
 	emAlerter := poller.NewEmailAlerter(emailClient, emailFrom, poller.TrustedEmailsFilePath(appDBPath))
-	alerter := poller.NewMultiAlerter(tgAlerter, emAlerter)
+	dbAlerter := poller.NewDatabaseAlerter(dbMgr)
+	alerter := poller.NewMultiAlerter(tgAlerter, emAlerter, dbAlerter)
 
 	// 6. Initialize Auth Manager
 	authMgr := poller.NewAuthManager(dbMgr, emailClient, emailFrom, adminPass, baseURL)

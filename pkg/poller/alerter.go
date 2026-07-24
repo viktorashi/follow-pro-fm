@@ -2,11 +2,13 @@ package poller
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
@@ -283,4 +285,35 @@ func (e *EmailAlerter) AlertInfo(event AlertEvent) error {
 
 func (e *EmailAlerter) AlertSuccess(event AlertEvent) error {
 	return e.send("✅ SUCCESS:", event)
+}
+
+// DatabaseAlerter saves alerts to the application database.
+type DatabaseAlerter struct {
+	dbMgr *DBManager
+}
+
+func NewDatabaseAlerter(dbMgr *DBManager) *DatabaseAlerter {
+	return &DatabaseAlerter{
+		dbMgr: dbMgr,
+	}
+}
+
+func (d *DatabaseAlerter) save(level string, event AlertEvent) error {
+	if d.dbMgr == nil {
+		return nil
+	}
+	// Use background context for best-effort saving since it might be called from various contexts
+	return d.dbMgr.SaveAlert(context.Background(), level, event.Title, event.Message, time.Now())
+}
+
+func (d *DatabaseAlerter) AlertCritical(event AlertEvent) error {
+	return d.save("CRITICAL", event)
+}
+
+func (d *DatabaseAlerter) AlertInfo(event AlertEvent) error {
+	return d.save("INFO", event)
+}
+
+func (d *DatabaseAlerter) AlertSuccess(event AlertEvent) error {
+	return d.save("SUCCESS", event)
 }

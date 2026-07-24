@@ -100,6 +100,7 @@ func (s *TelemetryServer) registerRoutes() {
 	protected := s.echo.Group("", s.authMgr.RequireAuth())
 	protected.GET("/", s.handleDashboardView)
 	protected.GET("/logs", s.handleLogsView)
+	protected.GET("/alerts", s.handleAlertsView)
 	protected.GET("/radio-logs", s.handleRadioLogsView)
 	protected.GET("/data", s.handleDataView)
 	protected.Static("/raw-data", s.dataDir)
@@ -218,6 +219,17 @@ func (s *TelemetryServer) getCampaignArtists() []string {
 
 func (s *TelemetryServer) handleLogsView(c *echo.Context) error {
 	return Render(c, http.StatusOK, LogsPage())
+}
+
+func (s *TelemetryServer) handleAlertsView(c *echo.Context) error {
+	var alerts []AlertRecord
+	if s.dbMgr != nil {
+		l, err := s.dbMgr.GetRecentAlerts(c.Request().Context(), 200)
+		if err == nil {
+			alerts = l
+		}
+	}
+	return Render(c, http.StatusOK, AlertsPage(alerts))
 }
 
 func (s *TelemetryServer) handleRadioLogsView(c *echo.Context) error {
