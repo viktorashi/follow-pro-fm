@@ -9,6 +9,8 @@ Don't run formatting / linting / typechecks / whatever manually. Committing will
 
 Only amend commits if they've not yet been pushed. So that you NEVER have to FORCE-PUSH.
 
+If asked to fix a regression, maybe first try using `git bisect` to find the commit that introduced it. Then look urself.
+
 This project depends on a custom light build of ffmpeg with just what we need. Never change anything of the ffmpeg codebase, except the build args
 
 Please make sure the way it runs locally + the tests correctly reproduce exactly in the Dockerfile, of what's actually gonna be running in prod.
