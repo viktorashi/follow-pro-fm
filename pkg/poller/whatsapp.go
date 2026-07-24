@@ -577,7 +577,7 @@ func (m *MockWhatsAppClient) SendMessage(ctx context.Context, to types.JID, mess
 	}
 	records = append(records, record)
 	if data, err := json.MarshalIndent(records, "", "  "); err == nil {
-		_ = os.WriteFile(path, data, 0644)
+		_ = os.WriteFile(path, data, 0o644)
 	}
 
 	return whatsmeow.SendResponse{
@@ -599,7 +599,7 @@ func (m *MockWhatsAppClient) SimulatePairing() {
 	m.loggedIn = true
 	m.connected = true
 
-	_ = os.WriteFile(m.dbPath, []byte("paired"), 0644)
+	_ = os.WriteFile(m.dbPath, []byte("paired"), 0o644)
 
 	if m.stateMgr != nil {
 		m.stateMgr.UpdateConnection(m.phone, func(s *WAConnectionState) {
