@@ -490,6 +490,9 @@ func main() {
 			return fmt.Errorf("sender phone %s is not connected or logged in", senderPhone)
 		},
 		DisconnectWhatsApp: func() {
+			if streamingTranscriber != nil {
+				streamingTranscriber.SetEnabled(false)
+			}
 			wappMutex.RLock()
 			defer wappMutex.RUnlock()
 			for _, c := range wappClients {
@@ -499,6 +502,9 @@ func main() {
 			}
 		},
 		ConnectWhatsApp: func() error {
+			if streamingTranscriber != nil {
+				streamingTranscriber.SetEnabled(true)
+			}
 			wappMutex.RLock()
 			defer wappMutex.RUnlock()
 			for _, c := range wappClients {
