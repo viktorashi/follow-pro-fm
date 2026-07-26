@@ -302,8 +302,10 @@ func (d *DatabaseAlerter) save(level string, event AlertEvent) error {
 	if d.dbMgr == nil {
 		return nil
 	}
-	// Use background context for best-effort saving since it might be called from various contexts
-	return d.dbMgr.SaveAlert(context.Background(), level, event.Title, event.Message, time.Now())
+	// Best-effort save: use a short timeout so alerting can't block the caller if the DB is locked.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return d.dbMgr.SaveAlert(ctx, level, event.Title, event.Message, time.Now().UTC())
 }
 
 func (d *DatabaseAlerter) AlertCritical(event AlertEvent) error {
