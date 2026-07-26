@@ -13,6 +13,5 @@ ENV UVICORN_HOST="::" \
     WHISPER_MODEL="tiny" \
     WHISPER__MODEL="tiny" \
     WHISPER__COMPUTE_TYPE="int8" \
-    PRELOAD_MODELS='["tiny"]' \
     DEFAULT_LANGUAGE="ro" \
     OMP_NUM_THREADS="4"
