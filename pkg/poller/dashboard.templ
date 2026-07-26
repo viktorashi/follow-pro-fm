@@ -481,6 +481,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 						<button onclick="toggleKillSwitch(false)" class="btn btn-secondary btn-sm">UNDO KILL</button>
 						<a href="/data" class="btn btn-secondary btn-sm">Files</a>
 						<a href="/radio-logs" class="btn btn-secondary btn-sm">Radio History</a>
+						<a href="/alerts" class="btn btn-secondary btn-sm">Alerts</a>
 						<a href="/logs" class="btn btn-secondary btn-sm">Logs</a>
 						<a href="/logout" class="btn btn-secondary btn-sm">Logout</a>
 					</div>
@@ -873,7 +874,21 @@ templ QRComponent(conns []WAConnectionState) {
 	}
 	for _, conn := range conns {
 		<div class="glass qr-card mb-4">
-			<h2 class="text-sm uppercase text-muted mb-4">WhatsApp Pairing ({ conn.Phone })</h2>
+			<div class="flex justify-between items-center mb-4">
+				<h2 class="text-sm uppercase text-muted m-0">WhatsApp Pairing ({ conn.Phone })</h2>
+				<button 
+					type="button" 
+					class="btn btn-secondary btn-sm text-xs py-1 px-2.5" 
+					style="color: #ef4444; border-color: rgba(239, 68, 68, 0.3);"
+					hx-post="/api/sender/disconnect" 
+					hx-vals={ fmt.Sprintf(`{"phone": %q}`, conn.Phone) }
+					hx-confirm={ fmt.Sprintf("Are you sure you want to disconnect and remove %s?", conn.Phone) }
+					hx-target="#qr-card"
+					hx-swap="innerHTML"
+				>
+					Disconnect
+				</button>
+			</div>
 			<div class="text-xs mb-4">
 				if conn.Status == StatusConnected {
 					<span class="text-success">Connected</span>
@@ -1027,6 +1042,54 @@ templ RadioLogsPage(logs []RadioLog) {
 						}
 					</tbody>
 				</table>
+			</div>
+		</div>
+	}
+}
+
+templ AlertsPage(alerts []AlertRecord) {
+	@Layout("System Alerts - ProFM Jaguare") {
+		<div class="container">
+			<header class="header flex justify-between items-center mb-6">
+				<h1 class="title m-0">🔔 System Alerts</h1>
+				<a href="/" class="btn btn-secondary btn-sm">Back to Dashboard</a>
+			</header>
+
+			<div class="card p-6">
+				if len(alerts) == 0 {
+					<p class="text-muted text-center py-4">No alerts found in the database.</p>
+				} else {
+					<div class="table-container mt-4" style="max-height: 80vh; overflow-y: auto;">
+						<table class="table" style="width: 100%; border-collapse: collapse;">
+							<thead>
+								<tr style="border-bottom: 1px solid var(--border-color);">
+									<th style="padding: 12px; text-align: left;">Time</th>
+									<th style="padding: 12px; text-align: left;">Level</th>
+									<th style="padding: 12px; text-align: left;">Title</th>
+									<th style="padding: 12px; text-align: left;">Message</th>
+								</tr>
+							</thead>
+							<tbody>
+								for _, a := range alerts {
+									<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+										<td class="text-muted text-sm" style="padding: 12px; white-space: nowrap;">{ a.CreatedAt }</td>
+										<td style="padding: 12px;">
+											if a.Level == "CRITICAL" {
+												<span class="badge bg-danger">CRITICAL</span>
+											} else if a.Level == "SUCCESS" {
+												<span class="badge" style="background-color: var(--success-color); color: #000;">SUCCESS</span>
+											} else {
+												<span class="badge bg-info">INFO</span>
+											}
+										</td>
+										<td style="padding: 12px; font-weight: 500;">{ a.Title }</td>
+										<td style="padding: 12px; opacity: 0.8; font-size: 0.9em; max-width: 400px; word-wrap: break-word;">{ a.Message }</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				}
 			</div>
 		</div>
 	}

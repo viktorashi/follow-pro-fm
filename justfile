@@ -195,8 +195,11 @@ fly-list-volumes:
 run-temp-fly-vm volume_id="vol_rkg633w5y5p0z3o4":
     flyctl machine run ubuntu:latest --app pro-fm-poller --volume {{ volume_id }}:/data --shell
 
+deploy:
+    fly deploy --ha=false
+
 deploy-whisper:
-    cd whisper-server && fly deploy
+    cd whisper-server && fly deploy #stateless so ok
 
 restart-whisper:
     fly apps restart pro-fm-whisper

@@ -130,26 +130,31 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 	// Set a realistic device name
 	store.DeviceProps.Os = proto.String("Mac OS")
 
+	ctx, cancel := context.WithCancel(context.Background())
+	pairingCancelsMutex.Lock()
+	pairingCancels[phone] = cancel
+	pairingCancelsMutex.Unlock()
+
 	// Run connection logic asynchronously so we don't block the telemetry server
 	// and so we can retry on network failures.
 	go func() {
+		defer func() {
+			pairingCancelsMutex.Lock()
+			delete(pairingCancels, phone)
+			pairingCancelsMutex.Unlock()
+			cancel()
+		}()
+
 		for {
+			if ctx.Err() != nil {
+				return
+			}
+
 			if client.Store.ID == nil {
 				// No session exists, perform login
-				ctx, cancel := context.WithCancel(context.Background())
-
-				pairingCancelsMutex.Lock()
-				pairingCancels[phone] = cancel
-				pairingCancelsMutex.Unlock()
-
 				qrChan, _ := client.GetQRChannel(ctx)
 				err = client.Connect()
 				if err != nil {
-					pairingCancelsMutex.Lock()
-					delete(pairingCancels, phone)
-					pairingCancelsMutex.Unlock()
-
-					cancel()
 					if stateMgr != nil {
 						stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
 							s.Status = StatusError
@@ -157,7 +162,11 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 						})
 					}
 					fmt.Printf("❌ Failed to connect for pairing (retrying in %s): %v\n", ConnectionRetryDelay, err)
-					time.Sleep(ConnectionRetryDelay)
+					select {
+					case <-time.After(ConnectionRetryDelay):
+					case <-ctx.Done():
+						return
+					}
 					continue
 				}
 
@@ -214,15 +223,18 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 						}
 					}
 				}
-				pairingCancelsMutex.Lock()
-				delete(pairingCancels, phone)
-				pairingCancelsMutex.Unlock()
-				cancel()
 
 				if !paired {
+					if ctx.Err() != nil {
+						return
+					}
 					fmt.Println("❌ Login timed out or failed, retrying...")
 					client.Disconnect()
-					time.Sleep(ConnectionRetryDelay)
+					select {
+					case <-time.After(ConnectionRetryDelay):
+					case <-ctx.Done():
+						return
+					}
 					continue
 				}
 
@@ -230,7 +242,11 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 					if client.IsLoggedIn() && client.IsConnected() {
 						break
 					}
-					time.Sleep(500 * time.Millisecond)
+					select {
+					case <-time.After(500 * time.Millisecond):
+					case <-ctx.Done():
+						return
+					}
 				}
 			} else {
 				// Session exists, connect automatically
@@ -243,7 +259,11 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 						})
 					}
 					fmt.Printf("❌ Failed to connect (retrying in %s): %v\n", ConnectionRetryDelay, err)
-					time.Sleep(ConnectionRetryDelay)
+					select {
+					case <-time.After(ConnectionRetryDelay):
+					case <-ctx.Done():
+						return
+					}
 					continue
 				}
 
@@ -255,9 +275,8 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 				}
 			}
 
-			// Wait for LoggedOut event to restart the connection/pairing loop.
-			// Network reconnects are handled automatically by whatsmeow in the background,
-			// but we need to wait for a full LoggedOut event to generate a new QR code.
+			// Wait for LoggedOut event to restart the connection/pairing loop,
+			// or ctx.Done() to terminate the loop cleanly when disconnected from UI.
 			logoutChan := make(chan struct{})
 			handlerID := client.AddEventHandler(func(evt interface{}) {
 				if _, ok := evt.(*events.LoggedOut); ok {
@@ -268,9 +287,15 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 					}
 				}
 			})
-			<-logoutChan
-			client.RemoveEventHandler(handlerID)
-			client.Disconnect() // Ensure we're cleanly disconnected before restarting loop
+			select {
+			case <-logoutChan:
+				client.RemoveEventHandler(handlerID)
+				client.Disconnect()
+			case <-ctx.Done():
+				client.RemoveEventHandler(handlerID)
+				client.Disconnect()
+				return
+			}
 		}
 	}()
 
