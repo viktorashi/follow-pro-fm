@@ -140,6 +140,11 @@ func (m *DBManager) SetSenderSession(ctx context.Context, phone, dbFilename stri
 	return err
 }
 
+func (m *DBManager) RemoveSenderSession(ctx context.Context, phone string) error {
+	_, err := m.db.ExecContext(ctx, "DELETE FROM sender_sessions WHERE phone = ?", phone)
+	return err
+}
+
 func (m *DBManager) SenderSessions(ctx context.Context) ([]SenderSession, error) {
 	rows, err := m.db.QueryContext(ctx, "SELECT phone, db_filename FROM sender_sessions ORDER BY phone")
 	if err != nil {
