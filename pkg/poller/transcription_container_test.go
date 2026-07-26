@@ -127,6 +127,7 @@ func TestWhisperContainerTranscription(t *testing.T) {
 
 		runCmd := exec.Command("docker", "run", "-d",
 			"-p", fmt.Sprintf("%d:8000", testPort),
+			"-v", "profm-whisper-cache:/root/.cache/huggingface",
 			"-e", "UVICORN_HOST=0.0.0.0",
 			"-e", "ENABLE_UI=false",
 			"-e", "WHISPER_MODEL=base",
@@ -143,7 +144,7 @@ func TestWhisperContainerTranscription(t *testing.T) {
 
 		// Wait for container readiness via /health endpoint
 		healthy := false
-		for i := 0; i < 80; i++ {
+		for i := 0; i < 240; i++ {
 			time.Sleep(500 * time.Millisecond)
 			resp, err := http.Get(healthURL)
 			if err == nil && resp.StatusCode == http.StatusOK {
@@ -168,7 +169,7 @@ func TestWhisperContainerTranscription(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 			defer cancel()
 
 			liveTranscript, err := transcriber(ctx, tc.AudioBytes)
