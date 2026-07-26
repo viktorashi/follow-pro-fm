@@ -264,7 +264,7 @@ type AlertRecord struct {
 }
 
 func (m *DBManager) SaveAlert(ctx context.Context, level, title, message string, createdAt time.Time) error {
-	_, err := m.db.ExecContext(ctx, "INSERT INTO alerts (level, title, message, created_at) VALUES (?, ?, ?, ?)", level, title, message, createdAt.Format(time.RFC3339))
+	_, err := m.db.ExecContext(ctx, "INSERT INTO alerts (level, title, message, created_at) VALUES (?, ?, ?, ?)", level, title, message, createdAt.UTC().Format(time.RFC3339))
 	return err
 }
 
