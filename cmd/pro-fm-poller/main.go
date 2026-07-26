@@ -259,7 +259,7 @@ func main() {
 	transcriptionURL := os.Getenv("TRANSCRIPTION_URL")
 	if transcriptionURL == "" {
 		if isProd {
-			transcriptionURL = "http://pro-fm-whisper.internal:8000/v1/audio/transcriptions"
+			transcriptionURL = "http://pro-fm-whisper.flycast/v1/audio/transcriptions"
 		} else {
 			transcriptionURL = "http://localhost:8000/v1/audio/transcriptions"
 		}
