@@ -5,7 +5,7 @@ primary_region = "fra"
 dockerfile = "Dockerfile"
 
 [env]
-UVICORN_HOST = "::"
+UVICORN_HOST = "0.0.0.0"
 ENABLE_UI = "false"
 WHISPER__MODEL = "tiny"
 WHISPER__COMPUTE_TYPE = "int8"
@@ -14,7 +14,7 @@ OMP_NUM_THREADS = "4"
 
 [http_service]
 internal_port = 8000
-force_https = true
+force_https = false
 auto_stop_machines = false
 auto_start_machines = true
 min_machines_running = 1
