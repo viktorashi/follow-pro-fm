@@ -127,9 +127,13 @@ func TestWhisperContainerTranscription(t *testing.T) {
 
 		runCmd := exec.Command("docker", "run", "-d",
 			"-p", fmt.Sprintf("%d:8000", testPort),
-			"-e", "WHISPER__MODEL=tiny",
+			"-e", "UVICORN_HOST=0.0.0.0",
+			"-e", "ENABLE_UI=false",
+			"-e", "WHISPER_MODEL=base",
+			"-e", "WHISPER__MODEL=base",
 			"-e", "WHISPER__COMPUTE_TYPE=int8",
-			"-e", `PRELOAD_MODELS=["tiny"]`,
+			"-e", "DEFAULT_LANGUAGE=ro",
+			"-e", "OMP_NUM_THREADS=4",
 			"--name", containerName,
 			imageName,
 		)
