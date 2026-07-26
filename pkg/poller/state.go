@@ -144,6 +144,28 @@ func (sm *StateManager) ReplaceConnectionPhone(from, to string) {
 	})
 }
 
+func (sm *StateManager) RemoveConnection(phone string) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	filtered := make([]WAConnectionState, 0, len(sm.state.Connections))
+	for _, conn := range sm.state.Connections {
+		if conn.Phone != phone {
+			filtered = append(filtered, conn)
+		}
+	}
+	sm.state.Connections = filtered
+	sm.state.reconcileConnectionState()
+
+	// Broadcast
+	for ch := range sm.subscribers {
+		select {
+		case ch <- sm.state:
+		default:
+		}
+	}
+}
+
 // Get returns a copy of the current state.
 func (sm *StateManager) Get() AppState {
 	sm.mu.RLock()

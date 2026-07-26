@@ -25,19 +25,20 @@ import (
 
 // TelemetryServer runs the embedded HTTP dashboard.
 type TelemetryServer struct {
-	echo        *echo.Echo
-	authMgr     *AuthManager
-	stateMgr    *StateManager
-	broadcaster *SSEBroadcaster
-	logWriter   *SSELogWriter
-	dbMgr       *DBManager
-	dataDir     string
-	audiosDir   string
-	campaigns   []Campaign
-	wappClients []WhatsAppClient
-	onAddPhone  func() error
-	timeNow     func() time.Time
-	transcribe  func(context.Context, []byte) (string, error)
+	echo              *echo.Echo
+	authMgr           *AuthManager
+	stateMgr          *StateManager
+	broadcaster       *SSEBroadcaster
+	logWriter         *SSELogWriter
+	dbMgr             *DBManager
+	dataDir           string
+	audiosDir         string
+	campaigns         []Campaign
+	wappClients       []WhatsAppClient
+	onAddPhone        func() error
+	onDisconnectPhone func(phone string) error
+	timeNow           func() time.Time
+	transcribe        func(context.Context, []byte) (string, error)
 }
 
 type ScheduleEntry struct {
@@ -110,6 +111,7 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.GET("/api/schedule", s.handleGetSchedule)
 	protected.POST("/api/schedule", s.handleSetSchedule)
 	protected.POST("/api/sender/add", s.handleAddSenderPhone)
+	protected.POST("/api/sender/disconnect", s.handleDisconnectSenderPhone)
 	protected.POST("/api/audio/upload", s.handleAudioUpload)
 
 	if os.Getenv("MOCK_WHATSAPP") == "true" {
@@ -506,6 +508,10 @@ func (s *TelemetryServer) SetOnAddPhone(fn func() error) {
 	s.onAddPhone = fn
 }
 
+func (s *TelemetryServer) SetOnDisconnectPhone(fn func(phone string) error) {
+	s.onDisconnectPhone = fn
+}
+
 func (s *TelemetryServer) handleAddSenderPhone(c *echo.Context) error {
 	if s.onAddPhone != nil {
 		err := s.onAddPhone()
@@ -517,6 +523,26 @@ func (s *TelemetryServer) handleAddSenderPhone(c *echo.Context) error {
 	}
 
 	return c.String(http.StatusOK, "QR pairing started. Scan the code above.")
+}
+
+func (s *TelemetryServer) handleDisconnectSenderPhone(c *echo.Context) error {
+	phone := strings.TrimSpace(c.FormValue("phone"))
+	if phone == "" {
+		return c.String(http.StatusBadRequest, "Phone is required")
+	}
+
+	if s.onDisconnectPhone != nil {
+		if err := s.onDisconnectPhone(phone); err != nil {
+			return c.String(http.StatusInternalServerError, "Could not disconnect phone: "+err.Error())
+		}
+	} else {
+		return c.String(http.StatusInternalServerError, "Disconnect phone callback not set")
+	}
+
+	var qrBuf bytes.Buffer
+	state := s.stateMgr.Get()
+	_ = QRComponent(state.Connections).Render(c.Request().Context(), &qrBuf)
+	return c.HTML(http.StatusOK, qrBuf.String())
 }
 
 func (s *TelemetryServer) handleAudioUpload(c *echo.Context) error {
