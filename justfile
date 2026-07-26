@@ -199,7 +199,7 @@ deploy:
     fly deploy --ha=false
 
 deploy-whisper:
-    cd whisper-server && fly deploy --ha=false
+    cd whisper-server && fly deploy --ha=true #stateless so ok
 
 restart-whisper:
     fly apps restart pro-fm-whisper
