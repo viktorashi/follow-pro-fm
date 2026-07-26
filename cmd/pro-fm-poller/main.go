@@ -206,7 +206,8 @@ func main() {
 	}
 
 	emAlerter := poller.NewEmailAlerter(emailClient, emailFrom, poller.TrustedEmailsFilePath(appDBPath))
-	alerter := poller.NewMultiAlerter(tgAlerter, emAlerter)
+	dbAlerter := poller.NewDatabaseAlerter(dbMgr)
+	alerter := poller.NewMultiAlerter(tgAlerter, emAlerter, dbAlerter)
 
 	// 6. Initialize Auth Manager
 	authMgr := poller.NewAuthManager(dbMgr, emailClient, emailFrom, adminPass, baseURL)
@@ -258,7 +259,7 @@ func main() {
 	transcriptionURL := os.Getenv("TRANSCRIPTION_URL")
 	if transcriptionURL == "" {
 		if isProd {
-			transcriptionURL = "http://pro-fm-whisper.internal:8000/v1/audio/transcriptions"
+			transcriptionURL = "http://pro-fm-whisper.flycast/v1/audio/transcriptions"
 		} else {
 			transcriptionURL = "http://localhost:8000/v1/audio/transcriptions"
 		}
@@ -385,6 +386,37 @@ func main() {
 	}
 
 	telemetryServer.SetOnAddPhone(startPairing)
+	telemetryServer.SetOnDisconnectPhone(func(p string) error {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			return nil
+		}
+		if !strings.HasPrefix(p, "+") && p != "New phone (scan QR)" {
+			p = "+" + p
+		}
+
+		poller.CancelPairing(p)
+
+		wappMutex.Lock()
+		client, exists := wappClients[p]
+		if exists {
+			delete(wappClients, p)
+			client.Disconnect()
+		}
+
+		var wappClientsSlice []poller.WhatsAppClient
+		for _, connectedClient := range wappClients {
+			wappClientsSlice = append(wappClientsSlice, connectedClient)
+		}
+		telemetryServer.SetWhatsAppClients(wappClientsSlice)
+		wappMutex.Unlock()
+
+		stateMgr.RemoveConnection(p)
+		_ = dbMgr.RemoveSenderSession(context.Background(), p)
+
+		log.Printf("🔌 Cleanly disconnected WhatsApp sender phone: %s", p)
+		return nil
+	})
 
 	for _, phone := range bootstrapSenderPhones(dbPath) {
 		if err := addSenderPhone(phone, ""); err != nil {
@@ -458,6 +490,9 @@ func main() {
 			return fmt.Errorf("sender phone %s is not connected or logged in", senderPhone)
 		},
 		DisconnectWhatsApp: func() {
+			if streamingTranscriber != nil {
+				streamingTranscriber.SetEnabled(false)
+			}
 			wappMutex.RLock()
 			defer wappMutex.RUnlock()
 			for _, c := range wappClients {
@@ -467,6 +502,9 @@ func main() {
 			}
 		},
 		ConnectWhatsApp: func() error {
+			if streamingTranscriber != nil {
+				streamingTranscriber.SetEnabled(true)
+			}
 			wappMutex.RLock()
 			defer wappMutex.RUnlock()
 			for _, c := range wappClients {

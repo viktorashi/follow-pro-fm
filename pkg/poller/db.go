@@ -110,6 +110,13 @@ func initSchema(db *sql.DB) error {
 			phone TEXT PRIMARY KEY,
 			db_filename TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS alerts (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			level TEXT NOT NULL,
+			title TEXT NOT NULL,
+			message TEXT NOT NULL,
+			created_at DATETIME NOT NULL
+		);`,
 	}
 
 	for _, query := range queries {
@@ -130,6 +137,11 @@ func (m *DBManager) SetSenderSession(ctx context.Context, phone, dbFilename stri
 		 ON CONFLICT(phone) DO UPDATE SET db_filename = excluded.db_filename`,
 		phone, dbFilename,
 	)
+	return err
+}
+
+func (m *DBManager) RemoveSenderSession(ctx context.Context, phone string) error {
+	_, err := m.db.ExecContext(ctx, "DELETE FROM sender_sessions WHERE phone = ?", phone)
 	return err
 }
 
@@ -241,6 +253,40 @@ func (m *DBManager) GetRadioLogs(ctx context.Context, limit int) ([]RadioLog, er
 		return nil, err
 	}
 	return logs, nil
+}
+
+type AlertRecord struct {
+	ID        int
+	Level     string
+	Title     string
+	Message   string
+	CreatedAt string
+}
+
+func (m *DBManager) SaveAlert(ctx context.Context, level, title, message string, createdAt time.Time) error {
+	_, err := m.db.ExecContext(ctx, "INSERT INTO alerts (level, title, message, created_at) VALUES (?, ?, ?, ?)", level, title, message, createdAt.UTC().Format(time.RFC3339))
+	return err
+}
+
+func (m *DBManager) GetRecentAlerts(ctx context.Context, limit int) ([]AlertRecord, error) {
+	rows, err := m.db.QueryContext(ctx, "SELECT id, level, title, message, created_at FROM alerts ORDER BY id DESC LIMIT ?", limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var alerts []AlertRecord
+	for rows.Next() {
+		var a AlertRecord
+		if err := rows.Scan(&a.ID, &a.Level, &a.Title, &a.Message, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		alerts = append(alerts, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return alerts, nil
 }
 
 func normalizeCampaignArtistKey(artist string) string {
