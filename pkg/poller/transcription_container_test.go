@@ -125,9 +125,15 @@ func TestWhisperContainerTranscription(t *testing.T) {
 		imageName := "fedirz/faster-whisper-server:latest-cpu"
 		t.Logf("Spinning up test Whisper container %s on port %d...", containerName, testPort)
 
+		// Use a local directory bind mount so GitHub Actions can cache it
+		cacheDir, _ := filepath.Abs("../../.whisper_cache")
+		if err := os.MkdirAll(cacheDir, 0755); err != nil {
+			t.Fatalf("failed to create cache dir: %v", err)
+		}
+
 		runCmd := exec.Command("docker", "run", "-d",
 			"-p", fmt.Sprintf("%d:8000", testPort),
-			"-v", "profm-whisper-cache:/root/.cache/huggingface",
+			"-v", fmt.Sprintf("%s:/root/.cache/huggingface", cacheDir),
 			"-e", "UVICORN_HOST=0.0.0.0",
 			"-e", "ENABLE_UI=false",
 			"-e", "WHISPER_MODEL=base",
