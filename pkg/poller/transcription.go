@@ -31,6 +31,9 @@ func NewHTTPTranscriber(url string) func(context.Context, []byte) (string, error
 		if err := writer.WriteField("prompt", "Follow ProFM! Ascultă hitul către Londra. Trimite acum un mesaj audio pe WhatsApp."); err != nil {
 			return "", err
 		}
+		if err := writer.WriteField("vad_filter", "true"); err != nil {
+			return "", err
+		}
 		if err := writer.Close(); err != nil {
 			return "", err
 		}

@@ -125,11 +125,25 @@ func TestWhisperContainerTranscription(t *testing.T) {
 		imageName := "fedirz/faster-whisper-server:latest-cpu"
 		t.Logf("Spinning up test Whisper container %s on port %d...", containerName, testPort)
 
+		// Use a local directory bind mount so GitHub Actions can cache it
+		cacheDir, err := filepath.Abs("../../.whisper_cache")
+		if err != nil {
+			t.Fatalf("failed to resolve cache dir: %v", err)
+		}
+		if err := os.MkdirAll(cacheDir, 0755); err != nil {
+			t.Fatalf("failed to create cache dir: %v", err)
+		}
+
 		runCmd := exec.Command("docker", "run", "-d",
 			"-p", fmt.Sprintf("%d:8000", testPort),
-			"-e", "WHISPER__MODEL=tiny",
+			"-v", fmt.Sprintf("%s:/root/.cache/huggingface", cacheDir),
+			"-e", "UVICORN_HOST=0.0.0.0",
+			"-e", "ENABLE_UI=false",
+			"-e", "WHISPER_MODEL=base",
+			"-e", "WHISPER__MODEL=base",
 			"-e", "WHISPER__COMPUTE_TYPE=int8",
-			"-e", `PRELOAD_MODELS=["tiny"]`,
+			"-e", "DEFAULT_LANGUAGE=ro",
+			"-e", "OMP_NUM_THREADS=4",
 			"--name", containerName,
 			imageName,
 		)
@@ -139,7 +153,7 @@ func TestWhisperContainerTranscription(t *testing.T) {
 
 		// Wait for container readiness via /health endpoint
 		healthy := false
-		for i := 0; i < 80; i++ {
+		for i := 0; i < 240; i++ {
 			time.Sleep(500 * time.Millisecond)
 			resp, err := http.Get(healthURL)
 			if err == nil && resp.StatusCode == http.StatusOK {
@@ -164,7 +178,7 @@ func TestWhisperContainerTranscription(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 			defer cancel()
 
 			liveTranscript, err := transcriber(ctx, tc.AudioBytes)
