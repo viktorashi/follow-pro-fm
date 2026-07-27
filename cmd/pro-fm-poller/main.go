@@ -534,6 +534,11 @@ func websocketURL(transcriptionURL string) string {
 	case "https":
 		u.Scheme = "wss"
 	}
+
+	q := u.Query()
+	q.Set("vad_filter", "true")
+	u.RawQuery = q.Encode()
+
 	return u.String()
 }
 
