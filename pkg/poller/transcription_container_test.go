@@ -126,7 +126,10 @@ func TestWhisperContainerTranscription(t *testing.T) {
 		t.Logf("Spinning up test Whisper container %s on port %d...", containerName, testPort)
 
 		// Use a local directory bind mount so GitHub Actions can cache it
-		cacheDir, _ := filepath.Abs("../../.whisper_cache")
+		cacheDir, err := filepath.Abs("../../.whisper_cache")
+		if err != nil {
+			t.Fatalf("failed to resolve cache dir: %v", err)
+		}
 		if err := os.MkdirAll(cacheDir, 0755); err != nil {
 			t.Fatalf("failed to create cache dir: %v", err)
 		}
