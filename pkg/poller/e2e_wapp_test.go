@@ -5,12 +5,17 @@ package poller
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
 
 func TestPoller_E2E(t *testing.T) {
+	// Force mock for reliability in automated E2E testing to avoid hanging on QR scans
+	os.Setenv("MOCK_WHATSAPP", "true")
+	defer os.Unsetenv("MOCK_WHATSAPP")
+
 	rootDir := E2EProjectRoot(t)
 	appDBPath := filepath.Join(rootDir, "data/app.sqlite")
 
