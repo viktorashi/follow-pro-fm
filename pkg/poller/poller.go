@@ -718,6 +718,14 @@ func (p *Poller) checkSongWithCoordinator(currentSong *SongInfo, now time.Time, 
 			}
 		}
 
+		campaignArtist, matchesCampaign := p.matchingCampaignArtist(now, song)
+		if matchesCampaign {
+			if p.Alerter != nil {
+				msg := fmt.Sprintf("🎵 Contest Song Detected!\nArtist: %s\nTitle: %s\n\n(This is an instant notification; automatic send rules apply independently.)", song.Artist, song.Title)
+				_ = p.Alerter.AlertSuccess(AlertEvent{Title: "Contest Song Playing", Message: msg})
+			}
+		}
+
 		// Abort immediately if the bot has been permanently killed
 		if p.StateMgr != nil && p.StateMgr.Get().KillSwitchActive {
 			log.Printf("   ⛔️ KILL SWITCH ACTIVE! Ignoring all campaign matches for '%s'.", song.Artist)
@@ -726,7 +734,6 @@ func (p *Poller) checkSongWithCoordinator(currentSong *SongInfo, now time.Time, 
 
 		// Only check campaigns if we haven't hit the daily limit of matches
 		if p.matchesToday < MaxDailyMatches {
-			campaignArtist, matchesCampaign := p.matchingCampaignArtist(now, song)
 			if matchesCampaign {
 				if !coordinator.Claim(now, triggerSourceMetadata) {
 					return
@@ -1083,6 +1090,11 @@ func (p *Poller) checkFingerprintWithCoordinator(now time.Time, coordinator *Con
 	p.ignoredTrigger = trigger
 	p.ignoredTriggerMu.Unlock()
 
+	if p.Alerter != nil {
+		msg := fmt.Sprintf("🎵 Contest Song Detected (via Fingerprint)!\nArtist: %s\nTitle: %s\n\n(This is an instant notification; automatic send rules apply independently.)", song.Artist, song.Title)
+		_ = p.Alerter.AlertSuccess(AlertEvent{Title: "Contest Song Playing", Message: msg})
+	}
+
 	log.Printf("   [FINGERPRINT MATCH] Matched signature: %s -> %s - %s", name, song.Artist, song.Title)
 	if p.wasSongPlayedRecently(song.Artist, song.Title) {
 		return
@@ -1170,6 +1182,11 @@ func (p *Poller) handleTranscriptWithCoordinator(now time.Time, coordinator *Con
 	song := capture.Metadata
 	if song == (SongInfo{}) {
 		song = p.resolveFingerprintSong(fingerprintTrigger{artist: campaignArtist, title: phrase})
+	}
+
+	if p.Alerter != nil {
+		msg := fmt.Sprintf("🎵 Contest Phrase Detected (via Transcription)!\nPhrase: %s\nCampaign: %s\n\n(This is an instant notification; automatic send rules apply independently.)", phrase, campaignArtist)
+		_ = p.Alerter.AlertSuccess(AlertEvent{Title: "Contest Song Playing", Message: msg})
 	}
 	if p.wasSongPlayedRecently(song.Artist, song.Title) {
 		return

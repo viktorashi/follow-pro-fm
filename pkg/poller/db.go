@@ -127,6 +127,7 @@ func initSchema(db *sql.DB) error {
 
 	// Migrations
 	_, _ = db.Exec(`ALTER TABLE signature_files ADD COLUMN transcript TEXT DEFAULT '';`)
+	_, _ = db.Exec(`ALTER TABLE played_songs RENAME COLUMN played_date TO played_datetime;`)
 
 	return nil
 }
