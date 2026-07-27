@@ -2,7 +2,7 @@ FROM fedirz/faster-whisper-server:latest-cpu AS downloader
 
 ENV WHISPER_MODEL=base
 # Pre-download the model into /root/.cache/huggingface
-RUN uv run python -c "from faster_whisper import download_model; download_model('base')"
+RUN uv run python -c "import os; from faster_whisper import download_model; download_model(os.environ['WHISPER_MODEL'])"
 
 FROM fedirz/faster-whisper-server:latest-cpu
 # Copy only the downloaded model cache, leaving behind any uv/pip download cache
