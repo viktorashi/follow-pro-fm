@@ -36,3 +36,7 @@ The dates are given in main as so:
 Also these rules, which you must follow strictly are in: `rulez/` in some PDF's or whatever else i end up adding in there.
 
 In case voicenotes don't get automatically sent, don't suggest sending a test number FROM the target one, cuz i don't control it.
+
+
+* Notify the user INSTANTLY whenever a contest song is playing, NO MATTER WHAT (even if daily limits are hit, or kill switch is active, or if WhatsApp fails). The alert must be immediate so the user can manually send it if needed.
+* DO NOT spam alerts on WhatsApp disconnects. Rate-limit/deduplicate alerts so the user only gets notified on the FIRST failure, reducing noise.
