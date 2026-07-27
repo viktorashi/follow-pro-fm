@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
@@ -31,13 +32,38 @@ type Alerter interface {
 // MultiAlerter aggregates multiple alerters and sends to all of them.
 type MultiAlerter struct {
 	alerters []Alerter
+	lastSent map[string]time.Time
+	mu       sync.Mutex
 }
 
 func NewMultiAlerter(alerters ...Alerter) *MultiAlerter {
-	return &MultiAlerter{alerters: alerters}
+	return &MultiAlerter{
+		alerters: alerters,
+		lastSent: make(map[string]time.Time),
+	}
+}
+
+func (m *MultiAlerter) shouldSend(event AlertEvent) bool {
+	if event.Title == "Contest Song Playing" {
+		return true // Always send contest song alerts without deduplication
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	key := event.Title + "|" + event.Message
+	if last, exists := m.lastSent[key]; exists {
+		// Suppress identical alerts (e.g. WhatsApp disconnects) for 4 hours
+		if time.Since(last) < 4*time.Hour {
+			return false
+		}
+	}
+	m.lastSent[key] = time.Now()
+	return true
 }
 
 func (m *MultiAlerter) AlertCritical(event AlertEvent) error {
+	if !m.shouldSend(event) {
+		return nil
+	}
 	var lastErr error
 	for _, a := range m.alerters {
 		if err := a.AlertCritical(event); err != nil {
@@ -48,6 +74,9 @@ func (m *MultiAlerter) AlertCritical(event AlertEvent) error {
 }
 
 func (m *MultiAlerter) AlertInfo(event AlertEvent) error {
+	if !m.shouldSend(event) {
+		return nil
+	}
 	var lastErr error
 	for _, a := range m.alerters {
 		if err := a.AlertInfo(event); err != nil {
@@ -58,6 +87,9 @@ func (m *MultiAlerter) AlertInfo(event AlertEvent) error {
 }
 
 func (m *MultiAlerter) AlertSuccess(event AlertEvent) error {
+	if !m.shouldSend(event) {
+		return nil
+	}
 	var lastErr error
 	for _, a := range m.alerters {
 		if err := a.AlertSuccess(event); err != nil {
