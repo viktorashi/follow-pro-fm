@@ -926,6 +926,17 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist, artist, title
 		if err != nil {
 			log.Printf("   ❌ Error sending voice note from %s: %v\n", job.Phone, err)
 			lastErr = err
+
+			isTimelocked := strings.Contains(err.Error(), "463") || strings.Contains(err.Error(), "ReachoutTimelocked")
+			if isTimelocked {
+				p.StateMgr.UpdateConnection(job.Phone, func(s *WAConnectionState) {
+					s.Status = StatusError
+				})
+				p.StateMgr.Update(func(s *AppState) {
+					s.LastError = fmt.Sprintf("Sender %s timelocked by WhatsApp (Error 463). New sender phone required.", job.Phone)
+				})
+			}
+
 			_ = p.Alerter.AlertCritical(AlertEvent{
 				Title:       "Voice Note Failed",
 				Message:     fmt.Sprintf("Could not send voice note to %s from %s\nTrigger: %s\nArtist: %s\nPiesa: %s\nEroare: %v", p.TargetPhone, job.Phone, triggerSource, artist, title, err),

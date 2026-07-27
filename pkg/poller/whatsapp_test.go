@@ -45,7 +45,11 @@ func TestSendVoiceNote_Success(t *testing.T) {
 	// Wait a moment for async InitWhatsApp/Connect
 	time.Sleep(100 * time.Millisecond)
 
-	// Since we haven't paired yet, client is connected but not logged in.
+	mockClient.mu.Lock()
+	mockClient.loggedIn = false
+	mockClient.mu.Unlock()
+
+	// Since we forced the mock into a logged-out state, client is connected but not logged in.
 	// SendVoiceNote should fail.
 	testAudio := filepath.Join("testdata", "waveform_sample.ogg")
 	if _, err := os.Stat(testAudio); err != nil {

@@ -59,22 +59,158 @@ type WhatsAppClient interface {
 	IsConnected() bool
 	IsLoggedIn() bool
 	SendPresence(ctx context.Context, presence types.Presence) error
+	SubscribePresence(ctx context.Context, jid types.JID) error
 	SendChatPresence(ctx context.Context, jid types.JID, state types.ChatPresence, media types.ChatPresenceMedia) error
 	IsOnWhatsApp(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error)
 	Upload(ctx context.Context, data []byte, mediaType whatsmeow.MediaType) (whatsmeow.UploadResponse, error)
 	SendMessage(ctx context.Context, to types.JID, message *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error)
 	AddEventHandler(handler whatsmeow.EventHandler) uint32
+	RemoveEventHandler(id uint32)
+}
+
+type whatsappClientWrapper struct {
+	mu       sync.RWMutex
+	client   *whatsmeow.Client
+	handlers []whatsmeow.EventHandler
+}
+
+func (w *whatsappClientWrapper) setClient(c *whatsmeow.Client) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.client = c
+	for _, h := range w.handlers {
+		c.AddEventHandler(h)
+	}
+}
+
+func (w *whatsappClientWrapper) Connect() error {
+	w.mu.RLock()
+	c := w.client
+	w.mu.RUnlock()
+	if c == nil {
+		return fmt.Errorf("no client")
+	}
+	return c.Connect()
+}
+
+func (w *whatsappClientWrapper) Disconnect() {
+	w.mu.RLock()
+	c := w.client
+	w.mu.RUnlock()
+	if c != nil {
+		c.Disconnect()
+	}
+}
+
+func (w *whatsappClientWrapper) IsConnected() bool {
+	w.mu.RLock()
+	c := w.client
+	w.mu.RUnlock()
+	if c != nil {
+		return c.IsConnected()
+	}
+	return false
+}
+
+func (w *whatsappClientWrapper) IsLoggedIn() bool {
+	w.mu.RLock()
+	c := w.client
+	w.mu.RUnlock()
+	if c != nil {
+		return c.IsLoggedIn()
+	}
+	return false
+}
+
+func (w *whatsappClientWrapper) SendPresence(ctx context.Context, presence types.Presence) error {
+	w.mu.RLock()
+	c := w.client
+	w.mu.RUnlock()
+	if c != nil {
+		return c.SendPresence(ctx, presence)
+	}
+	return fmt.Errorf("no client")
+}
+
+func (w *whatsappClientWrapper) SubscribePresence(ctx context.Context, jid types.JID) error {
+	w.mu.RLock()
+	c := w.client
+	w.mu.RUnlock()
+	if c != nil {
+		return c.SubscribePresence(ctx, jid)
+	}
+	return fmt.Errorf("no client")
+}
+
+func (w *whatsappClientWrapper) SendChatPresence(ctx context.Context, jid types.JID, state types.ChatPresence, media types.ChatPresenceMedia) error {
+	w.mu.RLock()
+	c := w.client
+	w.mu.RUnlock()
+	if c != nil {
+		return c.SendChatPresence(ctx, jid, state, media)
+	}
+	return fmt.Errorf("no client")
+}
+
+func (w *whatsappClientWrapper) IsOnWhatsApp(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error) {
+	w.mu.RLock()
+	c := w.client
+	w.mu.RUnlock()
+	if c != nil {
+		return c.IsOnWhatsApp(ctx, phones)
+	}
+	return nil, fmt.Errorf("no client")
+}
+
+func (w *whatsappClientWrapper) Upload(ctx context.Context, data []byte, mediaType whatsmeow.MediaType) (whatsmeow.UploadResponse, error) {
+	w.mu.RLock()
+	c := w.client
+	w.mu.RUnlock()
+	if c != nil {
+		return c.Upload(ctx, data, mediaType)
+	}
+	return whatsmeow.UploadResponse{}, fmt.Errorf("no client")
+}
+
+func (w *whatsappClientWrapper) SendMessage(ctx context.Context, to types.JID, message *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error) {
+	w.mu.RLock()
+	c := w.client
+	w.mu.RUnlock()
+	if c != nil {
+		return c.SendMessage(ctx, to, message, extra...)
+	}
+	return whatsmeow.SendResponse{}, fmt.Errorf("no client")
+}
+
+func (w *whatsappClientWrapper) AddEventHandler(handler whatsmeow.EventHandler) uint32 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.handlers = append(w.handlers, handler)
+	if w.client != nil {
+		w.client.AddEventHandler(handler)
+	}
+	return uint32(len(w.handlers))
+}
+
+func (w *whatsappClientWrapper) RemoveEventHandler(id uint32) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.client != nil {
+		w.client.RemoveEventHandler(id)
+	}
 }
 
 // InitWhatsApp initializes the WhatsApp client and handles connection/pairing
 func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter Alerter, baseURL string, onPaired ...func(string)) (WhatsAppClient, error) {
 	if os.Getenv("MOCK_WHATSAPP") == "true" {
 		client := &MockWhatsAppClient{
-			phone:    phone,
-			dbPath:   dbPath,
-			stateMgr: stateMgr,
-			alerter:  alerter,
-			baseURL:  baseURL,
+			phone:     phone,
+			dbPath:    dbPath,
+			stateMgr:  stateMgr,
+			alerter:   alerter,
+			baseURL:   baseURL,
+			connected: true,
+			loggedIn:  true,
 		}
 		_ = client.Connect()
 		return client, nil
@@ -87,21 +223,16 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	deviceStore, err := container.GetFirstDevice(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get first device: %w", err)
-	}
-
 	clientLog := waLog.Stdout("Client", "WARN", true)
-	client := whatsmeow.NewClient(deviceStore, clientLog)
+	wrapper := &whatsappClientWrapper{}
 
 	// Add event handlers to ensure we're processing E2E and presence
-	client.AddEventHandler(func(evt interface{}) {
+	wrapper.AddEventHandler(func(evt interface{}) {
 		switch evt.(type) {
 		case *events.Connected:
 			// Tell WhatsApp servers we are online.
 			// Crucial for E2E prekey setups and for avoiding "Waiting for this message".
-			_ = client.SendPresence(context.Background(), types.PresenceAvailable)
+			_ = wrapper.SendPresence(context.Background(), types.PresenceAvailable)
 		case *events.Disconnected:
 			fmt.Println("🔌 Disconnected from WhatsApp servers")
 			if stateMgr != nil {
@@ -149,6 +280,17 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 			if ctx.Err() != nil {
 				return
 			}
+
+			deviceStore, err := container.GetFirstDevice(context.Background())
+			if err != nil {
+				fmt.Printf("❌ Failed to get first device: %v\n", err)
+				time.Sleep(ConnectionRetryDelay)
+				continue
+			}
+
+			// Always re-create the client in this loop to avoid using a deleted device after logout
+			client := whatsmeow.NewClient(deviceStore, clientLog)
+			wrapper.setClient(client)
 
 			if client.Store.ID == nil {
 				// No session exists, perform login
@@ -299,7 +441,7 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 		}
 	}()
 
-	return client, nil
+	return wrapper, nil
 }
 
 // normalizePhoneNumber normalizes Romanian and international numbers to numbers-only format
@@ -359,6 +501,9 @@ func SendVoiceNote(client WhatsAppClient, phone string, audioPath string) error 
 		estimatedSeconds = 30
 	}
 
+	// 0. Proactively subscribe to presence to refresh tokens/privacy state if needed
+	_ = client.SubscribePresence(context.Background(), targetJID)
+
 	// 1. Send "recording audio" presence and sleep for estimatedSeconds
 	_ = client.SendChatPresence(context.Background(), targetJID, types.ChatPresenceComposing, types.ChatPresenceMediaAudio)
 
@@ -403,6 +548,9 @@ func SendVoiceNote(client WhatsAppClient, phone string, audioPath string) error 
 		if uploadErr == nil {
 			break
 		}
+		if strings.Contains(uploadErr.Error(), "463") || strings.Contains(uploadErr.Error(), "ReachoutTimelocked") {
+			break
+		}
 		fmt.Printf("   ⚠️ Upload attempt %d failed: %v. Retrying in 2s...\n", i+1, uploadErr)
 		time.Sleep(2 * time.Second)
 	}
@@ -439,6 +587,9 @@ func SendVoiceNote(client WhatsAppClient, phone string, audioPath string) error 
 	for i := 0; i < 3; i++ {
 		resp, sendErr = client.SendMessage(context.Background(), targetJID, msg)
 		if sendErr == nil {
+			break
+		}
+		if strings.Contains(sendErr.Error(), "463") || strings.Contains(sendErr.Error(), "ReachoutTimelocked") {
 			break
 		}
 		fmt.Printf("   ⚠️ Send message attempt %d failed: %v. Retrying in 2s...\n", i+1, sendErr)
@@ -547,6 +698,10 @@ func (m *MockWhatsAppClient) SendPresence(ctx context.Context, presence types.Pr
 	return nil
 }
 
+func (m *MockWhatsAppClient) SubscribePresence(ctx context.Context, jid types.JID) error {
+	return nil
+}
+
 func (m *MockWhatsAppClient) SendChatPresence(ctx context.Context, jid types.JID, state types.ChatPresence, media types.ChatPresenceMedia) error {
 	return nil
 }
@@ -616,6 +771,10 @@ func (m *MockWhatsAppClient) AddEventHandler(handler whatsmeow.EventHandler) uin
 	defer m.mu.Unlock()
 	m.eventHandlers = append(m.eventHandlers, handler)
 	return uint32(len(m.eventHandlers))
+}
+
+func (m *MockWhatsAppClient) RemoveEventHandler(id uint32) {
+	// Not implemented for mock
 }
 
 func (m *MockWhatsAppClient) SimulatePairing() {
