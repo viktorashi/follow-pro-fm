@@ -4,6 +4,7 @@
 package poller
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 func TestPoller_E2E_NoWhatsApp(t *testing.T) {
 	rootDir := E2EProjectRoot(t)
 	audiosDir := filepath.Join(rootDir, "data/audios")
+	appDBPath := filepath.Join(rootDir, "data/app.sqlite")
 	LoadE2EEnv(rootDir)
 
 	t.Log("Skipping real WhatsApp client initialization (nowapp build tag)")
@@ -28,6 +30,42 @@ func TestPoller_E2E_NoWhatsApp(t *testing.T) {
 	server := NewCampaignHitServer(t)
 	defer server.Close()
 
+	stateMgr := NewStateManager()
+
+	// Make an in-memory DB and import persons + sessions from the real DB
+	dbMgr, err := NewDBManager(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to create in-memory DB: %v", err)
+	}
+	importDbMgr, err := NewDBManager(appDBPath)
+	if err == nil {
+		persons, persErr := importDbMgr.ListPersons(context.Background())
+		if persErr == nil {
+			for _, p := range persons {
+				_, _ = dbMgr.db.Exec("INSERT INTO persons (id, name, slug, created_at) VALUES (?, ?, ?, ?)", p.ID, p.Name, p.Slug, p.CreatedAt)
+			}
+		}
+		sessions, sessErr := importDbMgr.SenderSessions(context.Background())
+		if sessErr == nil {
+			for _, session := range sessions {
+				_, _ = dbMgr.db.Exec("INSERT INTO sender_sessions (phone, db_filename, person_id) VALUES (?, ?, ?)", session.Phone, session.DBFilename, session.PersonID)
+			}
+		}
+	}
+
+	// Create connections from imported sessions
+	sessions, _ := dbMgr.SenderSessions(context.Background())
+	stateMgr.Update(func(s *AppState) {
+		for _, sess := range sessions {
+			s.Connections = append(s.Connections, WAConnectionState{
+				Phone:             sess.Phone,
+				WhatsAppConnected: true,
+				Status:            StatusConnected,
+			})
+		}
+	})
+	HydrateConnectionPersons(dbMgr, stateMgr, context.Background())
+
 	poller := &Poller{
 		APIURL:       server.URL,
 		PollInterval: 1 * time.Millisecond,
@@ -35,17 +73,15 @@ func TestPoller_E2E_NoWhatsApp(t *testing.T) {
 			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
 		},
 		TargetPhone: targetPhone,
-		StateMgr:    NewStateManager(),
+		StateMgr:    stateMgr,
 		Alerter:     multiAlerter,
 		AudiosDir:   audiosDir,
+		DBMgr:       dbMgr,
 		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
 			t.Logf("🚀 Simulating voice note send from %s to %s (audio: %s)", senderPhone, targetPhone, audioPath)
 			return nil
 		},
 	}
-	poller.StateMgr.Update(func(s *AppState) {
-		s.Connections = []WAConnectionState{{Phone: "+40734788254", WhatsAppConnected: true, Status: StatusConnected}}
-	})
 
 	currentSong := &SongInfo{}
 

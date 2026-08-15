@@ -55,13 +55,22 @@ func TestPoller_E2E(t *testing.T) {
 	// Make an in-memory DB for the rest of the app state for blazing fast tests
 	dbMgr, err := NewDBManager(":memory:")
 
-	// Open the physical DB exclusively to harvest the WhatsApp session paths
+	// Open the physical DB to harvest WhatsApp session paths AND person assignments
 	importDbMgr, err2 := NewDBManager(appDBPath)
 	if err == nil && err2 == nil {
-		sessions, err := importDbMgr.SenderSessions(context.Background())
-		if err == nil {
+		// Import persons
+		persons, persErr := importDbMgr.ListPersons(context.Background())
+		if persErr == nil {
+			for _, p := range persons {
+				_, _ = dbMgr.db.Exec("INSERT INTO persons (id, name, slug, created_at) VALUES (?, ?, ?, ?)", p.ID, p.Name, p.Slug, p.CreatedAt)
+			}
+		}
+
+		// Import sender_sessions WITH person_id
+		sessions, sessErr := importDbMgr.SenderSessions(context.Background())
+		if sessErr == nil {
 			for _, session := range sessions {
-				_, _ = dbMgr.db.Exec("INSERT INTO sender_sessions (phone, db_filename) VALUES (?, ?)", session.Phone, session.DBFilename)
+				_, _ = dbMgr.db.Exec("INSERT INTO sender_sessions (phone, db_filename, person_id) VALUES (?, ?, ?)", session.Phone, session.DBFilename, session.PersonID)
 			}
 		}
 	}
@@ -79,6 +88,11 @@ func TestPoller_E2E(t *testing.T) {
 				}
 			}
 		}
+	}
+
+	// Hydrate connections with PersonSlug/PersonID/PersonName from DB
+	if dbMgr != nil {
+		HydrateConnectionPersons(dbMgr, stateMgr, context.Background())
 	}
 
 	defer func() {

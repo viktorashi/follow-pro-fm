@@ -865,15 +865,14 @@ func (s *TelemetryServer) handleBatchMoveAudios(c *echo.Context) error {
 	})
 }
 
-func (s *TelemetryServer) refreshStatePersons(ctx context.Context) {
-	if s.dbMgr == nil || s.stateMgr == nil {
-		return
-	}
-	persons, err := s.dbMgr.ListPersons(ctx)
+// HydrateConnectionPersons loads persons and sender_sessions from the DB
+// and enriches the in-memory connection state with PersonID/PersonName/PersonSlug.
+func HydrateConnectionPersons(dbMgr *DBManager, stateMgr *StateManager, ctx context.Context) {
+	persons, err := dbMgr.ListPersons(ctx)
 	if err != nil {
 		return
 	}
-	sessions, err := s.dbMgr.SenderSessions(ctx)
+	sessions, err := dbMgr.SenderSessions(ctx)
 	if err != nil {
 		return
 	}
@@ -882,7 +881,7 @@ func (s *TelemetryServer) refreshStatePersons(ctx context.Context) {
 		sessionMap[sess.Phone] = sess
 	}
 
-	s.stateMgr.Update(func(st *AppState) {
+	stateMgr.Update(func(st *AppState) {
 		st.Persons = persons
 		for i, conn := range st.Connections {
 			if sess, ok := sessionMap[conn.Phone]; ok {
@@ -892,6 +891,13 @@ func (s *TelemetryServer) refreshStatePersons(ctx context.Context) {
 			}
 		}
 	})
+}
+
+func (s *TelemetryServer) refreshStatePersons(ctx context.Context) {
+	if s.dbMgr == nil || s.stateMgr == nil {
+		return
+	}
+	HydrateConnectionPersons(s.dbMgr, s.stateMgr, ctx)
 }
 
 func dashboardUploadPhones(conns []WAConnectionState) []string {
