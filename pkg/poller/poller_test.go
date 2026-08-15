@@ -267,7 +267,7 @@ func TestPoller_getNowPlaying_BadURL(t *testing.T) {
 	}
 }
 
-func TestPoller_checkSong(t *testing.T) {
+func TestPoller_checkMetadataWithCoordinator(t *testing.T) {
 	// A Wednesday at 12:00 PM (Active time for campaigns)
 	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
 
@@ -388,7 +388,7 @@ func TestPoller_checkSong(t *testing.T) {
 				},
 			}
 
-			poller.checkSong(tt.currentSong, activeTime)
+			poller.checkMetadataWithCoordinator(tt.currentSong, activeTime, poller.contestCheckCoordinator())
 
 			if poller.matchesToday != tt.wantMatches {
 				t.Errorf("matchesToday = %v, want %v", poller.matchesToday, tt.wantMatches)
@@ -400,7 +400,7 @@ func TestPoller_checkSong(t *testing.T) {
 	}
 }
 
-func TestPoller_checkSong_Deduplication(t *testing.T) {
+func TestPoller_checkMetadataWithCoordinator_Deduplication(t *testing.T) {
 	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
 	dbMgr, _ := NewDBManager(":memory:")
 	audiosDir := t.TempDir()
@@ -443,7 +443,7 @@ func TestPoller_checkSong_Deduplication(t *testing.T) {
 		}))
 		defer server.Close()
 		poller.APIURL = server.URL
-		poller.checkSong(currentSong, when)
+		poller.checkMetadataWithCoordinator(currentSong, when, poller.contestCheckCoordinator())
 	}
 
 	// 1. Play BTS - Dynamite (should trigger, voiceCalls = 1)
@@ -490,7 +490,7 @@ func TestPoller_checkSong_Deduplication(t *testing.T) {
 	}
 }
 
-func TestPoller_checkSong_DailyLimit(t *testing.T) {
+func TestPoller_checkMetadataWithCoordinator_DailyLimit(t *testing.T) {
 	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"BTS","playerExtendedSongSubtitle":"Dynamite"}}}`))
@@ -523,7 +523,7 @@ func TestPoller_checkSong_DailyLimit(t *testing.T) {
 	}
 
 	currentSong := &SongInfo{}
-	poller.checkSong(currentSong, activeTime)
+	poller.checkMetadataWithCoordinator(currentSong, activeTime, poller.contestCheckCoordinator())
 
 	if voiceCalls != 0 {
 		t.Errorf("Expected 0 voice calls due to daily limit, got %d", voiceCalls)
@@ -533,7 +533,7 @@ func TestPoller_checkSong_DailyLimit(t *testing.T) {
 	}
 }
 
-func TestPoller_checkSong_RequiresDifferentArtistBetweenCampaignSends(t *testing.T) {
+func TestPoller_checkMetadataWithCoordinator_RequiresDifferentArtistBetweenCampaignSends(t *testing.T) {
 	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
 	dbMgr, err := NewDBManager(":memory:")
 	if err != nil {
@@ -573,7 +573,7 @@ func TestPoller_checkSong_RequiresDifferentArtistBetweenCampaignSends(t *testing
 		}))
 		defer server.Close()
 		poller.APIURL = server.URL
-		poller.checkSong(currentSong, when)
+		poller.checkMetadataWithCoordinator(currentSong, when, poller.contestCheckCoordinator())
 	}
 
 	simulateSong("BTS", "Dynamite", activeTime)
