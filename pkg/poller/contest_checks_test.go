@@ -39,13 +39,13 @@ func TestPollerContestCheckCooldownDefaultsAndIsConfigurable(t *testing.T) {
 	now := time.Date(2026, time.July, 12, 12, 0, 0, 0, time.UTC)
 	poller := &Poller{ContestCheckCooldown: 5 * time.Minute}
 
-	if !poller.ClaimContestWindow(now, "test") {
-		t.Fatal("first checker should claim the window")
+	if !poller.contestCheckCoordinator().Claim(now, "test") {
+		t.Error("First checker should claim the window successfully")
 	}
-	if poller.CanCheckContest(now.Add(2 * time.Minute)) {
+	if poller.contestCheckCoordinator().CanCheck(now.Add(2 * time.Minute)) {
 		t.Fatal("poller should share the claimed window with other checkers (after 60s telemetry window)")
 	}
-	if !poller.ClaimContestWindow(now.Add(5*time.Minute), "test") {
+	if !poller.contestCheckCoordinator().Claim(now.Add(5*time.Minute), "test") {
 		t.Fatal("configured cooldown should permit the next window after five minutes")
 	}
 }

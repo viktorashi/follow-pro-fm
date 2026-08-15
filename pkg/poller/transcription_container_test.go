@@ -191,7 +191,7 @@ func TestWhisperContainerTranscription(t *testing.T) {
 				t.Fatalf("[%s] Got empty transcription from Whisper", tc.Name)
 			}
 
-			matched := TriggerValuesMatch(liveTranscript, tc.FullText)
+			matched := strings.Contains(normalizeTriggerValue(liveTranscript), normalizeTriggerValue(tc.FullText)) || strings.Contains(normalizeTriggerValue(tc.FullText), normalizeTriggerValue(liveTranscript))
 			overlap := transcriptWordOverlap(liveTranscript, tc.FullText)
 			t.Logf("[%s] Reference overlap ratio: %.2f%%", tc.Name, overlap*100)
 
