@@ -317,11 +317,34 @@ func (p *Poller) resolveFingerprintSong(trigger fingerprintTrigger) SongInfo {
 	return song
 }
 
+func hasExistingSignatureForSong(dir string, prefix string) (bool, string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false, ""
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasPrefix(entry.Name(), prefix) {
+			return true, entry.Name()
+		}
+	}
+	return false, ""
+}
+
 func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte, transcript string) {
 	recordedAt := time.Now()
 	filename := fmt.Sprintf("%s - %s - %d.mp3", song.Artist, song.Title, recordedAt.Unix())
 	unreviewedDir := filepath.Join(p.SignaturesDir, BucketUnreviewed)
 	canonicalDir := filepath.Join(p.SignaturesDir, BucketCanonical)
+
+	prefix := fmt.Sprintf("%s - %s - ", song.Artist, song.Title)
+	if exists, name := hasExistingSignatureForSong(unreviewedDir, prefix); exists {
+		log.Printf("   [SIGNATURE REVIEW] Skipped saving %q because we already have an unreviewed signature for this song: %q", filename, name)
+		return
+	}
+	if exists, name := hasExistingSignatureForSong(canonicalDir, prefix); exists {
+		log.Printf("   [SIGNATURE REVIEW] Skipped saving %q because we already have a canonical signature for this song: %q", filename, name)
+		return
+	}
 
 	var allowed map[string]struct{}
 	matchedName := ""
@@ -331,15 +354,6 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte, transc
 			log.Printf("   ⚠️ Failed to load campaign-bound canonical signatures: %v", err)
 		} else {
 			allowed = loaded
-			// User requested: don't capture BucketUnreviewed chunks for songs that we've already reviewed (as per metadata songname)
-			prefix := fmt.Sprintf("%s - %s", song.Artist, song.Title)
-			for canonicalFilename := range allowed {
-				if strings.HasPrefix(canonicalFilename, prefix) {
-					log.Printf("   [SIGNATURE REVIEW] Skipped saving %q because we already have a canonical signature for this song: %q", filename, canonicalFilename)
-					return
-				}
-			}
-
 			match, name, err := findMatchingCanonicalSignatureInSet(data, defaultFingerprintFormat, canonicalDir, allowed)
 			if err == nil && match {
 				matchedName = name
