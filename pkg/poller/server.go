@@ -616,10 +616,8 @@ func (s *TelemetryServer) handleAudioUpload(c *echo.Context) error {
 }
 
 func dashboardUploadPhones(conns []WAConnectionState) []string {
-	seen := map[string]struct{}{
-		CanonicalSenderPhone: {},
-	}
-	phones := []string{CanonicalSenderPhone}
+	seen := make(map[string]struct{})
+	var phones []string
 
 	for _, conn := range conns {
 		phone := strings.TrimSpace(conn.Phone)
@@ -636,10 +634,7 @@ func dashboardUploadPhones(conns []WAConnectionState) []string {
 		phones = append(phones, phone)
 	}
 
-	sort.Slice(phones[1:], func(i, j int) bool {
-		return phones[1:][i] < phones[1:][j]
-	})
-
+	sort.Strings(phones)
 	return phones
 }
 

@@ -23,10 +23,8 @@ import (
 type whatsAppInitFunc func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error)
 
 func bootstrapSenderPhones(dbPath string) []string {
-	phones := []string{poller.CanonicalSenderPhone}
-	seen := map[string]struct{}{
-		poller.CanonicalSenderPhone: {},
-	}
+	var phones []string
+	seen := make(map[string]struct{})
 
 	matches, _ := filepath.Glob(filepath.Join(filepath.Dir(dbPath), "wapp_*.sqlite"))
 	sort.Strings(matches)
@@ -304,9 +302,6 @@ func main() {
 		if dbForPhone == "" {
 			normalized := poller.NormalizePhone(p)
 			dbForPhone = filepath.Join(filepath.Dir(dbPath), "wapp_"+normalized+".sqlite")
-			if normalized == poller.CanonicalSenderPhoneNormalized {
-				dbForPhone = dbPath
-			}
 		}
 
 		c, err := initSenderPhone(p, dbForPhone, stateMgr, alerter, baseURL, func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error) {

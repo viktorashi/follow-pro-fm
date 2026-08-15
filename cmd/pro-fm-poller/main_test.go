@@ -11,7 +11,7 @@ import (
 	"pro-fm-poller/pkg/poller"
 )
 
-func TestBootstrapSenderPhonesAlwaysIncludesCanonicalAndPersistedSecondaries(t *testing.T) {
+func TestBootstrapSenderPhonesLoadsPersistedPhones(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "wapp.sqlite")
 
@@ -27,8 +27,8 @@ func TestBootstrapSenderPhonesAlwaysIncludesCanonicalAndPersistedSecondaries(t *
 
 	got := bootstrapSenderPhones(dbPath)
 	want := []string{
-		poller.CanonicalSenderPhone,
 		"+40711122334",
+		"+40734788254",
 		"+40770661491",
 	}
 
@@ -37,15 +37,13 @@ func TestBootstrapSenderPhonesAlwaysIncludesCanonicalAndPersistedSecondaries(t *
 	}
 }
 
-func TestBootstrapSenderPhonesFallsBackToCanonicalOnly(t *testing.T) {
+func TestBootstrapSenderPhonesEmptyWhenNoFiles(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "wapp.sqlite")
 
 	got := bootstrapSenderPhones(dbPath)
-	want := []string{poller.CanonicalSenderPhone}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("bootstrapSenderPhones() = %v, want %v", got, want)
+	if len(got) != 0 {
+		t.Fatalf("bootstrapSenderPhones() = %v, want empty", got)
 	}
 }
 
