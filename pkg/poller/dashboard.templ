@@ -2,6 +2,7 @@ package poller
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -650,63 +651,75 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 					<div class="glass p-6" id="people-section">
 						<div class="flex justify-between items-center mb-6">
 							<div>
-								<h2 class="text-base font-bold flex items-center gap-2">👥 People & WhatsApp Senders</h2>
-								<div class="text-xs text-muted">Each person owns an audio pool. All phones assigned to a person draw from that person's pool.</div>
+								<h2 class="text-lg font-bold flex items-center gap-2 text-white">👥 People & WhatsApp Senders</h2>
+								<div class="text-xs text-muted mt-0.5">Each person owns a dedicated voice note pool. All phones assigned to a person draw from that pool.</div>
 							</div>
-							<button onclick="document.getElementById('modal-add-person').classList.toggle('hidden')" class="btn btn-primary btn-sm">+ Add New Person</button>
+							<button onclick="document.getElementById('modal-add-person').classList.toggle('hidden')" class="btn btn-primary btn-sm flex items-center gap-1 font-semibold">
+								<span>+</span> Add New Person
+							</button>
 						</div>
 
-						<div id="modal-add-person" class="hidden mb-6 p-4 rounded-xl bg-black/30 border border-white/10">
-							<div class="font-semibold text-sm mb-2 text-primary">Create New Person</div>
-							<form id="create-person-form" onsubmit="return createPerson(event, this)" class="flex gap-2 items-end">
-								<div class="flex-grow">
-									<label class="text-xs text-muted mb-1">Person Name</label>
-									<input type="text" name="name" placeholder="e.g. Victor Stan" class="input" required />
+						<div id="modal-add-person" class="hidden mb-6 p-5 rounded-2xl bg-black/40 border border-primary/30 shadow-lg">
+							<div class="font-bold text-sm mb-3 text-primary flex items-center gap-1.5">
+								<span>✨</span> Create New Person
+							</div>
+							<form id="create-person-form" onsubmit="return createPerson(event, this)" class="flex flex-col sm:flex-row gap-3 items-end">
+								<div class="flex-grow w-full">
+									<label class="text-xs text-muted mb-1 block">Person Full Name</label>
+									<input type="text" name="name" placeholder="e.g. Victor Stan" class="input w-full" required />
 								</div>
-								<button type="submit" class="btn btn-primary btn-sm">Save Person</button>
-								<button type="button" onclick="document.getElementById('modal-add-person').classList.add('hidden')" class="btn btn-secondary btn-sm">Cancel</button>
+								<div class="flex gap-2 w-full sm:w-auto">
+									<button type="submit" class="btn btn-primary btn-sm flex-1 sm:flex-initial">Save Person</button>
+									<button type="button" onclick="document.getElementById('modal-add-person').classList.add('hidden')" class="btn btn-secondary btn-sm flex-1 sm:flex-initial">Cancel</button>
+								</div>
 							</form>
 						</div>
 
 						if len(persons) == 0 {
-							<div class="text-center py-6 text-muted border border-dashed border-white/10 rounded-xl">
-								<p class="mb-2">No people registered yet.</p>
+							<div class="text-center py-10 text-muted border-2 border-dashed border-white/10 rounded-2xl bg-white/[0.02]">
+								<p class="text-base font-semibold text-white/80 mb-1">No people registered yet</p>
+								<p class="text-xs text-muted mb-4">Create a person profile to assign connected WhatsApp numbers and upload voice notes.</p>
 								<button onclick="document.getElementById('modal-add-person').classList.remove('hidden')" class="btn btn-primary btn-sm">Create First Person</button>
 							</div>
 						} else {
 							<div class="space-y-6">
 								for _, p := range persons {
-									<div class="border border-white/10 rounded-xl p-4 bg-black/20">
-										<div class="flex justify-between items-start mb-4">
+									<div class="border border-white/10 rounded-2xl p-5 bg-black/30 shadow-sm transition-all hover:border-white/20">
+										<!-- Person Header -->
+										<div class="flex flex-wrap justify-between items-start gap-4 mb-4 pb-4 border-b border-white/10">
 											<div>
-												<div class="flex items-center gap-2">
-													<span class="font-bold text-base">{ p.Name }</span>
-													<span class="text-xs font-mono bg-white/10 px-2 py-0.5 rounded text-muted">{ p.Slug }</span>
+												<div class="flex items-center gap-3">
+													<h3 class="text-lg font-bold text-white tracking-tight">{ p.Name }</h3>
+													<span class="text-xs font-mono bg-primary/15 text-primary border border-primary/30 px-2.5 py-0.5 rounded-full">{ p.Slug }</span>
 												</div>
-												<div class="text-xs text-muted mt-1">Created: { p.CreatedAt.Format("02 Jan 2006 15:04") }</div>
+												<div class="text-xs text-muted mt-1 flex items-center gap-2">
+													<span>Created: { p.CreatedAt.Format("02 Jan 2006 15:04") }</span>
+												</div>
 											</div>
-											<div class="flex gap-2">
-												<button type="button" onclick={ templ.ComponentScript{Call: fmt.Sprintf("editPerson(%d, '%s')", p.ID, p.Name)} } class="btn btn-secondary btn-sm">Edit Name</button>
-												<button type="button" onclick={ templ.ComponentScript{Call: fmt.Sprintf("deletePerson(%d, '%s')", p.ID, p.Name)} } class="btn btn-danger btn-sm">Delete</button>
+											<div class="flex items-center gap-2">
+												<button type="button" onclick={ templ.ComponentScript{Call: fmt.Sprintf("editPerson(%d, '%s')", p.ID, p.Name)} } class="btn btn-secondary btn-sm text-xs py-1.5 px-3">Edit Name</button>
+												<button type="button" onclick={ templ.ComponentScript{Call: fmt.Sprintf("deletePerson(%d, '%s')", p.ID, p.Name)} } class="btn btn-danger btn-sm text-xs py-1.5 px-3">Delete</button>
 											</div>
 										</div>
 
 										<!-- Assigned Phones Sub-section -->
-										<div class="mb-4">
-											<div class="text-xs uppercase text-muted tracking-wider font-semibold mb-2">Assigned WhatsApp Phones:</div>
+										<div class="mb-5">
+											<div class="text-xs uppercase text-muted tracking-wider font-semibold mb-2.5 flex items-center gap-1.5">
+												<span>📱</span> Assigned WhatsApp Numbers:
+											</div>
 											<div class="flex flex-wrap gap-3">
 												for _, conn := range state.Connections {
 													if conn.PersonSlug == p.Slug || (conn.PersonID != nil && *conn.PersonID == p.ID) {
-														<div class="flex items-center gap-2 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm">
+														<div class="flex items-center gap-2.5 bg-white/5 hover:bg-white/10 border border-white/15 rounded-xl px-3.5 py-2 text-sm shadow-sm transition-colors">
 															if conn.Status == StatusConnected {
-																<span class="w-2.5 h-2.5 rounded-full bg-success inline-block"></span>
+																<span class="w-2.5 h-2.5 rounded-full bg-success inline-block shadow-sm shadow-success/50" title="Connected"></span>
 															} else if conn.Status == StatusPairingRequired {
-																<span class="w-2.5 h-2.5 rounded-full bg-warning inline-block"></span>
+																<span class="w-2.5 h-2.5 rounded-full bg-warning inline-block shadow-sm shadow-warning/50" title="Pairing Required"></span>
 															} else {
-																<span class="w-2.5 h-2.5 rounded-full bg-danger inline-block"></span>
+																<span class="w-2.5 h-2.5 rounded-full bg-danger inline-block shadow-sm shadow-danger/50" title="Disconnected / Error"></span>
 															}
-															<span class="font-mono">{ conn.Phone }</span>
-															<select onchange={ templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', this.value)", conn.Phone)} } class="input py-0 px-1 text-xs h-6 bg-white/5 border-white/10">
+															<span class="font-mono font-medium text-white/90">{ conn.Phone }</span>
+															<select onchange={ templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', this.value)", conn.Phone)} } class="bg-black/50 text-white rounded-lg px-2.5 py-1 text-xs border border-white/20 focus:outline-none focus:border-primary cursor-pointer">
 																<option value={ fmt.Sprintf("%d", p.ID) } selected>{ p.Name }</option>
 																for _, other := range persons {
 																	if other.ID != p.ID {
@@ -715,7 +728,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 																}
 																<option value="0">Unassign</option>
 															</select>
-															<button type="button" hx-post="/api/sender/disconnect" hx-vals={ fmt.Sprintf(`{"phone": "%s"}`, conn.Phone) } hx-target="#qr-card" hx-swap="innerHTML" class="text-danger hover:text-danger/80 text-xs ml-1" title="Disconnect">✕</button>
+															<button type="button" hx-post="/api/sender/disconnect" hx-vals={ fmt.Sprintf(`{"phone": "%s"}`, conn.Phone) } hx-target="#qr-card" hx-swap="innerHTML" class="text-danger hover:text-danger/80 text-sm font-bold ml-1 p-1 hover:bg-danger/10 rounded" title="Disconnect Phone">✕</button>
 														</div>
 													}
 												}
@@ -723,18 +736,20 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 										</div>
 
 										<!-- Audio Pool & Batch Move -->
-										<div class="border-t border-white/10 pt-3">
-											<div class="flex justify-between items-center mb-2">
-												<div class="text-xs text-muted">
-													Audio Pool: <strong class="text-success">{ fmt.Sprintf("%d", len(personAudios[p.Slug].Active)) } active</strong> · <span class="text-muted">{ fmt.Sprintf("%d", len(personAudios[p.Slug].Used)) } used</span>
+										<div class="pt-2">
+											<div class="flex flex-wrap items-center justify-between gap-3 mb-3 p-3 rounded-xl bg-white/[0.03] border border-white/10">
+												<div class="text-xs text-muted flex items-center gap-2">
+													<span>🎵 Audio Pool:</span>
+													<span class="bg-success/15 text-success font-semibold px-2 py-0.5 rounded-full border border-success/30">{ fmt.Sprintf("%d active", len(personAudios[p.Slug].Active)) }</span>
+													<span class="bg-white/10 text-muted px-2 py-0.5 rounded-full">{ fmt.Sprintf("%d used", len(personAudios[p.Slug].Used)) }</span>
 												</div>
 												if len(personAudios[p.Slug].Active) > 0 && len(persons) > 1 {
 													<div class="flex items-center gap-2">
-														<label class="text-xs text-muted flex items-center gap-1 cursor-pointer">
-															<input type="checkbox" onchange={ templ.ComponentScript{Call: fmt.Sprintf("toggleSelectAllAudios('%s', this.checked)", p.Slug)} } />
+														<label class="text-xs text-muted flex items-center gap-1.5 cursor-pointer select-none bg-black/40 px-2.5 py-1 rounded-lg border border-white/10">
+															<input type="checkbox" onchange={ templ.ComponentScript{Call: fmt.Sprintf("toggleSelectAllAudios('%s', this.checked)", p.Slug)} } class="rounded border-white/20" />
 															<span>Select All</span>
 														</label>
-														<select id={ "target-person-" + p.Slug } class="input py-0 px-2 text-xs h-7 bg-white/5 border-white/10">
+														<select id={ "target-person-" + p.Slug } class="bg-black/50 text-white rounded-lg px-2.5 py-1 text-xs border border-white/20 focus:outline-none focus:border-primary">
 															<option value="" disabled selected>Move selected to...</option>
 															for _, other := range persons {
 																if other.Slug != p.Slug {
@@ -742,22 +757,27 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 																}
 															}
 														</select>
-														<button type="button" onclick={ templ.ComponentScript{Call: fmt.Sprintf("batchMoveAudios('%s')", p.Slug)} } class="btn btn-secondary btn-sm py-0.5 text-xs">🚚 Move</button>
+														<button type="button" onclick={ templ.ComponentScript{Call: fmt.Sprintf("batchMoveAudios('%s')", p.Slug)} } class="btn btn-primary btn-sm py-1 px-3 text-xs font-semibold flex items-center gap-1">🚚 Move</button>
 													</div>
 												}
 											</div>
 
 											if len(personAudios[p.Slug].Active) > 0 {
-												<div class="max-h-36 overflow-y-auto space-y-1 bg-black/30 rounded p-2 text-xs font-mono">
+												<div class="max-h-64 overflow-y-auto space-y-1.5 bg-black/40 rounded-xl p-2.5 border border-white/10">
 													for _, f := range personAudios[p.Slug].Active {
-														<label class="flex items-center gap-2 hover:bg-white/5 p-1 rounded cursor-pointer">
-															<input type="checkbox" class={ "audio-checkbox-" + p.Slug } value={ f } />
-															<span class="truncate">{ f }</span>
-														</label>
+														<div class="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-white/5 border border-transparent hover:border-white/10 transition-colors">
+															<label class="flex items-center gap-3 cursor-pointer flex-grow min-w-0">
+																<input type="checkbox" class={ "audio-checkbox-" + p.Slug + " rounded border-white/20 text-primary focus:ring-0" } value={ f } />
+																<span class="text-xs font-mono text-white/90 truncate" title={ f }>{ f }</span>
+															</label>
+															<div class="flex items-center gap-2 shrink-0">
+																<audio controls preload="none" class="h-7 w-48 opacity-80 hover:opacity-100 transition-opacity" src={ fmt.Sprintf("/api/audio/play?slug=%s&file=%s", p.Slug, url.QueryEscape(f)) }></audio>
+															</div>
+														</div>
 													}
 												</div>
 											} else {
-												<div class="text-xs text-muted italic">No active voice notes uploaded for { p.Name }.</div>
+												<div class="text-xs text-muted italic p-3 bg-black/20 rounded-xl border border-dashed border-white/10 text-center">No active voice notes uploaded for { p.Name }.</div>
 											}
 										</div>
 									</div>

@@ -358,7 +358,9 @@ func TestPoller_checkMetadataWithCoordinator(t *testing.T) {
 			dbMgr, _ := NewDBManager(":memory:")
 
 			audiosDir := t.TempDir()
-			_ = os.WriteFile(audiosDir+"/test.ogg", []byte("fake"), 0644)
+			personDir := filepath.Join(audiosDir, "main-sender")
+			_ = os.MkdirAll(personDir, 0755)
+			_ = os.WriteFile(filepath.Join(personDir, "test.ogg"), []byte("fake"), 0644)
 			poller := &Poller{
 				APIURL:       server.URL,
 				PollInterval: 1 * time.Millisecond,
@@ -404,9 +406,11 @@ func TestPoller_checkMetadataWithCoordinator_Deduplication(t *testing.T) {
 	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
 	dbMgr, _ := NewDBManager(":memory:")
 	audiosDir := t.TempDir()
-	_ = os.WriteFile(audiosDir+"/test1.ogg", []byte("fake-1"), 0644)
-	_ = os.WriteFile(audiosDir+"/test2.ogg", []byte("fake-2"), 0644)
-	_ = os.WriteFile(audiosDir+"/test3.ogg", []byte("fake-3"), 0644)
+	personDir := filepath.Join(audiosDir, "main-sender")
+	_ = os.MkdirAll(personDir, 0755)
+	_ = os.WriteFile(filepath.Join(personDir, "test1.ogg"), []byte("fake-1"), 0644)
+	_ = os.WriteFile(filepath.Join(personDir, "test2.ogg"), []byte("fake-2"), 0644)
+	_ = os.WriteFile(filepath.Join(personDir, "test3.ogg"), []byte("fake-3"), 0644)
 
 	voiceCalls := 0
 	poller := &Poller{
@@ -541,10 +545,12 @@ func TestPoller_checkMetadataWithCoordinator_RequiresDifferentArtistBetweenCampa
 	}
 
 	audiosDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(audiosDir, "test1.ogg"), []byte("first"), 0o644); err != nil {
+	personDir := filepath.Join(audiosDir, "main-sender")
+	_ = os.MkdirAll(personDir, 0755)
+	if err := os.WriteFile(filepath.Join(personDir, "test1.ogg"), []byte("first"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(audiosDir, "test2.ogg"), []byte("second"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(personDir, "test2.ogg"), []byte("second"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
@@ -713,7 +719,9 @@ func TestPoller_saveUnreviewedChunkForReviewStoresCampaignOwnership(t *testing.T
 
 func TestPoller_doTriggerVoiceNote_ReportsOnlySuccessAfterSend(t *testing.T) {
 	audiosDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(audiosDir, "test.ogg"), []byte("fake"), 0o644); err != nil {
+	personDir := filepath.Join(audiosDir, "main-sender")
+	_ = os.MkdirAll(personDir, 0755)
+	if err := os.WriteFile(filepath.Join(personDir, "test.ogg"), []byte("fake"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
@@ -751,7 +759,9 @@ func TestPoller_doTriggerVoiceNote_ReportsOnlySuccessAfterSend(t *testing.T) {
 
 func TestPoller_doTriggerVoiceNote_ReportsOnlyFailureAfterSendError(t *testing.T) {
 	audiosDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(audiosDir, "test.ogg"), []byte("fake"), 0o644); err != nil {
+	personDir := filepath.Join(audiosDir, "main-sender")
+	_ = os.MkdirAll(personDir, 0755)
+	if err := os.WriteFile(filepath.Join(personDir, "test.ogg"), []byte("fake"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
@@ -902,8 +912,17 @@ func TestNormalizeTriggerValueDiacritics(t *testing.T) {
 
 func createMockStateMgr() *StateManager {
 	sm := NewStateManager()
+	personID := int64(1)
 	sm.Update(func(s *AppState) {
-		s.Connections = []WAConnectionState{{Phone: "+40734788254", WhatsAppConnected: true, Status: StatusConnected}}
+		s.Persons = []Person{{ID: personID, Name: "Main Sender", Slug: "main-sender"}}
+		s.Connections = []WAConnectionState{{
+			Phone:             "+40734788254",
+			WhatsAppConnected: true,
+			Status:            StatusConnected,
+			PersonID:          &personID,
+			PersonName:        "Main Sender",
+			PersonSlug:        "main-sender",
+		}}
 	})
 	return sm
 }

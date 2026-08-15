@@ -126,6 +126,7 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.POST("/api/persons/:id/delete", s.handleDeletePerson)
 	protected.POST("/api/phones/assign", s.handleAssignPhone)
 	protected.POST("/api/audios/batch-move", s.handleBatchMoveAudios)
+	protected.GET("/api/audio/play", s.handleAudioPlay)
 
 	if os.Getenv("MOCK_WHATSAPP") == "true" {
 		protected.POST("/api/test/mock-scan", s.handleMockScan)
@@ -596,7 +597,10 @@ func (s *TelemetryServer) handleDisconnectSenderPhone(c *echo.Context) error {
 func (s *TelemetryServer) handleAudioUpload(c *echo.Context) error {
 	personSlug := strings.TrimSpace(c.FormValue("person_slug"))
 	if personSlug == "" {
-		personSlug = strings.TrimSpace(c.FormValue("phone"))
+		phone := strings.TrimSpace(c.FormValue("phone"))
+		if phone != "" {
+			personSlug = NormalizePhone(phone)
+		}
 	}
 	if personSlug == "" {
 		return c.String(http.StatusBadRequest, "Person is required")
@@ -661,6 +665,32 @@ func (s *TelemetryServer) handleAudioUpload(c *echo.Context) error {
 
 	s.refreshStatePersons(c.Request().Context())
 	return c.String(http.StatusOK, fmt.Sprintf("Successfully uploaded %d files to %s", len(saved), personSlug))
+}
+
+func (s *TelemetryServer) handleAudioPlay(c *echo.Context) error {
+	slug := strings.TrimSpace(c.QueryParam("slug"))
+	if slug == "" {
+		slug = strings.TrimSpace(c.QueryParam("person_slug"))
+	}
+	filename := filepath.Base(c.QueryParam("file"))
+	if filename == "" || filename == "." || filename == ".." {
+		return c.String(http.StatusBadRequest, "Invalid file name")
+	}
+
+	targetDir := GetAudioDirForPerson(slug, s.audiosDir)
+	filePath := filepath.Join(targetDir, filename)
+
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		// Check used folder if not found in active
+		filePath = filepath.Join(targetDir, "used", filename)
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			return c.String(http.StatusNotFound, "Audio file not found")
+		}
+	}
+
+	c.Response().Header().Set(echo.HeaderContentType, "audio/ogg")
+	http.ServeFile(c.Response(), c.Request(), filePath)
+	return nil
 }
 
 func (s *TelemetryServer) handleListPersons(c *echo.Context) error {

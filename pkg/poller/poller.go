@@ -565,18 +565,14 @@ func (p *Poller) runMetadataChecker(checker ContestChecker, checkImmediately boo
 
 func (p *Poller) refreshAudioStats(s *AppState) {
 	personStats := make(map[string]PhoneAudioStats)
+	totalUnused := 0
+	totalUsed := 0
+
 	for _, person := range s.Persons {
 		unused, used := GetAudioStats(GetAudioDirForPerson(person.Slug, p.AudiosDir))
 		personStats[person.Slug] = PhoneAudioStats{Unused: unused, Used: used}
-	}
-
-	phoneStats := GetAudioStatsPerPhone(s.Connections, p.AudiosDir)
-
-	totalUnused := 0
-	totalUsed := 0
-	for _, stat := range personStats {
-		totalUnused += stat.Unused
-		totalUsed += stat.Used
+		totalUnused += unused
+		totalUsed += used
 	}
 
 	for i, conn := range s.Connections {
@@ -587,11 +583,8 @@ func (p *Poller) refreshAudioStats(s *AppState) {
 				continue
 			}
 		}
-		st := phoneStats[conn.Phone]
-		s.Connections[i].UnusedAudios = st.Unused
-		s.Connections[i].UsedAudios = st.Used
-		totalUnused += st.Unused
-		totalUsed += st.Used
+		s.Connections[i].UnusedAudios = 0
+		s.Connections[i].UsedAudios = 0
 	}
 
 	s.UnusedAudios = totalUnused
@@ -821,22 +814,17 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist string, now ti
 	}
 	var jobs []SendJob
 
-	// Group connected phones by PersonSlug (or fallback to phone normalized if unassigned)
+	// Group connected phones by PersonSlug
 	phoneGroups := make(map[string][]WAConnectionState)
 	for _, conn := range p.StateMgr.Get().Connections {
-		key := conn.PersonSlug
-		if key == "" {
-			key = NormalizePhone(conn.Phone)
+		if conn.PersonSlug == "" {
+			continue // Unassigned phones cannot draw from an audio pool
 		}
-		phoneGroups[key] = append(phoneGroups[key], conn)
+		phoneGroups[conn.PersonSlug] = append(phoneGroups[conn.PersonSlug], conn)
 	}
 
-	for groupKey, conns := range phoneGroups {
-		dir := filepath.Join(p.AudiosDir, groupKey)
-		if _, err := os.Stat(dir); os.IsNotExist(err) {
-			_ = InitAudioPool(dir)
-		}
-
+	for personSlug, conns := range phoneGroups {
+		dir := filepath.Join(p.AudiosDir, personSlug)
 		allocatedHashes := make(map[string]struct{})
 		for _, conn := range conns {
 			f, hash, err := GetRandomAvailableAudio(dir, func(contentHash string) (bool, error) {
@@ -850,7 +838,7 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist string, now ti
 			})
 			if err == nil {
 				allocatedHashes[hash] = struct{}{}
-				jobs = append(jobs, SendJob{Phone: conn.Phone, AudioFile: f, AudioHash: hash, PersonSlug: groupKey})
+				jobs = append(jobs, SendJob{Phone: conn.Phone, AudioFile: f, AudioHash: hash, PersonSlug: personSlug})
 			}
 		}
 	}
