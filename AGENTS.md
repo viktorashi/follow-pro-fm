@@ -4,8 +4,8 @@ Alwayss, use the ponytail skill (It might have already been injected in your con
 
 Never merge / push onto main by yourself unless specifically prompted otherwise.
 That's what's actually deploying to main through CI / CD
-For anything you're given, make atomic, structured ordered commits for each of those.
-Don't run formatting / linting / typechecks / whatever manually. Committing will do that for you.
+For anything you're given, make atomic, structured ordered commits. Don't leave the worktree dirty.
+Don't run tests / formatting / linting / typechecks / whatever manually. Committing will trigger the git hooks so don't worry about it.
 
 Only amend commits if they've not yet been pushed. So that you NEVER have to FORCE-PUSH.
 
@@ -37,6 +37,5 @@ Also these rules, which you must follow strictly are in: `rulez/` in some PDF's 
 
 In case voicenotes don't get automatically sent, don't suggest sending a test number FROM the target one, cuz i don't control it.
 
-
-* Notify the user INSTANTLY whenever a contest song is playing, NO MATTER WHAT (even if daily limits are hit, or kill switch is active, or if WhatsApp fails). The alert must be immediate so the user can manually send it if needed.
-* DO NOT spam alerts on WhatsApp disconnects. Rate-limit/deduplicate alerts so the user only gets notified on the FIRST failure, reducing noise.
+- Notify the user INSTANTLY whenever a contest song is playing, NO MATTER WHAT (even if daily limits are hit, or kill switch is active, or if WhatsApp fails). The alert must be immediate so the user can manually send it if needed.
+- DO NOT spam alerts on WhatsApp disconnects. Rate-limit/deduplicate alerts so the user only gets notified on the FIRST failure, reducing noise.
