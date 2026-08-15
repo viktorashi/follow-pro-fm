@@ -597,12 +597,6 @@ func (s *TelemetryServer) handleDisconnectSenderPhone(c *echo.Context) error {
 func (s *TelemetryServer) handleAudioUpload(c *echo.Context) error {
 	personSlug := strings.TrimSpace(c.FormValue("person_slug"))
 	if personSlug == "" {
-		phone := strings.TrimSpace(c.FormValue("phone"))
-		if phone != "" {
-			personSlug = NormalizePhone(phone)
-		}
-	}
-	if personSlug == "" {
 		return c.String(http.StatusBadRequest, "Person is required")
 	}
 
