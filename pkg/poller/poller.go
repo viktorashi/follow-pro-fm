@@ -162,7 +162,7 @@ type metadataContestChecker struct {
 }
 
 func (c *metadataContestChecker) Check(now time.Time) {
-	c.poller.checkSongWithCoordinator(c.currentSong, now, c.coordinator)
+	c.poller.checkMetadataWithCoordinator(c.currentSong, now, c.coordinator)
 }
 
 type fingerprintContestChecker struct {
@@ -643,11 +643,7 @@ func (p *Poller) prepareStartState() bool {
 	return true
 }
 
-func (p *Poller) checkSong(currentSong *SongInfo, now time.Time) {
-	p.checkSongWithCoordinator(currentSong, now, p.contestCheckCoordinator())
-}
-
-func (p *Poller) checkSongWithCoordinator(currentSong *SongInfo, now time.Time, coordinator *ContestCheckCoordinator) {
+func (p *Poller) checkMetadataWithCoordinator(currentSong *SongInfo, now time.Time, coordinator *ContestCheckCoordinator) {
 	if !coordinator.CanCheck(now) {
 		return
 	}

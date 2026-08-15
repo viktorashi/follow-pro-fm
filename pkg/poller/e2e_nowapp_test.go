@@ -50,7 +50,7 @@ func TestPoller_E2E_NoWhatsApp(t *testing.T) {
 	currentSong := &SongInfo{}
 
 	t.Log("Triggering song check...")
-	poller.checkSong(currentSong, activeTime)
+	poller.checkMetadataWithCoordinator(currentSong, activeTime, poller.contestCheckCoordinator())
 
 	if poller.matchesToday != 1 {
 		t.Fatalf("Expected 1 match to trigger message, got %d", poller.matchesToday)
