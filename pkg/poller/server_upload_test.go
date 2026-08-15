@@ -84,17 +84,14 @@ func TestHandleAudioUploadRejectsUsedNameCollisions(t *testing.T) {
 	}
 }
 
-func TestHandleAudioUploadAllowsPhoneNotPrelistedInDashboardState(t *testing.T) {
+func TestHandleAudioUploadWithPersonSlug(t *testing.T) {
 	audiosDir := t.TempDir()
 	server := &TelemetryServer{
 		audiosDir: audiosDir,
 		stateMgr:  NewStateManager(),
 	}
-	server.stateMgr.Update(func(s *AppState) {
-		s.Connections = []WAConnectionState{{Phone: "+40111222333", Status: StatusConnected, WhatsAppConnected: true}}
-	})
 
-	ctx, rec := newAudioUploadContext(t, "+40999888777", "fresh.ogg", []byte("ogg-data"))
+	ctx, rec := newAudioUploadContext(t, "bubu", "fresh.ogg", []byte("ogg-data"))
 
 	if err := server.handleAudioUpload(ctx); err != nil {
 		t.Fatalf("handleAudioUpload returned error: %v", err)
@@ -103,7 +100,7 @@ func TestHandleAudioUploadAllowsPhoneNotPrelistedInDashboardState(t *testing.T) 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	activePath := filepath.Join(audiosDir, "40999888777", "fresh.ogg")
+	activePath := filepath.Join(audiosDir, "bubu", "fresh.ogg")
 	if _, err := os.Stat(activePath); err != nil {
 		t.Fatalf("expected upload at %s: %v", activePath, err)
 	}
@@ -145,13 +142,40 @@ func TestHandleBatchMoveAudios(t *testing.T) {
 	}
 }
 
-func newAudioUploadContext(t *testing.T, phone string, filename string, contents []byte) (*echo.Context, *httptest.ResponseRecorder) {
+func TestHandleAudioPlay(t *testing.T) {
+	audiosDir := t.TempDir()
+	personDir := filepath.Join(audiosDir, "bubu")
+	_ = os.MkdirAll(personDir, 0755)
+	_ = os.WriteFile(filepath.Join(personDir, "sample.ogg"), []byte("sample-data"), 0644)
+
+	server := &TelemetryServer{
+		audiosDir: audiosDir,
+		stateMgr:  NewStateManager(),
+	}
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/audio/play?slug=bubu&file=sample.ogg", nil)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	if err := server.handleAudioPlay(ctx); err != nil {
+		t.Fatalf("handleAudioPlay error = %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if rec.Header().Get("Content-Type") != "audio/ogg" {
+		t.Fatalf("content-type = %s, want audio/ogg", rec.Header().Get("Content-Type"))
+	}
+}
+
+func newAudioUploadContext(t *testing.T, personSlug string, filename string, contents []byte) (*echo.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 
-	if err := writer.WriteField("phone", phone); err != nil {
+	if err := writer.WriteField("person_slug", personSlug); err != nil {
 		t.Fatalf("WriteField: %v", err)
 	}
 
