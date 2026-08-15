@@ -235,17 +235,6 @@ func normalizeTriggerValue(value string) string {
 	return strings.Join(strings.Fields(value), " ")
 }
 
-// CanCheckContest lets every checker avoid repeated work during a claimed window.
-func (p *Poller) CanCheckContest(now time.Time) bool {
-	return p.contestCheckCoordinator().CanCheck(now)
-}
-
-// ClaimContestWindow lets the first checker that finds a campaign candidate
-// put all checkers to sleep for the shared cooldown.
-func (p *Poller) ClaimContestWindow(now time.Time, source string) bool {
-	return p.contestCheckCoordinator().Claim(now, source)
-}
-
 func (p *Poller) contestCheckCoordinator() *ContestCheckCoordinator {
 	p.checkerMu.Lock()
 	defer p.checkerMu.Unlock()
@@ -253,17 +242,6 @@ func (p *Poller) contestCheckCoordinator() *ContestCheckCoordinator {
 		p.checker = NewContestCheckCoordinator(p.ContestCheckCooldown)
 	}
 	return p.checker
-}
-
-// TriggerValuesMatch implements the core application logic to determine if a live
-// transcription matches a trusted transcript or campaign phrase (checking if either is contained within the other).
-func TriggerValuesMatch(left, right string) bool {
-	left = normalizeTriggerValue(left)
-	right = normalizeTriggerValue(right)
-	if left == "" || right == "" {
-		return false
-	}
-	return strings.Contains(left, right) || strings.Contains(right, left)
 }
 
 func hasExistingSignatureForSong(dir string, prefix string) (bool, string) {
@@ -1041,6 +1019,12 @@ func (c *fingerprintContestChecker) Check(now time.Time) {
 	}
 
 	log.Printf("   [FINGERPRINT MATCH] Matched signature: %s", name)
+
+	if p.Alerter != nil {
+		msg := fmt.Sprintf("🎵 Contest Audio Signature Detected!\nSignature Name: %s\nCampaign: %s\n\n(This is an instant notification; automatic send rules apply independently.)", name, campaignArtist)
+		_ = p.Alerter.AlertSuccess(AlertEvent{Title: "Contest Song Playing", Message: msg})
+	}
+
 	p.evaluateAndTriggerCampaign(now, campaignArtist, triggerSourceFingerprint, 0, fmt.Sprintf("fingerprint match %q", name), func(matchIndex int, currentRadioLogID int64) {
 		p.tagCapture(capture, contestTag{Source: triggerSourceFingerprint, CampaignArtist: campaignArtist, SignatureName: name})
 		if p.StateMgr != nil && p.StateMgr.Get().GatheringSignatures {
@@ -1108,7 +1092,7 @@ func (p *Poller) handleTranscriptWithCoordinator(now time.Time, coordinator *Con
 	p.tagCapture(capture, tag)
 
 	if p.Alerter != nil {
-		msg := fmt.Sprintf("🎵 Contest Phrase Detected (via Transcription)!\nPhrase: %s\nCampaign: %s\n\n(This is an instant notification; automatic send rules apply independently.)", phrase, campaignArtist)
+		msg := fmt.Sprintf("🎵 Contest Phrase Detected (via Transcription)!\nMatched Phrase: %s\nCampaign: %s\nTranscript: \"%s\"\n\n(This is an instant notification; automatic send rules apply independently.)", phrase, campaignArtist, transcript)
 		_ = p.Alerter.AlertSuccess(AlertEvent{Title: "Contest Song Playing", Message: msg})
 	}
 	p.evaluateAndTriggerCampaign(now, campaignArtist, triggerSourceTranscription, 0, fmt.Sprintf("transcription match %q", phrase), func(matchIndex int, currentRadioLogID int64) {
