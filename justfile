@@ -80,9 +80,7 @@ fly-ssh:
 # Usage:
 #   just push-audios                        (pushes local 'data/audios' to remote '/data/audios')
 #   just push-files                         (alias for push-audios)
-#   just push-audios ./my_audios            (pushes to canonical sender '/data/audios/')
 #   just push-audios ./my_audios 40771234567 (pushes to '/data/audios/40771234567/')
-#   just push-audios ./my_audios /           (pushes to canonical sender '/data/audios/')
 push-audios LOCAL_DIR="data/audios" PHONE="":
     #!/usr/bin/env bash
     set -e
@@ -99,18 +97,13 @@ push-audios LOCAL_DIR="data/audios" PHONE="":
         exit 1
     fi
 
-    if [ "$LOCAL" = "data/audios" ]; then
+    if [ -z "$PHONE" ] || [ "$PHONE" = "/" ]; then
         TARGET="/data/audios"
-        echo "Uploading local 'data/audios' folder to Fly persistent volume..."
+        echo "Uploading local '$LOCAL' folder to Fly persistent volume at $TARGET..."
     else
-        if [ -z "$PHONE" ] || [ "$PHONE" = "/" ]; then
-            TARGET="/data/audios"
-            echo "Pushing audios from $LOCAL to canonical sender at $TARGET..."
-        else
-            PHONE=$(echo "$PHONE" | sed 's/+//g' | sed 's/ //g')
-            TARGET="/data/audios/$PHONE"
-            echo "Pushing audios from $LOCAL to phone $PHONE at $TARGET..."
-        fi
+        PHONE=$(echo "$PHONE" | sed 's/+//g' | sed 's/ //g')
+        TARGET="/data/audios/$PHONE"
+        echo "Pushing audios from $LOCAL to phone $PHONE at $TARGET..."
     fi
 
     TMP_STAGING=$(mktemp -d)
