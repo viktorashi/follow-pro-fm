@@ -126,6 +126,7 @@ type Poller struct {
 	Transcribe                   func(context.Context, []byte) (string, error)
 	StreamingTranscriptionActive func() bool
 
+	matchesMu    sync.Mutex
 	matchesToday int
 	lastCheckDay int
 
@@ -705,7 +706,6 @@ func (p *Poller) checkSongWithCoordinator(currentSong *SongInfo, now time.Time, 
 	if !coordinator.CanCheck(now) {
 		return
 	}
-	p.resetDailyMatchesIfNeeded(now)
 
 	song, err := p.getNowPlaying()
 	if err != nil {
@@ -746,9 +746,10 @@ func (p *Poller) checkSongWithCoordinator(currentSong *SongInfo, now time.Time, 
 			return
 		}
 
-		// Only check campaigns if we haven't hit the daily limit of matches
-		if p.matchesToday < MaxDailyMatches {
-			if matchesCampaign {
+		if matchesCampaign {
+			if p.hasReachedDailyLimit(now) {
+				log.Printf("   [INFO] Daily limit of %d matches reached. Ignoring further campaign matches for today.", MaxDailyMatches)
+			} else {
 				if !coordinator.Claim(now, triggerSourceMetadata) {
 					return
 				}
@@ -767,8 +768,6 @@ func (p *Poller) checkSongWithCoordinator(currentSong *SongInfo, now time.Time, 
 					})
 				}
 			}
-		} else {
-			log.Printf("   [INFO] Daily limit of %d matches reached. Ignoring further campaign matches for today.", MaxDailyMatches)
 		}
 	}
 
@@ -802,11 +801,14 @@ func (p *Poller) checkSongWithCoordinator(currentSong *SongInfo, now time.Time, 
 	})
 }
 
-func (p *Poller) resetDailyMatchesIfNeeded(now time.Time) {
+func (p *Poller) hasReachedDailyLimit(now time.Time) bool {
+	p.matchesMu.Lock()
+	defer p.matchesMu.Unlock()
 	if now.YearDay() != p.lastCheckDay {
 		p.matchesToday = 0
 		p.lastCheckDay = now.YearDay()
 	}
+	return p.matchesToday >= MaxDailyMatches
 }
 
 func (p *Poller) wasSongPlayedRecently(artist, title string) bool {
@@ -826,14 +828,20 @@ func (p *Poller) wasSongPlayedRecently(artist, title string) bool {
 }
 
 func (p *Poller) claimScheduledMatch(now time.Time, artist, title string) (int, bool) {
-	p.resetDailyMatchesIfNeeded(now)
+	p.matchesMu.Lock()
+	if now.YearDay() != p.lastCheckDay {
+		p.matchesToday = 0
+		p.lastCheckDay = now.YearDay()
+	}
 	if p.matchesToday >= MaxDailyMatches {
+		p.matchesMu.Unlock()
 		log.Printf("   [INFO] Daily limit of %d matches reached. Ignoring further campaign matches for today.", MaxDailyMatches)
 		return 0, false
 	}
 
 	p.matchesToday++
 	matchIndex := p.matchesToday
+	p.matchesMu.Unlock()
 
 	selected, err := IsMatchSelectedToday(p.DBMgr, now, matchIndex)
 	if err != nil {
@@ -1074,8 +1082,7 @@ func (p *Poller) checkFingerprintWithCoordinator(now time.Time, coordinator *Con
 	if !p.canRunContestChecker(now) {
 		return
 	}
-	p.resetDailyMatchesIfNeeded(now)
-	if p.matchesToday >= MaxDailyMatches {
+	if p.hasReachedDailyLimit(now) {
 		return
 	}
 	canonicalDir := filepath.Join(p.SignaturesDir, BucketCanonical)
@@ -1140,8 +1147,7 @@ func (p *Poller) checkTranscriptionWithCoordinator(now time.Time, coordinator *C
 	if p.Transcribe == nil || (p.StreamingTranscriptionActive != nil && p.StreamingTranscriptionActive()) || !coordinator.CanCheck(now) || !p.canRunContestChecker(now) {
 		return
 	}
-	p.resetDailyMatchesIfNeeded(now)
-	if p.matchesToday >= MaxDailyMatches {
+	if p.hasReachedDailyLimit(now) {
 		return
 	}
 	capture := p.captureContestAudio(now, SongInfo{})
@@ -1174,12 +1180,11 @@ func (p *Poller) HandleStreamingTranscript(transcript string) {
 	if !p.canRunContestChecker(now) {
 		return
 	}
-	p.resetDailyMatchesIfNeeded(now)
 	p.handleTranscriptWithCoordinator(now, p.contestCheckCoordinator(), p.captureContestAudio(now, SongInfo{}), transcript)
 }
 
 func (p *Poller) handleTranscriptWithCoordinator(now time.Time, coordinator *ContestCheckCoordinator, capture *contestCapture, transcript string) {
-	if capture == nil || !coordinator.CanCheck(now) || p.matchesToday >= MaxDailyMatches {
+	if capture == nil || !coordinator.CanCheck(now) || p.hasReachedDailyLimit(now) {
 		return
 	}
 	p.captureMu.Lock()
