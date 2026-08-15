@@ -188,11 +188,11 @@ func (s *TelemetryServer) handleMagicLinkVerify(c *echo.Context) error {
 
 func (s *TelemetryServer) handleDashboardView(c *echo.Context) error {
 	state := s.stateMgr.Get()
-	chunks, err := s.listChunks("unreviewed")
+	chunks, err := s.listChunks(BucketUnreviewed)
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Error reading unreviewed signatures: "+err.Error())
 	}
-	canonicalChunks, err := s.listChunks("canonical")
+	canonicalChunks, err := s.listChunks(BucketCanonical)
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Error reading canonical signatures: "+err.Error())
 	}
@@ -804,7 +804,7 @@ func (s *TelemetryServer) listScheduleEntries(ctx context.Context) ([]ScheduleEn
 }
 
 func (s *TelemetryServer) handleUnreviewedList(c *echo.Context) error {
-	chunks, err := s.listChunks("unreviewed")
+	chunks, err := s.listChunks(BucketUnreviewed)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -815,13 +815,13 @@ func (s *TelemetryServer) handleSignatureFile(c *echo.Context) error {
 	filename := c.QueryParam("name")
 	bucket := c.QueryParam("bucket")
 	if bucket == "" {
-		bucket = "unreviewed"
+		bucket = BucketUnreviewed
 	}
 	if !isSafeFilename(filename) || !isSafeFilename(bucket) {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid filename or bucket"})
 	}
 
-	path := filepath.Join(s.dataDir, "signatures", bucket, filename)
+	path := filepath.Join(s.dataDir, DirSignatures, bucket, filename)
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "file not found"})
@@ -843,8 +843,8 @@ func (s *TelemetryServer) handleUnreviewedCrop(c *echo.Context) error {
 	_, _ = fmt.Sscanf(c.FormValue("start_seconds"), "%f", &startSeconds)
 	_, _ = fmt.Sscanf(c.FormValue("end_seconds"), "%f", &endSeconds)
 
-	unreviewedDir := filepath.Join(s.dataDir, "signatures", "unreviewed")
-	canonicalDir := filepath.Join(s.dataDir, "signatures", "canonical")
+	unreviewedDir := filepath.Join(s.dataDir, DirSignatures, BucketUnreviewed)
+	canonicalDir := filepath.Join(s.dataDir, DirSignatures, BucketCanonical)
 
 	err := CropAndMarkCanonical(unreviewedDir, canonicalDir, filename, startSeconds, endSeconds)
 	if err != nil {
@@ -864,11 +864,11 @@ func (s *TelemetryServer) handleUnreviewedCrop(c *echo.Context) error {
 	}
 
 	if s.dbMgr != nil {
-		if err := s.dbMgr.CopySignatureFile(c.Request().Context(), "unreviewed", "canonical", filename); err != nil {
+		if err := s.dbMgr.CopySignatureFile(c.Request().Context(), BucketUnreviewed, BucketCanonical, filename); err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		if transcript != "" {
-			_ = s.dbMgr.UpdateSignatureTranscript(c.Request().Context(), "canonical", filename, transcript)
+			_ = s.dbMgr.UpdateSignatureTranscript(c.Request().Context(), BucketCanonical, filename, transcript)
 		}
 	}
 
@@ -881,7 +881,7 @@ func (s *TelemetryServer) handleUnreviewedDelete(c *echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid filename"})
 	}
 
-	unreviewedDir := filepath.Join(s.dataDir, "signatures", "unreviewed")
+	unreviewedDir := filepath.Join(s.dataDir, DirSignatures, BucketUnreviewed)
 	targetPath := filepath.Join(unreviewedDir, filename)
 
 	if _, err := os.Stat(targetPath); err != nil {
@@ -899,7 +899,7 @@ func (s *TelemetryServer) handleUnreviewedDelete(c *echo.Context) error {
 }
 
 func (s *TelemetryServer) listChunks(bucket string) ([]ReviewChunk, error) {
-	dir := filepath.Join(s.dataDir, "signatures", bucket)
+	dir := filepath.Join(s.dataDir, DirSignatures, bucket)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -1008,7 +1008,7 @@ func formatScheduleTargets(targets []int) string {
 }
 
 func (s *TelemetryServer) handleRemuxAllUnreviewed(c *echo.Context) error {
-	unreviewedDir := filepath.Join(s.dataDir, "signatures", "unreviewed")
+	unreviewedDir := filepath.Join(s.dataDir, DirSignatures, BucketUnreviewed)
 	entries, err := os.ReadDir(unreviewedDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -1053,7 +1053,7 @@ func (s *TelemetryServer) handleTranscribeSignature(c *echo.Context) error {
 		return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "transcription service not configured"})
 	}
 
-	path := filepath.Join(s.dataDir, "signatures", req.Bucket, req.Filename)
+	path := filepath.Join(s.dataDir, DirSignatures, req.Bucket, req.Filename)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

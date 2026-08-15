@@ -16,7 +16,7 @@ import (
 
 func TestTelemetryServer_UnreviewedChunkEndpointsExposeSavedChunks(t *testing.T) {
 	dataDir := t.TempDir()
-	unreviewedDir := filepath.Join(dataDir, "signatures", "unreviewed")
+	unreviewedDir := filepath.Join(dataDir, DirSignatures, BucketUnreviewed)
 	if err := os.MkdirAll(unreviewedDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
@@ -70,7 +70,7 @@ func TestTelemetryServer_HandleUnreviewedCropCopiesRecordedMetadataToCanonical(t
 	dataDir := t.TempDir()
 	dbMgr := mustNewTestDBManager(t)
 	filename := "BTS - Butter.mp3"
-	unreviewedDir := filepath.Join(dataDir, "signatures", "unreviewed")
+	unreviewedDir := filepath.Join(dataDir, DirSignatures, BucketUnreviewed)
 	if err := os.MkdirAll(unreviewedDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
@@ -83,7 +83,7 @@ func TestTelemetryServer_HandleUnreviewedCropCopiesRecordedMetadataToCanonical(t
 	}
 
 	recordedAt := bucharestTime(2026, time.June, 17, 12, 0, 0)
-	if err := dbMgr.UpsertSignatureFile(context.Background(), "unreviewed", filename, recordedAt, "BTS", ""); err != nil {
+	if err := dbMgr.UpsertSignatureFile(context.Background(), BucketUnreviewed, filename, recordedAt, "BTS", ""); err != nil {
 		t.Fatalf("UpsertSignatureFile() error = %v", err)
 	}
 
@@ -102,7 +102,7 @@ func TestTelemetryServer_HandleUnreviewedCropCopiesRecordedMetadataToCanonical(t
 		t.Fatalf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 
-	meta, err := dbMgr.GetSignatureFile(context.Background(), "canonical", filename)
+	meta, err := dbMgr.GetSignatureFile(context.Background(), BucketCanonical, filename)
 	if err != nil {
 		t.Fatalf("GetSignatureFile(canonical) error = %v", err)
 	}

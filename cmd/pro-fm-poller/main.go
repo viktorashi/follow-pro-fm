@@ -467,7 +467,7 @@ func main() {
 		StateMgr:             stateMgr,
 		Alerter:              alerter,
 		AudiosDir:            audiosDir,
-		SignaturesDir:        filepath.Join(filepath.Dir(audiosDir), "signatures"),
+		SignaturesDir:        filepath.Join(filepath.Dir(audiosDir), poller.DirSignatures),
 		AudioBuffer:          audioBuffer,
 		DBMgr:                dbMgr,
 		BaseURL:              baseURL,

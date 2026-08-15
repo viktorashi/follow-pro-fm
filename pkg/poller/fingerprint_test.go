@@ -62,10 +62,10 @@ func TestAllowedCanonicalSignatureNamesUsesStoredCampaignOwnership(t *testing.T)
 	writeFile(t, filepath.Join(canonicalDir, "BTS - Dynamite.mp3"), []byte("signature"))
 	writeFile(t, filepath.Join(canonicalDir, "Ed Sheeran - Shape of You.mp3"), []byte("signature"))
 
-	if err := dbMgr.UpsertSignatureFile(ctx, "canonical", "BTS - Dynamite.mp3", bucharestTime(2026, time.June, 17, 12, 0, 0), "BTS", ""); err != nil {
+	if err := dbMgr.UpsertSignatureFile(ctx, BucketCanonical, "BTS - Dynamite.mp3", bucharestTime(2026, time.June, 17, 12, 0, 0), "BTS", ""); err != nil {
 		t.Fatalf("UpsertSignatureFile(BTS) error = %v", err)
 	}
-	if err := dbMgr.UpsertSignatureFile(ctx, "canonical", "Ed Sheeran - Shape of You.mp3", bucharestTime(2026, time.July, 22, 12, 0, 0), "Ariana", ""); err != nil {
+	if err := dbMgr.UpsertSignatureFile(ctx, BucketCanonical, "Ed Sheeran - Shape of You.mp3", bucharestTime(2026, time.July, 22, 12, 0, 0), "Ariana", ""); err != nil {
 		t.Fatalf("UpsertSignatureFile(Ed) error = %v", err)
 	}
 
@@ -101,7 +101,7 @@ func TestCampaignBoundFingerprintDetectionDoesNotTriggerOtherCampaignSignature(t
 	signature := mustReadFingerprintFixture(t, filepath.Join("testdata", "fingerprint", "cases", "quiet_match"), "signature")
 	writeFile(t, filepath.Join(canonicalDir, "Ariana - candidate.mp3"), signature)
 
-	if err := dbMgr.UpsertSignatureFile(ctx, "canonical", "Ariana - candidate.mp3", bucharestTime(2026, time.July, 22, 12, 0, 0), "Ariana", ""); err != nil {
+	if err := dbMgr.UpsertSignatureFile(ctx, BucketCanonical, "Ariana - candidate.mp3", bucharestTime(2026, time.July, 22, 12, 0, 0), "Ariana", ""); err != nil {
 		t.Fatalf("UpsertSignatureFile() error = %v", err)
 	}
 

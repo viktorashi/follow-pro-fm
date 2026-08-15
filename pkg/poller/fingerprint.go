@@ -226,7 +226,7 @@ func allowedCanonicalSignatureNames(ctx context.Context, dbMgr *DBManager, campa
 		if entry.IsDir() {
 			continue
 		}
-		campaignArtist, err := signatureCampaignArtist(ctx, dbMgr, campaigns, "canonical", entry.Name(), canonicalDir)
+		campaignArtist, err := signatureCampaignArtist(ctx, dbMgr, campaigns, BucketCanonical, entry.Name(), canonicalDir)
 		if err != nil {
 			continue
 		}
