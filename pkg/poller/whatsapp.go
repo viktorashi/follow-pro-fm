@@ -68,10 +68,71 @@ type WhatsAppClient interface {
 	RemoveEventHandler(id uint32)
 }
 
+func waitRetry(ctx context.Context) bool {
+	select {
+	case <-time.After(ConnectionRetryDelay):
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func handleConnectionError(err error, label string, phone string, stateMgr *StateManager, ctx context.Context) bool {
+	if stateMgr != nil {
+		stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
+			s.Status = StatusError
+			s.WhatsAppConnected = false
+		})
+	}
+	fmt.Printf("❌ %s (retrying in %s): %v\n", label, ConnectionRetryDelay, err)
+	return waitRetry(ctx)
+}
+
 type whatsappClientWrapper struct {
 	mu       sync.RWMutex
 	client   *whatsmeow.Client
 	handlers []whatsmeow.EventHandler
+}
+
+func withClient[T any](w *whatsappClientWrapper, action func(*whatsmeow.Client) (T, error)) (T, error) {
+	w.mu.RLock()
+	c := w.client
+	w.mu.RUnlock()
+	if c != nil {
+		return action(c)
+	}
+	var zero T
+	return zero, fmt.Errorf("no client")
+}
+
+func withClientErr(w *whatsappClientWrapper, action func(*whatsmeow.Client) error) error {
+	w.mu.RLock()
+	c := w.client
+	w.mu.RUnlock()
+	if c != nil {
+		return action(c)
+	}
+	return fmt.Errorf("no client")
+}
+
+func withClientVal[T any](w *whatsappClientWrapper, action func(*whatsmeow.Client) T) T {
+	w.mu.RLock()
+	c := w.client
+	w.mu.RUnlock()
+	if c != nil {
+		return action(c)
+	}
+	var zero T
+	return zero
+}
+
+func withClientVoid(w *whatsappClientWrapper, action func(*whatsmeow.Client)) {
+	w.mu.RLock()
+	c := w.client
+	w.mu.RUnlock()
+	if c != nil {
+		action(c)
+	}
 }
 
 func (w *whatsappClientWrapper) setClient(c *whatsmeow.Client) {
@@ -84,102 +145,49 @@ func (w *whatsappClientWrapper) setClient(c *whatsmeow.Client) {
 }
 
 func (w *whatsappClientWrapper) Connect() error {
-	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
-	if c == nil {
-		return fmt.Errorf("no client")
-	}
-	return c.Connect()
+	return withClientErr(w, func(c *whatsmeow.Client) error { return c.Connect() })
 }
 
 func (w *whatsappClientWrapper) Disconnect() {
-	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
-	if c != nil {
-		c.Disconnect()
-	}
+	withClientVoid(w, func(c *whatsmeow.Client) { c.Disconnect() })
 }
 
 func (w *whatsappClientWrapper) IsConnected() bool {
-	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
-	if c != nil {
-		return c.IsConnected()
-	}
-	return false
+	return withClientVal(w, func(c *whatsmeow.Client) bool { return c.IsConnected() })
 }
 
 func (w *whatsappClientWrapper) IsLoggedIn() bool {
-	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
-	if c != nil {
-		return c.IsLoggedIn()
-	}
-	return false
+	return withClientVal(w, func(c *whatsmeow.Client) bool { return c.IsLoggedIn() })
 }
 
 func (w *whatsappClientWrapper) SendPresence(ctx context.Context, presence types.Presence) error {
-	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
-	if c != nil {
-		return c.SendPresence(ctx, presence)
-	}
-	return fmt.Errorf("no client")
+	return withClientErr(w, func(c *whatsmeow.Client) error { return c.SendPresence(ctx, presence) })
 }
 
 func (w *whatsappClientWrapper) SubscribePresence(ctx context.Context, jid types.JID) error {
-	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
-	if c != nil {
-		return c.SubscribePresence(ctx, jid)
-	}
-	return fmt.Errorf("no client")
+	return withClientErr(w, func(c *whatsmeow.Client) error { return c.SubscribePresence(ctx, jid) })
 }
 
 func (w *whatsappClientWrapper) SendChatPresence(ctx context.Context, jid types.JID, state types.ChatPresence, media types.ChatPresenceMedia) error {
-	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
-	if c != nil {
-		return c.SendChatPresence(ctx, jid, state, media)
-	}
-	return fmt.Errorf("no client")
+	return withClientErr(w, func(c *whatsmeow.Client) error { return c.SendChatPresence(ctx, jid, state, media) })
 }
 
 func (w *whatsappClientWrapper) IsOnWhatsApp(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error) {
-	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
-	if c != nil {
+	return withClient(w, func(c *whatsmeow.Client) ([]types.IsOnWhatsAppResponse, error) {
 		return c.IsOnWhatsApp(ctx, phones)
-	}
-	return nil, fmt.Errorf("no client")
+	})
 }
 
 func (w *whatsappClientWrapper) Upload(ctx context.Context, data []byte, mediaType whatsmeow.MediaType) (whatsmeow.UploadResponse, error) {
-	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
-	if c != nil {
+	return withClient(w, func(c *whatsmeow.Client) (whatsmeow.UploadResponse, error) {
 		return c.Upload(ctx, data, mediaType)
-	}
-	return whatsmeow.UploadResponse{}, fmt.Errorf("no client")
+	})
 }
 
 func (w *whatsappClientWrapper) SendMessage(ctx context.Context, to types.JID, message *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error) {
-	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
-	if c != nil {
+	return withClient(w, func(c *whatsmeow.Client) (whatsmeow.SendResponse, error) {
 		return c.SendMessage(ctx, to, message, extra...)
-	}
-	return whatsmeow.SendResponse{}, fmt.Errorf("no client")
+	})
 }
 
 func (w *whatsappClientWrapper) AddEventHandler(handler whatsmeow.EventHandler) uint32 {
@@ -297,19 +305,10 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 				qrChan, _ := client.GetQRChannel(ctx)
 				err = client.Connect()
 				if err != nil {
-					if stateMgr != nil {
-						stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
-							s.Status = StatusError
-							s.WhatsAppConnected = false
-						})
+					if handleConnectionError(err, "Failed to connect for pairing", phone, stateMgr, ctx) {
+						continue
 					}
-					fmt.Printf("❌ Failed to connect for pairing (retrying in %s): %v\n", ConnectionRetryDelay, err)
-					select {
-					case <-time.After(ConnectionRetryDelay):
-					case <-ctx.Done():
-						return
-					}
-					continue
+					return
 				}
 
 				fmt.Print("\033[s") // Save cursor position
@@ -372,12 +371,10 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 					}
 					fmt.Println("❌ Login timed out or failed, retrying...")
 					client.Disconnect()
-					select {
-					case <-time.After(ConnectionRetryDelay):
-					case <-ctx.Done():
-						return
+					if waitRetry(ctx) {
+						continue
 					}
-					continue
+					return
 				}
 
 				for i := 0; i < ConnectionRetryAttempts; i++ {
@@ -394,19 +391,10 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 				// Session exists, connect automatically
 				err := client.Connect()
 				if err != nil {
-					if stateMgr != nil {
-						stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
-							s.Status = StatusError
-							s.WhatsAppConnected = false
-						})
+					if handleConnectionError(err, "Failed to connect", phone, stateMgr, ctx) {
+						continue
 					}
-					fmt.Printf("❌ Failed to connect (retrying in %s): %v\n", ConnectionRetryDelay, err)
-					select {
-					case <-time.After(ConnectionRetryDelay):
-					case <-ctx.Done():
-						return
-					}
-					continue
+					return
 				}
 
 				if stateMgr != nil {

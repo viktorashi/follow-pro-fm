@@ -761,7 +761,7 @@ func TestPoller_saveUnreviewedChunkForReviewAlertsOnceWhenSaved(t *testing.T) {
 		t.Fatalf("AlertInfo().Title = %q, want %q", got, "Intro Chunk Needs Review")
 	}
 
-	files, err := os.ReadDir(filepath.Join(signaturesDir, "unreviewed"))
+	files, err := os.ReadDir(filepath.Join(signaturesDir, BucketUnreviewed))
 	if err != nil {
 		t.Fatalf("ReadDir() error = %v", err)
 	}
@@ -787,7 +787,7 @@ func TestPoller_saveUnreviewedChunkForReviewStoresCampaignOwnership(t *testing.T
 	t.Setenv("BYPASS_CAMPAIGN_TIME_CHECKS", "true")
 	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"), "")
 
-	files, err := os.ReadDir(filepath.Join(signaturesDir, "unreviewed"))
+	files, err := os.ReadDir(filepath.Join(signaturesDir, BucketUnreviewed))
 	if err != nil {
 		t.Fatalf("ReadDir() error = %v", err)
 	}
@@ -795,7 +795,7 @@ func TestPoller_saveUnreviewedChunkForReviewStoresCampaignOwnership(t *testing.T
 		t.Fatalf("saved review chunks = %d, want 1", len(files))
 	}
 
-	meta, err := dbMgr.GetSignatureFile(context.Background(), "unreviewed", files[0].Name())
+	meta, err := dbMgr.GetSignatureFile(context.Background(), BucketUnreviewed, files[0].Name())
 	if err != nil {
 		t.Fatalf("GetSignatureFile() error = %v", err)
 	}

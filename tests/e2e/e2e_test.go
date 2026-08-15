@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"pro-fm-poller/pkg/poller"
 	"strings"
 	"sync"
 	"testing"
@@ -691,7 +692,7 @@ func TestE2E(t *testing.T) {
 		defer env.cleanup()
 
 		env.markPaired(t)
-		unreviewedDir := filepath.Join(env.TempDir, "signatures", "unreviewed")
+		unreviewedDir := filepath.Join(env.TempDir, poller.DirSignatures, poller.BucketUnreviewed)
 		if err := os.MkdirAll(unreviewedDir, 0o755); err != nil {
 			t.Fatalf("failed to create unreviewed dir: %v", err)
 		}
@@ -713,7 +714,7 @@ func TestE2E(t *testing.T) {
 			t.Fatalf("failed to open app database: %v", err)
 		}
 		defer func() { _ = db.Close() }()
-		if _, err := db.Exec(`INSERT INTO signature_files (bucket, filename, recorded_at, campaign_artist) VALUES (?, ?, ?, ?)`, "unreviewed", filename, time.Now().UTC().Format(time.RFC3339), "BTS"); err != nil {
+		if _, err := db.Exec(`INSERT INTO signature_files (bucket, filename, recorded_at, campaign_artist) VALUES (?, ?, ?, ?)`, poller.BucketUnreviewed, filename, time.Now().UTC().Format(time.RFC3339), "BTS"); err != nil {
 			t.Fatalf("failed to seed signature metadata row: %v", err)
 		}
 
@@ -765,7 +766,7 @@ func TestE2E(t *testing.T) {
 		}
 		_ = resp.Body.Close()
 
-		canonicalData, err := os.ReadFile(filepath.Join(env.TempDir, "signatures", "canonical", filename))
+		canonicalData, err := os.ReadFile(filepath.Join(env.TempDir, poller.DirSignatures, poller.BucketCanonical, filename))
 		if err != nil {
 			t.Fatalf("failed to read canonical crop: %v", err)
 		}

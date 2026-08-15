@@ -177,7 +177,7 @@ func TestSSEEventMarshalAndBufferRead(t *testing.T) {
 
 func TestHandleUnreviewedCropAndHelpers(t *testing.T) {
 	dataDir := t.TempDir()
-	unreviewedDir := filepath.Join(dataDir, "signatures", "unreviewed")
+	unreviewedDir := filepath.Join(dataDir, DirSignatures, BucketUnreviewed)
 	if err := os.MkdirAll(unreviewedDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
@@ -212,7 +212,7 @@ func TestHandleUnreviewedCropAndHelpers(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	canonical, err := os.ReadFile(filepath.Join(dataDir, "signatures", "canonical", filename))
+	canonical, err := os.ReadFile(filepath.Join(dataDir, DirSignatures, BucketCanonical, filename))
 	if err != nil {
 		t.Fatalf("ReadFile(canonical) error = %v", err)
 	}
