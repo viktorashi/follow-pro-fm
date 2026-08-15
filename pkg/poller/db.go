@@ -18,9 +18,38 @@ type DBManager struct {
 	trustedEmailsPath string
 }
 
+type Person struct {
+	ID        int64     `json:"id"`
+	Name      string    `json:"name"`
+	Slug      string    `json:"slug"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type SenderSession struct {
-	Phone      string
-	DBFilename string
+	Phone      string `json:"phone"`
+	DBFilename string `json:"db_filename"`
+	PersonID   *int64 `json:"person_id,omitempty"`
+	PersonName string `json:"person_name,omitempty"`
+	PersonSlug string `json:"person_slug,omitempty"`
+}
+
+func Slugify(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else if r == ' ' || r == '-' || r == '_' {
+			if b.Len() > 0 && !strings.HasSuffix(b.String(), "-") {
+				b.WriteRune('-')
+			}
+		}
+	}
+	res := strings.Trim(b.String(), "-")
+	if res == "" {
+		res = "person"
+	}
+	return res
 }
 
 func NewDBManager(dbPath string) (*DBManager, error) {
@@ -106,9 +135,16 @@ func initSchema(db *sql.DB) error {
 			phrase TEXT NOT NULL,
 			PRIMARY KEY(campaign_artist, phrase)
 		);`,
+		`CREATE TABLE IF NOT EXISTS persons (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			slug TEXT NOT NULL UNIQUE,
+			created_at DATETIME NOT NULL
+		);`,
 		`CREATE TABLE IF NOT EXISTS sender_sessions (
 			phone TEXT PRIMARY KEY,
-			db_filename TEXT NOT NULL
+			db_filename TEXT NOT NULL,
+			person_id INTEGER REFERENCES persons(id) ON DELETE SET NULL
 		);`,
 		`CREATE TABLE IF NOT EXISTS alerts (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -128,15 +164,134 @@ func initSchema(db *sql.DB) error {
 	// Migrations
 	_, _ = db.Exec(`ALTER TABLE signature_files ADD COLUMN transcript TEXT DEFAULT '';`)
 	_, _ = db.Exec(`ALTER TABLE played_songs RENAME COLUMN played_date TO played_datetime;`)
+	_, _ = db.Exec(`ALTER TABLE sender_sessions ADD COLUMN person_id INTEGER REFERENCES persons(id) ON DELETE SET NULL;`)
 
 	return nil
 }
 
+func (m *DBManager) CreatePerson(ctx context.Context, name string) (*Person, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fmt.Errorf("person name cannot be empty")
+	}
+	slug := Slugify(name)
+	baseSlug := slug
+	counter := 1
+	for {
+		var exists bool
+		err := m.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM persons WHERE slug = ?)", slug).Scan(&exists)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			break
+		}
+		counter++
+		slug = fmt.Sprintf("%s-%d", baseSlug, counter)
+	}
+
+	now := time.Now().UTC()
+	res, err := m.db.ExecContext(ctx, "INSERT INTO persons (name, slug, created_at) VALUES (?, ?, ?)", name, slug, now)
+	if err != nil {
+		return nil, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	return &Person{ID: id, Name: name, Slug: slug, CreatedAt: now}, nil
+}
+
+func (m *DBManager) ListPersons(ctx context.Context) ([]Person, error) {
+	rows, err := m.db.QueryContext(ctx, "SELECT id, name, slug, created_at FROM persons ORDER BY name ASC")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var persons []Person
+	for rows.Next() {
+		var p Person
+		var createdAtRaw interface{}
+		if err := rows.Scan(&p.ID, &p.Name, &p.Slug, &createdAtRaw); err != nil {
+			return nil, err
+		}
+		switch v := createdAtRaw.(type) {
+		case time.Time:
+			p.CreatedAt = v
+		case string:
+			p.CreatedAt, _ = time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", v)
+			if p.CreatedAt.IsZero() {
+				p.CreatedAt, _ = time.Parse(time.RFC3339, v)
+			}
+		}
+		persons = append(persons, p)
+	}
+	return persons, rows.Err()
+}
+
+func (m *DBManager) GetPerson(ctx context.Context, id int64) (*Person, error) {
+	var p Person
+	var createdAtRaw interface{}
+	err := m.db.QueryRowContext(ctx, "SELECT id, name, slug, created_at FROM persons WHERE id = ?", id).Scan(&p.ID, &p.Name, &p.Slug, &createdAtRaw)
+	if err != nil {
+		return nil, err
+	}
+	switch v := createdAtRaw.(type) {
+	case time.Time:
+		p.CreatedAt = v
+	case string:
+		p.CreatedAt, _ = time.Parse(time.RFC3339, v)
+	}
+	return &p, nil
+}
+
+func (m *DBManager) GetPersonBySlug(ctx context.Context, slug string) (*Person, error) {
+	var p Person
+	var createdAtRaw interface{}
+	err := m.db.QueryRowContext(ctx, "SELECT id, name, slug, created_at FROM persons WHERE slug = ?", slug).Scan(&p.ID, &p.Name, &p.Slug, &createdAtRaw)
+	if err != nil {
+		return nil, err
+	}
+	switch v := createdAtRaw.(type) {
+	case time.Time:
+		p.CreatedAt = v
+	case string:
+		p.CreatedAt, _ = time.Parse(time.RFC3339, v)
+	}
+	return &p, nil
+}
+
+func (m *DBManager) UpdatePerson(ctx context.Context, id int64, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("person name cannot be empty")
+	}
+	slug := Slugify(name)
+	_, err := m.db.ExecContext(ctx, "UPDATE persons SET name = ?, slug = ? WHERE id = ?", name, slug, id)
+	return err
+}
+
+func (m *DBManager) DeletePerson(ctx context.Context, id int64) error {
+	_, err := m.db.ExecContext(ctx, "DELETE FROM persons WHERE id = ?", id)
+	return err
+}
+
+func (m *DBManager) AssignPhoneToPerson(ctx context.Context, phone string, personID *int64) error {
+	_, err := m.db.ExecContext(ctx, "UPDATE sender_sessions SET person_id = ? WHERE phone = ?", personID, phone)
+	return err
+}
+
 func (m *DBManager) SetSenderSession(ctx context.Context, phone, dbFilename string) error {
+	return m.SetSenderSessionWithPerson(ctx, phone, dbFilename, nil)
+}
+
+func (m *DBManager) SetSenderSessionWithPerson(ctx context.Context, phone, dbFilename string, personID *int64) error {
 	_, err := m.db.ExecContext(ctx,
-		`INSERT INTO sender_sessions (phone, db_filename) VALUES (?, ?)
-		 ON CONFLICT(phone) DO UPDATE SET db_filename = excluded.db_filename`,
-		phone, dbFilename,
+		`INSERT INTO sender_sessions (phone, db_filename, person_id) VALUES (?, ?, ?)
+		 ON CONFLICT(phone) DO UPDATE SET db_filename = excluded.db_filename,
+		 person_id = COALESCE(excluded.person_id, sender_sessions.person_id)`,
+		phone, dbFilename, personID,
 	)
 	return err
 }
@@ -147,7 +302,12 @@ func (m *DBManager) RemoveSenderSession(ctx context.Context, phone string) error
 }
 
 func (m *DBManager) SenderSessions(ctx context.Context) ([]SenderSession, error) {
-	rows, err := m.db.QueryContext(ctx, "SELECT phone, db_filename FROM sender_sessions ORDER BY phone")
+	rows, err := m.db.QueryContext(ctx, `
+		SELECT s.phone, s.db_filename, s.person_id, COALESCE(p.name, ''), COALESCE(p.slug, '')
+		FROM sender_sessions s
+		LEFT JOIN persons p ON s.person_id = p.id
+		ORDER BY s.phone
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -156,12 +316,85 @@ func (m *DBManager) SenderSessions(ctx context.Context) ([]SenderSession, error)
 	var sessions []SenderSession
 	for rows.Next() {
 		var session SenderSession
-		if err := rows.Scan(&session.Phone, &session.DBFilename); err != nil {
+		var pID sql.NullInt64
+		if err := rows.Scan(&session.Phone, &session.DBFilename, &pID, &session.PersonName, &session.PersonSlug); err != nil {
 			return nil, err
+		}
+		if pID.Valid {
+			idVal := pID.Int64
+			session.PersonID = &idVal
 		}
 		sessions = append(sessions, session)
 	}
 	return sessions, rows.Err()
+}
+
+func (m *DBManager) AutoMigratePersons(ctx context.Context, audiosDir string) error {
+	persons, err := m.ListPersons(ctx)
+	if err != nil {
+		return err
+	}
+	if len(persons) > 0 {
+		return nil
+	}
+
+	sessions, err := m.SenderSessions(ctx)
+	if err != nil {
+		return err
+	}
+
+	hasAudioFiles := false
+	if entries, err := os.ReadDir(audiosDir); err == nil && len(entries) > 0 {
+		for _, e := range entries {
+			if strings.HasSuffix(strings.ToLower(e.Name()), ".ogg") || e.IsDir() {
+				hasAudioFiles = true
+				break
+			}
+		}
+	}
+
+	if len(sessions) == 0 && !hasAudioFiles {
+		return nil
+	}
+
+	defaultPerson, err := m.CreatePerson(ctx, "Main Sender")
+	if err != nil {
+		return err
+	}
+
+	for _, s := range sessions {
+		_ = m.AssignPhoneToPerson(ctx, s.Phone, &defaultPerson.ID)
+	}
+
+	targetDir := filepath.Join(audiosDir, defaultPerson.Slug)
+	_ = InitAudioPool(targetDir)
+
+	if entries, err := os.ReadDir(audiosDir); err == nil {
+		for _, e := range entries {
+			if e.Name() == defaultPerson.Slug || e.Name() == "used" {
+				continue
+			}
+			srcPath := filepath.Join(audiosDir, e.Name())
+			if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ".ogg") {
+				_ = os.Rename(srcPath, filepath.Join(targetDir, e.Name()))
+			} else if e.IsDir() {
+				subEntries, _ := os.ReadDir(srcPath)
+				for _, sub := range subEntries {
+					if !sub.IsDir() && strings.HasSuffix(strings.ToLower(sub.Name()), ".ogg") {
+						_ = os.Rename(filepath.Join(srcPath, sub.Name()), filepath.Join(targetDir, sub.Name()))
+					}
+				}
+				usedSubEntries, _ := os.ReadDir(filepath.Join(srcPath, "used"))
+				for _, sub := range usedSubEntries {
+					if !sub.IsDir() && strings.HasSuffix(strings.ToLower(sub.Name()), ".ogg") {
+						_ = os.Rename(filepath.Join(srcPath, "used", sub.Name()), filepath.Join(targetDir, "used", sub.Name()))
+					}
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func (m *DBManager) IsTrustedEmail(ctx context.Context, email string) (bool, error) {

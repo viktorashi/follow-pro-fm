@@ -61,12 +61,111 @@ templ Login() {
 	}
 }
 
-templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChunk, phones []string, schedules []ScheduleEntry, campaignArtists []string) {
+templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChunk, phones []string, schedules []ScheduleEntry, campaignArtists []string, persons []Person, personAudios map[string]PersonAudioFiles) {
 	@Layout("Dashboard - ProFM Jaguare") {
 		<script>
 			function toggleGathering() {
 				fetch('/api/settings/gathering', {method: 'POST'})
 					.then(() => window.location.reload());
+			}
+			function createPerson(event, form) {
+				event.preventDefault();
+				const data = new FormData(form);
+				fetch('/api/persons', {
+					method: 'POST',
+					body: data
+				}).then(async res => {
+					if (!res.ok) {
+						const payload = await res.json().catch(() => ({}));
+						throw new Error(payload.error || 'Failed to create person');
+					}
+					window.location.reload();
+				}).catch(err => alert(err.message));
+				return false;
+			}
+			function editPerson(id, currentName) {
+				const newName = prompt("Edit Person Name:", currentName);
+				if (!newName || newName.trim() === "" || newName.trim() === currentName) return;
+				const data = new FormData();
+				data.append("name", newName.trim());
+				fetch(`/api/persons/${id}/edit`, {
+					method: 'POST',
+					body: data
+				}).then(async res => {
+					if (!res.ok) {
+						const payload = await res.json().catch(() => ({}));
+						throw new Error(payload.error || 'Failed to update person');
+					}
+					window.location.reload();
+				}).catch(err => alert(err.message));
+			}
+			function deletePerson(id, name) {
+				if (!confirm(`Are you sure you want to delete person "${name}"? Any assigned phones will become unassigned!`)) return;
+				fetch(`/api/persons/${id}/delete`, {
+					method: 'POST'
+				}).then(async res => {
+					if (!res.ok) {
+						const payload = await res.json().catch(() => ({}));
+						throw new Error(payload.error || 'Failed to delete person');
+					}
+					window.location.reload();
+				}).catch(err => alert(err.message));
+			}
+			function assignPhone(phone, personId) {
+				const data = new FormData();
+				data.append("phone", phone);
+				data.append("person_id", personId);
+				fetch('/api/phones/assign', {
+					method: 'POST',
+					body: data
+				}).then(async res => {
+					if (!res.ok) {
+						const payload = await res.json().catch(() => ({}));
+						throw new Error(payload.error || 'Failed to assign phone');
+					}
+					window.location.reload();
+				}).catch(err => alert(err.message));
+			}
+			function toggleSelectAllAudios(personSlug, checked) {
+				document.querySelectorAll(`.audio-checkbox-${personSlug}`).forEach(cb => {
+					cb.checked = checked;
+				});
+			}
+			function batchMoveAudios(fromSlug) {
+				const targetSelect = document.getElementById(`target-person-${fromSlug}`);
+				if (!targetSelect) return;
+				const toSlug = targetSelect.value;
+				if (!toSlug) {
+					alert("Please select a target person to move files to.");
+					return;
+				}
+				if (toSlug === fromSlug) {
+					alert("Cannot move files to the same person.");
+					return;
+				}
+				const selectedFiles = [];
+				document.querySelectorAll(`.audio-checkbox-${fromSlug}:checked`).forEach(cb => {
+					selectedFiles.push(cb.value);
+				});
+				if (selectedFiles.length === 0) {
+					alert("Please select at least one audio file to move.");
+					return;
+				}
+				if (!confirm(`Move ${selectedFiles.length} file(s) from ${fromSlug} to ${toSlug}?`)) return;
+				fetch('/api/audios/batch-move', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						from_slug: fromSlug,
+						to_slug: toSlug,
+						files: selectedFiles
+					})
+				}).then(async res => {
+					const payload = await res.json().catch(() => ({}));
+					if (!res.ok) throw new Error(payload.error || 'Move failed');
+					alert(`Successfully moved ${payload.moved} voice note(s)!`);
+					window.location.reload();
+				}).catch(err => alert(err.message));
 			}
 			function cropUnreviewed(event, form) {
 				event.preventDefault();
@@ -486,6 +585,30 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 			});
 		</script>
 		<div class="container" hx-ext="sse" sse-connect="/events/dashboard">
+			if state.HasMegaCriticalAlert {
+				<div class="bg-danger/20 border-2 border-danger text-danger p-4 rounded-xl mb-6 flex items-center justify-between animate-pulse">
+					<div class="flex items-center gap-3">
+						<span class="text-2xl">🚨</span>
+						<div>
+							<div class="font-bold">MEGA CRITICAL ALERT: No People Configured!</div>
+							<div class="text-xs">You have connected WhatsApp phones but zero registered Persons. Contest voicenotes cannot be sent until a Person is created and phones are assigned.</div>
+						</div>
+					</div>
+					<button onclick="document.getElementById('create-person-form').scrollIntoView({behavior: 'smooth'})" class="btn btn-danger btn-sm">Create Person Now</button>
+				</div>
+			} else if state.UnassignedPhonesCount > 0 {
+				<div class="bg-warning/20 border-2 border-warning text-warning p-4 rounded-xl mb-6 flex items-center justify-between">
+					<div class="flex items-center gap-3">
+						<span class="text-2xl">⚠️</span>
+						<div>
+							<div class="font-bold">Unassigned WhatsApp Phone(s) Detected!</div>
+							<div class="text-xs">{ fmt.Sprintf("%d", state.UnassignedPhonesCount) } connected phone(s) are not assigned to any Person. Assign them in the People section below so their voice note pools can be used.</div>
+						</div>
+					</div>
+					<button onclick="document.getElementById('people-section').scrollIntoView({behavior: 'smooth'})" class="btn btn-warning btn-sm">Review Senders</button>
+				</div>
+			}
+
 			<header class="header flex justify-between items-center">
 				<h1 class="title m-0">🐆 Telemetrie pe ProFM, Jaguare</h1>
 				<div class="flex items-center gap-4">
@@ -521,6 +644,126 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 					<!-- Audio Stats -->
 					<div class="glass flex justify-between" id="audio-card" sse-swap="audio">
 						@AudioStatsComponent(state)
+					</div>
+
+					<!-- People & WhatsApp Senders -->
+					<div class="glass p-6" id="people-section">
+						<div class="flex justify-between items-center mb-6">
+							<div>
+								<h2 class="text-base font-bold flex items-center gap-2">👥 People & WhatsApp Senders</h2>
+								<div class="text-xs text-muted">Each person owns an audio pool. All phones assigned to a person draw from that person's pool.</div>
+							</div>
+							<button onclick="document.getElementById('modal-add-person').classList.toggle('hidden')" class="btn btn-primary btn-sm">+ Add New Person</button>
+						</div>
+
+						<div id="modal-add-person" class="hidden mb-6 p-4 rounded-xl bg-black/30 border border-white/10">
+							<div class="font-semibold text-sm mb-2 text-primary">Create New Person</div>
+							<form id="create-person-form" onsubmit="return createPerson(event, this)" class="flex gap-2 items-end">
+								<div class="flex-grow">
+									<label class="text-xs text-muted mb-1">Person Name</label>
+									<input type="text" name="name" placeholder="e.g. Victor Stan" class="input" required />
+								</div>
+								<button type="submit" class="btn btn-primary btn-sm">Save Person</button>
+								<button type="button" onclick="document.getElementById('modal-add-person').classList.add('hidden')" class="btn btn-secondary btn-sm">Cancel</button>
+							</form>
+						</div>
+
+						if len(persons) == 0 {
+							<div class="text-center py-6 text-muted border border-dashed border-white/10 rounded-xl">
+								<p class="mb-2">No people registered yet.</p>
+								<button onclick="document.getElementById('modal-add-person').classList.remove('hidden')" class="btn btn-primary btn-sm">Create First Person</button>
+							</div>
+						} else {
+							<div class="space-y-6">
+								for _, p := range persons {
+									<div class="border border-white/10 rounded-xl p-4 bg-black/20">
+										<div class="flex justify-between items-start mb-4">
+											<div>
+												<div class="flex items-center gap-2">
+													<span class="font-bold text-base">{ p.Name }</span>
+													<span class="text-xs font-mono bg-white/10 px-2 py-0.5 rounded text-muted">{ p.Slug }</span>
+												</div>
+												<div class="text-xs text-muted mt-1">Created: { p.CreatedAt.Format("02 Jan 2006 15:04") }</div>
+											</div>
+											<div class="flex gap-2">
+												<button type="button" onclick={ templ.ComponentScript{Call: fmt.Sprintf("editPerson(%d, '%s')", p.ID, p.Name)} } class="btn btn-secondary btn-sm">Edit Name</button>
+												<button type="button" onclick={ templ.ComponentScript{Call: fmt.Sprintf("deletePerson(%d, '%s')", p.ID, p.Name)} } class="btn btn-danger btn-sm">Delete</button>
+											</div>
+										</div>
+
+										<!-- Assigned Phones Sub-section -->
+										<div class="mb-4">
+											<div class="text-xs uppercase text-muted tracking-wider font-semibold mb-2">Assigned WhatsApp Phones:</div>
+											<div class="flex flex-wrap gap-3">
+												for _, conn := range state.Connections {
+													if conn.PersonSlug == p.Slug || (conn.PersonID != nil && *conn.PersonID == p.ID) {
+														<div class="flex items-center gap-2 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm">
+															if conn.Status == StatusConnected {
+																<span class="w-2.5 h-2.5 rounded-full bg-success inline-block"></span>
+															} else if conn.Status == StatusPairingRequired {
+																<span class="w-2.5 h-2.5 rounded-full bg-warning inline-block"></span>
+															} else {
+																<span class="w-2.5 h-2.5 rounded-full bg-danger inline-block"></span>
+															}
+															<span class="font-mono">{ conn.Phone }</span>
+															<select onchange={ templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', this.value)", conn.Phone)} } class="input py-0 px-1 text-xs h-6 bg-white/5 border-white/10">
+																<option value={ fmt.Sprintf("%d", p.ID) } selected>{ p.Name }</option>
+																for _, other := range persons {
+																	if other.ID != p.ID {
+																		<option value={ fmt.Sprintf("%d", other.ID) }>{ other.Name }</option>
+																	}
+																}
+																<option value="0">Unassign</option>
+															</select>
+															<button type="button" hx-post="/api/sender/disconnect" hx-vals={ fmt.Sprintf(`{"phone": "%s"}`, conn.Phone) } hx-target="#qr-card" hx-swap="innerHTML" class="text-danger hover:text-danger/80 text-xs ml-1" title="Disconnect">✕</button>
+														</div>
+													}
+												}
+											</div>
+										</div>
+
+										<!-- Audio Pool & Batch Move -->
+										<div class="border-t border-white/10 pt-3">
+											<div class="flex justify-between items-center mb-2">
+												<div class="text-xs text-muted">
+													Audio Pool: <strong class="text-success">{ fmt.Sprintf("%d", len(personAudios[p.Slug].Active)) } active</strong> · <span class="text-muted">{ fmt.Sprintf("%d", len(personAudios[p.Slug].Used)) } used</span>
+												</div>
+												if len(personAudios[p.Slug].Active) > 0 && len(persons) > 1 {
+													<div class="flex items-center gap-2">
+														<label class="text-xs text-muted flex items-center gap-1 cursor-pointer">
+															<input type="checkbox" onchange={ templ.ComponentScript{Call: fmt.Sprintf("toggleSelectAllAudios('%s', this.checked)", p.Slug)} } />
+															<span>Select All</span>
+														</label>
+														<select id={ "target-person-" + p.Slug } class="input py-0 px-2 text-xs h-7 bg-white/5 border-white/10">
+															<option value="" disabled selected>Move selected to...</option>
+															for _, other := range persons {
+																if other.Slug != p.Slug {
+																	<option value={ other.Slug }>{ other.Name }</option>
+																}
+															}
+														</select>
+														<button type="button" onclick={ templ.ComponentScript{Call: fmt.Sprintf("batchMoveAudios('%s')", p.Slug)} } class="btn btn-secondary btn-sm py-0.5 text-xs">🚚 Move</button>
+													</div>
+												}
+											</div>
+
+											if len(personAudios[p.Slug].Active) > 0 {
+												<div class="max-h-36 overflow-y-auto space-y-1 bg-black/30 rounded p-2 text-xs font-mono">
+													for _, f := range personAudios[p.Slug].Active {
+														<label class="flex items-center gap-2 hover:bg-white/5 p-1 rounded cursor-pointer">
+															<input type="checkbox" class={ "audio-checkbox-" + p.Slug } value={ f } />
+															<span class="truncate">{ f }</span>
+														</label>
+													}
+												</div>
+											} else {
+												<div class="text-xs text-muted italic">No active voice notes uploaded for { p.Name }.</div>
+											}
+										</div>
+									</div>
+								}
+							</div>
+						}
 					</div>
 
 					<div class="glass p-6" id="matcher-data">
@@ -704,9 +947,23 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 					</div>
 
 					<div class="glass p-6">
-						<h2 class="text-sm uppercase text-muted mb-4">Add Sender Phone</h2>
-						<form hx-post="/api/sender/add" hx-target="#add-sender-result" hx-swap="innerHTML">
-							<button type="submit" class="btn btn-secondary">Add phone and show QR code</button>
+						<h2 class="text-sm uppercase text-muted mb-2">Pair WhatsApp Phone</h2>
+						<p class="text-xs text-muted mb-4">Select who this WhatsApp number belongs to before generating the QR code.</p>
+						<form hx-post="/api/sender/add" hx-target="#add-sender-result" hx-swap="innerHTML" class="space-y-3">
+							<div>
+								<label class="text-xs text-muted mb-1">Assign to Person</label>
+								<select name="person_id" class="input" required>
+									if len(persons) == 0 {
+										<option value="" disabled selected>-- Create a Person first! --</option>
+									} else {
+										<option value="" disabled selected>-- Select Person --</option>
+										for _, p := range persons {
+											<option value={ fmt.Sprintf("%d", p.ID) }>{ p.Name }</option>
+										}
+									}
+								</select>
+							</div>
+							<button type="submit" class="btn btn-secondary w-full" disabled?={ len(persons) == 0 }>Generate Pairing QR Code</button>
 						</form>
 						<div id="add-sender-result" class="mt-4 text-sm text-warning"></div>
 					</div>
@@ -715,12 +972,14 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 						<h2 class="text-sm uppercase text-muted mb-4">Upload Voice Note</h2>
 						<form onsubmit="return uploadAudio(event, this)" class="space-y-4">
 							<div>
-								<label class="text-xs text-muted mb-1">Phone pool</label>
-								<select name="phone" class="input" required>
-									for _, phone := range phones {
-										<option value={ phone }>
-											{ phone }
-										</option>
+								<label class="text-xs text-muted mb-1">Target Person</label>
+								<select name="person_slug" class="input" required>
+									if len(persons) == 0 {
+										<option value="" disabled selected>-- Create a Person first! --</option>
+									} else {
+										for _, p := range persons {
+											<option value={ p.Slug }>{ p.Name } ({ p.Slug })</option>
+										}
 									}
 								</select>
 							</div>

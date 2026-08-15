@@ -265,6 +265,83 @@ func listUsedAudioFiles(rootDir string) ([]string, error) {
 	return files, err
 }
 
+func GetAudioDirForPerson(personSlug string, rootDir string) string {
+	personSlug = strings.TrimSpace(personSlug)
+	if personSlug == "" {
+		return rootDir
+	}
+	dir := filepath.Join(rootDir, personSlug)
+	_ = InitAudioPool(dir)
+	return dir
+}
+
+func MoveAudioFiles(sourceDir, targetDir string, filenames []string) error {
+	if err := InitAudioPool(targetDir); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Join(targetDir, "used"), 0755); err != nil {
+		return err
+	}
+
+	for _, filename := range filenames {
+		filename = filepath.Base(filename)
+		if filename == "" || filename == "." || filename == ".." {
+			continue
+		}
+
+		srcActive := filepath.Join(sourceDir, filename)
+		if _, err := os.Stat(srcActive); err == nil {
+			dstActive := filepath.Join(targetDir, filename)
+			if err := os.Rename(srcActive, dstActive); err != nil {
+				return fmt.Errorf("failed to move active file %s: %w", filename, err)
+			}
+			continue
+		}
+
+		srcUsed := filepath.Join(sourceDir, "used", filename)
+		if _, err := os.Stat(srcUsed); err == nil {
+			dstUsed := filepath.Join(targetDir, "used", filename)
+			if err := os.Rename(srcUsed, dstUsed); err != nil {
+				return fmt.Errorf("failed to move used file %s: %w", filename, err)
+			}
+			continue
+		}
+	}
+	return nil
+}
+
+func ListAudioFilesForPerson(personSlug string, rootDir string) ([]string, []string, error) {
+	personDir := GetAudioDirForPerson(personSlug, rootDir)
+	var active, used []string
+
+	if entries, err := os.ReadDir(personDir); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ".ogg") {
+				active = append(active, e.Name())
+			}
+		}
+	}
+
+	if usedEntries, err := os.ReadDir(filepath.Join(personDir, "used")); err == nil {
+		for _, e := range usedEntries {
+			if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ".ogg") {
+				used = append(used, e.Name())
+			}
+		}
+	}
+
+	return active, used, nil
+}
+
+func GetAudioStatsPerPerson(persons []Person, rootDir string) map[string]PhoneAudioStats {
+	stats := make(map[string]PhoneAudioStats)
+	for _, p := range persons {
+		unused, used := GetAudioStats(GetAudioDirForPerson(p.Slug, rootDir))
+		stats[p.Slug] = PhoneAudioStats{Unused: unused, Used: used}
+	}
+	return stats
+}
+
 func GetAudioDirForPhone(phone string, rootDir string) string {
 	normalized := NormalizePhone(phone)
 	if normalized == "" {

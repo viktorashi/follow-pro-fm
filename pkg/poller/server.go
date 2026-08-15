@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,25 +26,31 @@ import (
 
 // TelemetryServer runs the embedded HTTP dashboard.
 type TelemetryServer struct {
-	echo              *echo.Echo
-	authMgr           *AuthManager
-	stateMgr          *StateManager
-	broadcaster       *SSEBroadcaster
-	logWriter         *SSELogWriter
-	dbMgr             *DBManager
-	dataDir           string
-	audiosDir         string
-	campaigns         []Campaign
-	wappClients       []WhatsAppClient
-	onAddPhone        func() error
-	onDisconnectPhone func(phone string) error
-	timeNow           func() time.Time
-	transcribe        func(context.Context, []byte) (string, error)
+	echo                 *echo.Echo
+	authMgr              *AuthManager
+	stateMgr             *StateManager
+	broadcaster          *SSEBroadcaster
+	logWriter            *SSELogWriter
+	dbMgr                *DBManager
+	dataDir              string
+	audiosDir            string
+	campaigns            []Campaign
+	wappClients          []WhatsAppClient
+	onAddPhone           func() error
+	onAddPhoneWithPerson func(personID *int64) error
+	onDisconnectPhone    func(phone string) error
+	timeNow              func() time.Time
+	transcribe           func(context.Context, []byte) (string, error)
 }
 
 type ScheduleEntry struct {
 	Date          string
 	TargetMatches []int
+}
+
+type PersonAudioFiles struct {
+	Active []string `json:"active"`
+	Used   []string `json:"used"`
 }
 
 func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaster *SSEBroadcaster, logWriter *SSELogWriter, dbMgr *DBManager, dataDir string, audiosDir string, campaigns []Campaign, transcribe func(context.Context, []byte) (string, error)) *TelemetryServer {
@@ -113,6 +120,12 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.POST("/api/sender/add", s.handleAddSenderPhone)
 	protected.POST("/api/sender/disconnect", s.handleDisconnectSenderPhone)
 	protected.POST("/api/audio/upload", s.handleAudioUpload)
+	protected.GET("/api/persons", s.handleListPersons)
+	protected.POST("/api/persons", s.handleCreatePerson)
+	protected.POST("/api/persons/:id/edit", s.handleEditPerson)
+	protected.POST("/api/persons/:id/delete", s.handleDeletePerson)
+	protected.POST("/api/phones/assign", s.handleAssignPhone)
+	protected.POST("/api/audios/batch-move", s.handleBatchMoveAudios)
 
 	if os.Getenv("MOCK_WHATSAPP") == "true" {
 		protected.POST("/api/test/mock-scan", s.handleMockScan)
@@ -200,7 +213,23 @@ func (s *TelemetryServer) handleDashboardView(c *echo.Context) error {
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Error reading schedule entries: "+err.Error())
 	}
-	return Render(c, http.StatusOK, Dashboard(state, chunks, canonicalChunks, dashboardUploadPhones(state.Connections), schedules, s.getCampaignArtists()))
+
+	var persons []Person
+	personAudios := make(map[string]PersonAudioFiles)
+	if s.dbMgr != nil {
+		if pList, err := s.dbMgr.ListPersons(c.Request().Context()); err == nil {
+			persons = pList
+			for _, p := range persons {
+				active, used, _ := ListAudioFilesForPerson(p.Slug, s.audiosDir)
+				personAudios[p.Slug] = PersonAudioFiles{Active: active, Used: used}
+			}
+		}
+	}
+
+	s.refreshStatePersons(c.Request().Context())
+	state = s.stateMgr.Get()
+
+	return Render(c, http.StatusOK, Dashboard(state, chunks, canonicalChunks, dashboardUploadPhones(state.Connections), schedules, s.getCampaignArtists(), persons, personAudios))
 }
 
 func (s *TelemetryServer) getCampaignArtists() []string {
@@ -509,14 +538,32 @@ func (s *TelemetryServer) SetOnAddPhone(fn func() error) {
 	s.onAddPhone = fn
 }
 
+func (s *TelemetryServer) SetOnAddPhoneWithPerson(fn func(personID *int64) error) {
+	s.onAddPhoneWithPerson = fn
+}
+
 func (s *TelemetryServer) SetOnDisconnectPhone(fn func(phone string) error) {
 	s.onDisconnectPhone = fn
 }
 
 func (s *TelemetryServer) handleAddSenderPhone(c *echo.Context) error {
-	if s.onAddPhone != nil {
-		err := s.onAddPhone()
-		if err != nil {
+	var personID *int64
+	pIDStr := strings.TrimSpace(c.FormValue("person_id"))
+	if pIDStr == "" {
+		pIDStr = strings.TrimSpace(c.QueryParam("person_id"))
+	}
+	if pIDStr != "" {
+		if id, err := strconv.ParseInt(pIDStr, 10, 64); err == nil && id > 0 {
+			personID = &id
+		}
+	}
+
+	if s.onAddPhoneWithPerson != nil {
+		if err := s.onAddPhoneWithPerson(personID); err != nil {
+			return c.String(http.StatusConflict, "Could not start QR pairing: "+err.Error())
+		}
+	} else if s.onAddPhone != nil {
+		if err := s.onAddPhone(); err != nil {
 			return c.String(http.StatusConflict, "Could not start QR pairing: "+err.Error())
 		}
 	} else {
@@ -547,12 +594,12 @@ func (s *TelemetryServer) handleDisconnectSenderPhone(c *echo.Context) error {
 }
 
 func (s *TelemetryServer) handleAudioUpload(c *echo.Context) error {
-	phone := strings.TrimSpace(c.FormValue("phone"))
-	if phone == "" {
-		return c.String(http.StatusBadRequest, "Phone is required")
+	personSlug := strings.TrimSpace(c.FormValue("person_slug"))
+	if personSlug == "" {
+		personSlug = strings.TrimSpace(c.FormValue("phone"))
 	}
-	if !strings.HasPrefix(phone, "+") {
-		phone = "+" + phone
+	if personSlug == "" {
+		return c.String(http.StatusBadRequest, "Person is required")
 	}
 
 	form, err := c.MultipartForm()
@@ -565,7 +612,7 @@ func (s *TelemetryServer) handleAudioUpload(c *echo.Context) error {
 		return c.String(http.StatusBadRequest, "At least one audio file is required")
 	}
 
-	audioDir := GetAudioDirForPhone(phone, s.audiosDir)
+	audioDir := GetAudioDirForPerson(personSlug, s.audiosDir)
 	if err := os.MkdirAll(audioDir, 0755); err != nil {
 		return c.String(http.StatusInternalServerError, "Failed to prepare audio directory")
 	}
@@ -612,7 +659,215 @@ func (s *TelemetryServer) handleAudioUpload(c *echo.Context) error {
 		return c.String(http.StatusBadRequest, "No new valid .ogg files were uploaded")
 	}
 
-	return c.String(http.StatusOK, fmt.Sprintf("Successfully uploaded %d files to %s", len(saved), phone))
+	s.refreshStatePersons(c.Request().Context())
+	return c.String(http.StatusOK, fmt.Sprintf("Successfully uploaded %d files to %s", len(saved), personSlug))
+}
+
+func (s *TelemetryServer) handleListPersons(c *echo.Context) error {
+	if s.dbMgr == nil {
+		return c.JSON(http.StatusOK, []Person{})
+	}
+	persons, err := s.dbMgr.ListPersons(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, persons)
+}
+
+func (s *TelemetryServer) handleCreatePerson(c *echo.Context) error {
+	name := strings.TrimSpace(c.FormValue("name"))
+	if name == "" {
+		var req struct {
+			Name string `json:"name"`
+		}
+		_ = c.Bind(&req)
+		name = strings.TrimSpace(req.Name)
+	}
+	if name == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Person name is required"})
+	}
+
+	if s.dbMgr == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Database not initialized"})
+	}
+
+	person, err := s.dbMgr.CreatePerson(c.Request().Context(), name)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	_ = InitAudioPool(GetAudioDirForPerson(person.Slug, s.audiosDir))
+	s.refreshStatePersons(c.Request().Context())
+
+	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("HX-Refresh", "true")
+		return c.NoContent(http.StatusOK)
+	}
+	return c.JSON(http.StatusOK, person)
+}
+
+func (s *TelemetryServer) handleEditPerson(c *echo.Context) error {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid person ID"})
+	}
+	name := strings.TrimSpace(c.FormValue("name"))
+	if name == "" {
+		var req struct {
+			Name string `json:"name"`
+		}
+		_ = c.Bind(&req)
+		name = strings.TrimSpace(req.Name)
+	}
+	if name == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Person name is required"})
+	}
+
+	if s.dbMgr == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Database not initialized"})
+	}
+
+	if err := s.dbMgr.UpdatePerson(c.Request().Context(), id, name); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	s.refreshStatePersons(c.Request().Context())
+
+	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("HX-Refresh", "true")
+		return c.NoContent(http.StatusOK)
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *TelemetryServer) handleDeletePerson(c *echo.Context) error {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid person ID"})
+	}
+
+	if s.dbMgr == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Database not initialized"})
+	}
+
+	if err := s.dbMgr.DeletePerson(c.Request().Context(), id); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	s.refreshStatePersons(c.Request().Context())
+
+	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("HX-Refresh", "true")
+		return c.NoContent(http.StatusOK)
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *TelemetryServer) handleAssignPhone(c *echo.Context) error {
+	phone := strings.TrimSpace(c.FormValue("phone"))
+	personIDStr := strings.TrimSpace(c.FormValue("person_id"))
+
+	if phone == "" {
+		var req struct {
+			Phone    string `json:"phone"`
+			PersonID string `json:"person_id"`
+		}
+		_ = c.Bind(&req)
+		phone = strings.TrimSpace(req.Phone)
+		personIDStr = strings.TrimSpace(req.PersonID)
+	}
+
+	if phone == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Phone is required"})
+	}
+	if !strings.HasPrefix(phone, "+") {
+		phone = "+" + phone
+	}
+
+	var personID *int64
+	if personIDStr != "" && personIDStr != "0" && personIDStr != "null" {
+		if id, err := strconv.ParseInt(personIDStr, 10, 64); err == nil && id > 0 {
+			personID = &id
+		}
+	}
+
+	if s.dbMgr != nil {
+		if err := s.dbMgr.AssignPhoneToPerson(c.Request().Context(), phone, personID); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+	}
+
+	s.refreshStatePersons(c.Request().Context())
+
+	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("HX-Refresh", "true")
+		return c.NoContent(http.StatusOK)
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *TelemetryServer) handleBatchMoveAudios(c *echo.Context) error {
+	var req struct {
+		FromSlug string   `json:"from_slug"`
+		ToSlug   string   `json:"to_slug"`
+		Files    []string `json:"files"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+	}
+
+	req.FromSlug = strings.TrimSpace(req.FromSlug)
+	req.ToSlug = strings.TrimSpace(req.ToSlug)
+	if req.FromSlug == "" || req.ToSlug == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "from_slug and to_slug are required"})
+	}
+	if len(req.Files) == 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "At least one file must be selected"})
+	}
+
+	srcDir := GetAudioDirForPerson(req.FromSlug, s.audiosDir)
+	dstDir := GetAudioDirForPerson(req.ToSlug, s.audiosDir)
+
+	if err := MoveAudioFiles(srcDir, dstDir, req.Files); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	s.refreshStatePersons(c.Request().Context())
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"status": "ok",
+		"moved":  len(req.Files),
+	})
+}
+
+func (s *TelemetryServer) refreshStatePersons(ctx context.Context) {
+	if s.dbMgr == nil || s.stateMgr == nil {
+		return
+	}
+	persons, err := s.dbMgr.ListPersons(ctx)
+	if err != nil {
+		return
+	}
+	sessions, err := s.dbMgr.SenderSessions(ctx)
+	if err != nil {
+		return
+	}
+	sessionMap := make(map[string]SenderSession)
+	for _, sess := range sessions {
+		sessionMap[sess.Phone] = sess
+	}
+
+	s.stateMgr.Update(func(st *AppState) {
+		st.Persons = persons
+		for i, conn := range st.Connections {
+			if sess, ok := sessionMap[conn.Phone]; ok {
+				st.Connections[i].PersonID = sess.PersonID
+				st.Connections[i].PersonName = sess.PersonName
+				st.Connections[i].PersonSlug = sess.PersonSlug
+			}
+		}
+	})
 }
 
 func dashboardUploadPhones(conns []WAConnectionState) []string {

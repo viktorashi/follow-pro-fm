@@ -17,7 +17,7 @@ func TestHandleAudioUploadRejectsNonOGG(t *testing.T) {
 	audiosDir := t.TempDir()
 	server := &TelemetryServer{audiosDir: audiosDir}
 
-	ctx, rec := newAudioUploadContext(t, "+40734788254", "note.mp3", []byte("fake-mp3"))
+	ctx, rec := newAudioUploadContext(t, "victor-stan", "note.mp3", []byte("fake-mp3"))
 
 	if err := server.handleAudioUpload(ctx); err != nil {
 		t.Fatalf("handleAudioUpload returned error: %v", err)
@@ -31,12 +31,12 @@ func TestHandleAudioUploadRejectsNonOGG(t *testing.T) {
 	}
 }
 
-func TestHandleAudioUploadStoresInPerPhonePool(t *testing.T) {
+func TestHandleAudioUploadStoresInPersonPool(t *testing.T) {
 	audiosDir := t.TempDir()
 	server := &TelemetryServer{audiosDir: audiosDir}
-	phone := "+40111222333"
+	slug := "victor-stan"
 
-	ctx, rec := newAudioUploadContext(t, phone, "fresh.ogg", []byte("ogg-data"))
+	ctx, rec := newAudioUploadContext(t, slug, "fresh.ogg", []byte("ogg-data"))
 
 	if err := server.handleAudioUpload(ctx); err != nil {
 		t.Fatalf("handleAudioUpload returned error: %v", err)
@@ -46,8 +46,8 @@ func TestHandleAudioUploadStoresInPerPhonePool(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	activePath := filepath.Join(audiosDir, NormalizePhone(phone), "fresh.ogg")
-	usedPath := filepath.Join(audiosDir, NormalizePhone(phone), "used", "fresh.ogg")
+	activePath := filepath.Join(audiosDir, slug, "fresh.ogg")
+	usedPath := filepath.Join(audiosDir, slug, "used", "fresh.ogg")
 
 	data, err := os.ReadFile(activePath)
 	if err != nil {
@@ -61,39 +61,19 @@ func TestHandleAudioUploadStoresInPerPhonePool(t *testing.T) {
 	}
 }
 
-func TestHandleAudioUploadStoresInPhoneDirectory(t *testing.T) {
-	audiosDir := t.TempDir()
-	server := &TelemetryServer{audiosDir: audiosDir}
-	phone := "+40734788254"
-
-	ctx, rec := newAudioUploadContext(t, phone, "canon.ogg", []byte("canon"))
-
-	if err := server.handleAudioUpload(ctx); err != nil {
-		t.Fatalf("handleAudioUpload returned error: %v", err)
-	}
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
-	}
-
-	activePath := filepath.Join(audiosDir, "40734788254", "canon.ogg")
-	if _, err := os.Stat(activePath); err != nil {
-		t.Fatalf("expected upload at %s: %v", activePath, err)
-	}
-}
-
 func TestHandleAudioUploadRejectsUsedNameCollisions(t *testing.T) {
 	audiosDir := t.TempDir()
-	phoneDir := filepath.Join(audiosDir, "40734788254")
-	if err := os.MkdirAll(filepath.Join(phoneDir, "used"), 0755); err != nil {
+	slug := "victor-stan"
+	personDir := filepath.Join(audiosDir, slug)
+	if err := os.MkdirAll(filepath.Join(personDir, "used"), 0755); err != nil {
 		t.Fatalf("mkdir used: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(phoneDir, "used", "taken.ogg"), []byte("old"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(personDir, "used", "taken.ogg"), []byte("old"), 0644); err != nil {
 		t.Fatalf("seed used file: %v", err)
 	}
 
 	server := &TelemetryServer{audiosDir: audiosDir}
-	ctx, rec := newAudioUploadContext(t, "+40734788254", "taken.ogg", []byte("new"))
+	ctx, rec := newAudioUploadContext(t, slug, "taken.ogg", []byte("new"))
 
 	if err := server.handleAudioUpload(ctx); err != nil {
 		t.Fatalf("handleAudioUpload returned error: %v", err)
@@ -123,9 +103,45 @@ func TestHandleAudioUploadAllowsPhoneNotPrelistedInDashboardState(t *testing.T) 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	activePath := filepath.Join(audiosDir, NormalizePhone("+40999888777"), "fresh.ogg")
+	activePath := filepath.Join(audiosDir, "40999888777", "fresh.ogg")
 	if _, err := os.Stat(activePath); err != nil {
 		t.Fatalf("expected upload at %s: %v", activePath, err)
+	}
+}
+
+func TestHandleBatchMoveAudios(t *testing.T) {
+	audiosDir := t.TempDir()
+	fromDir := filepath.Join(audiosDir, "person-a")
+	toDir := filepath.Join(audiosDir, "person-b")
+	_ = os.MkdirAll(fromDir, 0755)
+	_ = os.MkdirAll(toDir, 0755)
+	_ = os.WriteFile(filepath.Join(fromDir, "note1.ogg"), []byte("n1"), 0644)
+	_ = os.WriteFile(filepath.Join(fromDir, "note2.ogg"), []byte("n2"), 0644)
+
+	server := &TelemetryServer{
+		audiosDir: audiosDir,
+		stateMgr:  NewStateManager(),
+	}
+
+	body := `{"from_slug":"person-a","to_slug":"person-b","files":["note1.ogg","note2.ogg"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/audios/batch-move", strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	e := echo.New()
+	ctx := e.NewContext(req, rec)
+
+	if err := server.handleBatchMoveAudios(ctx); err != nil {
+		t.Fatalf("handleBatchMoveAudios returned error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	if _, err := os.Stat(filepath.Join(toDir, "note1.ogg")); err != nil {
+		t.Fatalf("expected moved file in toDir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(fromDir, "note1.ogg")); !os.IsNotExist(err) {
+		t.Fatalf("expected source file removed from fromDir: %v", err)
 	}
 }
 
