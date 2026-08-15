@@ -12,3 +12,4 @@ audios/
 data/
 .gemini/
 storim-da-brain/
+.env*
