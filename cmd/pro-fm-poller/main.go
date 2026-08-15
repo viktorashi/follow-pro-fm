@@ -17,7 +17,6 @@ import (
 
 	"pro-fm-poller/pkg/poller"
 
-	"github.com/joho/godotenv"
 	"github.com/sendgrid/sendgrid-go"
 )
 
@@ -102,9 +101,6 @@ func initSenderPhone(phone string, dbPath string, stateMgr *poller.StateManager,
 }
 
 func main() {
-	// 0. Load .env if present (ignored in production)
-	_ = godotenv.Load()
-
 	// 1. Env Vars
 	profmAPIURL := os.Getenv("PROFM_API_URL")
 	if profmAPIURL == "" {
