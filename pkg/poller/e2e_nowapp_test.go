@@ -16,7 +16,7 @@ func TestPoller_E2E_NoWhatsApp(t *testing.T) {
 
 	t.Log("Skipping real WhatsApp client initialization (nowapp build tag)")
 
-	if err := InitAudioPool(GetAudioDirForPhone("+40734788254", audiosDir)); err != nil {
+	if err := InitAudioPool(audiosDir); err != nil {
 		t.Fatalf("Failed to initialize audio pool: %v", err)
 	}
 

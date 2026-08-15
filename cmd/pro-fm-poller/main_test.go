@@ -75,7 +75,7 @@ func TestInitSenderPhoneRollsBackStateOnInitFailure(t *testing.T) {
 	stateMgr := poller.NewStateManager()
 	phone := "+40111222333"
 
-	client, err := initSenderPhone(phone, filepath.Join(t.TempDir(), "wapp_40111222333.sqlite"), stateMgr, nil, "", func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error) {
+	client, err := initSenderPhone(phone, filepath.Join(t.TempDir(), "wapp_40111222333.sqlite"), stateMgr, nil, "", nil, "", "", func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error) {
 		return nil, fmt.Errorf("boom")
 	})
 	if err == nil {
@@ -96,7 +96,7 @@ func TestInitSenderPhoneKeepsStateOnSuccess(t *testing.T) {
 	phone := "+40111222333"
 	mockClient := &poller.MockWhatsAppClient{}
 
-	client, err := initSenderPhone(phone, filepath.Join(t.TempDir(), "wapp_40111222333.sqlite"), stateMgr, nil, "", func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error) {
+	client, err := initSenderPhone(phone, filepath.Join(t.TempDir(), "wapp_40111222333.sqlite"), stateMgr, nil, "", nil, "", "", func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error) {
 		return mockClient, nil
 	})
 	if err != nil {

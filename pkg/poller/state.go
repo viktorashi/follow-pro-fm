@@ -27,29 +27,39 @@ type WAConnectionState struct {
 	QRCodeData        string
 	UnusedAudios      int
 	UsedAudios        int
+	PersonID          *int64
+	PersonName        string
+	PersonSlug        string
 }
 
 type AppState struct {
-	GatheringSignatures bool
-	Status              AppStatus
-	WhatsAppConnected   bool
-	Connections         []WAConnectionState
-	KillSwitchActive    bool
-	CurrentSong         string
-	UnusedAudios        int
-	UsedAudios          int
-	LastError           string
-	LastVoiceNoteSentAt time.Time
+	GatheringSignatures   bool
+	Status                AppStatus
+	WhatsAppConnected     bool
+	Connections           []WAConnectionState
+	Persons               []Person
+	UnassignedPhonesCount int
+	HasMegaCriticalAlert  bool
+	KillSwitchActive      bool
+	CurrentSong           string
+	UnusedAudios          int
+	UsedAudios            int
+	LastError             string
+	LastVoiceNoteSentAt   time.Time
 }
 
 func (s *AppState) reconcileConnectionState() {
 	anyConnected := false
 	anyPairingRequired := false
 	anyError := false
+	unassigned := 0
 
 	for _, conn := range s.Connections {
 		if conn.WhatsAppConnected {
 			anyConnected = true
+		}
+		if conn.PersonID == nil || *conn.PersonID == 0 || conn.PersonSlug == "" {
+			unassigned++
 		}
 		switch conn.Status {
 		case StatusPairingRequired:
@@ -58,6 +68,8 @@ func (s *AppState) reconcileConnectionState() {
 			anyError = true
 		}
 	}
+	s.UnassignedPhonesCount = unassigned
+	s.HasMegaCriticalAlert = len(s.Persons) == 0 && len(s.Connections) > 0
 
 	s.WhatsAppConnected = anyConnected
 

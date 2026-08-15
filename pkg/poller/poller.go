@@ -563,23 +563,48 @@ func (p *Poller) runMetadataChecker(checker ContestChecker, checkImmediately boo
 	}
 }
 
+func (p *Poller) refreshAudioStats(s *AppState) {
+	personStats := make(map[string]PhoneAudioStats)
+	for _, person := range s.Persons {
+		unused, used := GetAudioStats(GetAudioDirForPerson(person.Slug, p.AudiosDir))
+		personStats[person.Slug] = PhoneAudioStats{Unused: unused, Used: used}
+	}
+
+	phoneStats := GetAudioStatsPerPhone(s.Connections, p.AudiosDir)
+
+	totalUnused := 0
+	totalUsed := 0
+	for _, stat := range personStats {
+		totalUnused += stat.Unused
+		totalUsed += stat.Used
+	}
+
+	for i, conn := range s.Connections {
+		if conn.PersonSlug != "" {
+			if st, ok := personStats[conn.PersonSlug]; ok {
+				s.Connections[i].UnusedAudios = st.Unused
+				s.Connections[i].UsedAudios = st.Used
+				continue
+			}
+		}
+		st := phoneStats[conn.Phone]
+		s.Connections[i].UnusedAudios = st.Unused
+		s.Connections[i].UsedAudios = st.Used
+		totalUnused += st.Unused
+		totalUsed += st.Used
+	}
+
+	s.UnusedAudios = totalUnused
+	s.UsedAudios = totalUsed
+}
+
 func (p *Poller) prepareStartState() bool {
 	if p.StateMgr == nil {
 		return true
 	}
 
-	stats := GetAudioStatsPerPhone(p.StateMgr.Get().Connections, p.AudiosDir)
 	p.StateMgr.Update(func(s *AppState) {
-		var totalUnused, totalUsed int
-		for i, conn := range s.Connections {
-			phoneStats := stats[conn.Phone]
-			s.Connections[i].UnusedAudios = phoneStats.Unused
-			s.Connections[i].UsedAudios = phoneStats.Used
-			totalUnused += phoneStats.Unused
-			totalUsed += phoneStats.Used
-		}
-		s.UnusedAudios = totalUnused
-		s.UsedAudios = totalUsed
+		p.refreshAudioStats(s)
 	})
 
 	if p.StateMgr.Get().KillSwitchActive {
@@ -663,18 +688,8 @@ func (c *metadataContestChecker) Check(now time.Time) {
 	}
 
 	// Always update audio stats on each check to keep UI fresh
-	stats := GetAudioStatsPerPhone(p.StateMgr.Get().Connections, p.AudiosDir)
 	p.StateMgr.Update(func(s *AppState) {
-		var totalUnused, totalUsed int
-		for i, conn := range s.Connections {
-			phoneStats := stats[conn.Phone]
-			s.Connections[i].UnusedAudios = phoneStats.Unused
-			s.Connections[i].UsedAudios = phoneStats.Used
-			totalUnused += phoneStats.Unused
-			totalUsed += phoneStats.Used
-		}
-		s.UnusedAudios = totalUnused
-		s.UsedAudios = totalUsed
+		p.refreshAudioStats(s)
 	})
 }
 
@@ -799,22 +814,44 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist string, now ti
 	})
 
 	type SendJob struct {
-		Phone     string
-		AudioFile string
-		AudioHash string
+		Phone      string
+		AudioFile  string
+		AudioHash  string
+		PersonSlug string
 	}
 	var jobs []SendJob
 
+	// Group connected phones by PersonSlug (or fallback to phone normalized if unassigned)
+	phoneGroups := make(map[string][]WAConnectionState)
 	for _, conn := range p.StateMgr.Get().Connections {
-		dir := GetAudioDirForPhone(conn.Phone, p.AudiosDir)
-		f, hash, err := GetRandomAvailableAudio(dir, func(contentHash string) (bool, error) {
-			if p.DBMgr == nil {
-				return false, nil
+		key := conn.PersonSlug
+		if key == "" {
+			key = NormalizePhone(conn.Phone)
+		}
+		phoneGroups[key] = append(phoneGroups[key], conn)
+	}
+
+	for groupKey, conns := range phoneGroups {
+		dir := filepath.Join(p.AudiosDir, groupKey)
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			_ = InitAudioPool(dir)
+		}
+
+		allocatedHashes := make(map[string]struct{})
+		for _, conn := range conns {
+			f, hash, err := GetRandomAvailableAudio(dir, func(contentHash string) (bool, error) {
+				if _, ok := allocatedHashes[contentHash]; ok {
+					return true, nil
+				}
+				if p.DBMgr == nil {
+					return false, nil
+				}
+				return p.DBMgr.IsAudioHashUsed(context.Background(), contentHash)
+			})
+			if err == nil {
+				allocatedHashes[hash] = struct{}{}
+				jobs = append(jobs, SendJob{Phone: conn.Phone, AudioFile: f, AudioHash: hash, PersonSlug: groupKey})
 			}
-			return p.DBMgr.IsAudioHashUsed(context.Background(), contentHash)
-		})
-		if err == nil {
-			jobs = append(jobs, SendJob{Phone: conn.Phone, AudioFile: f, AudioHash: hash})
 		}
 	}
 
@@ -840,7 +877,7 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist string, now ti
 	var sentFiles []string
 	var lastErr error
 	for _, job := range jobs {
-		log.Printf("   Sending WhatsApp voice note using: %s (trigger=%s) from sender %s", job.AudioFile, triggerSource, job.Phone)
+		log.Printf("   Sending WhatsApp voice note using: %s (trigger=%s) from sender %s (person=%s)", job.AudioFile, triggerSource, job.Phone, job.PersonSlug)
 		err := p.SendVoiceNote(job.Phone, p.TargetPhone, job.AudioFile)
 		if err != nil {
 			log.Printf("   ❌ Error sending voice note from %s: %v\n", job.Phone, err)
@@ -895,7 +932,6 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist string, now ti
 		})
 	}
 
-	stats := GetAudioStatsPerPhone(p.StateMgr.Get().Connections, p.AudiosDir)
 	p.StateMgr.Update(func(s *AppState) {
 		s.Status = StatusPolling
 		if lastErr != nil {
@@ -906,17 +942,7 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist string, now ti
 		if len(sentFiles) > 0 {
 			s.LastVoiceNoteSentAt = time.Now()
 		}
-
-		var totalUnused, totalUsed int
-		for i, conn := range s.Connections {
-			phoneStats := stats[conn.Phone]
-			s.Connections[i].UnusedAudios = phoneStats.Unused
-			s.Connections[i].UsedAudios = phoneStats.Used
-			totalUnused += phoneStats.Unused
-			totalUsed += phoneStats.Used
-		}
-		s.UnusedAudios = totalUnused
-		s.UsedAudios = totalUsed
+		p.refreshAudioStats(s)
 	})
 }
 
