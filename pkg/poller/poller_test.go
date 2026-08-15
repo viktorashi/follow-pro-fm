@@ -388,7 +388,7 @@ func TestPoller_checkMetadataWithCoordinator(t *testing.T) {
 				},
 			}
 
-			poller.checkMetadataWithCoordinator(tt.currentSong, activeTime, poller.contestCheckCoordinator())
+			(&metadataContestChecker{poller: poller, coordinator: poller.contestCheckCoordinator(), currentSong: tt.currentSong}).Check(activeTime)
 
 			if poller.matchesToday != tt.wantMatches {
 				t.Errorf("matchesToday = %v, want %v", poller.matchesToday, tt.wantMatches)
@@ -443,7 +443,7 @@ func TestPoller_checkMetadataWithCoordinator_Deduplication(t *testing.T) {
 		}))
 		defer server.Close()
 		poller.APIURL = server.URL
-		poller.checkMetadataWithCoordinator(currentSong, when, poller.contestCheckCoordinator())
+		(&metadataContestChecker{poller: poller, coordinator: poller.contestCheckCoordinator(), currentSong: currentSong}).Check(when)
 	}
 
 	// 1. Play BTS - Dynamite (should trigger, voiceCalls = 1)
@@ -523,7 +523,7 @@ func TestPoller_checkMetadataWithCoordinator_DailyLimit(t *testing.T) {
 	}
 
 	currentSong := &SongInfo{}
-	poller.checkMetadataWithCoordinator(currentSong, activeTime, poller.contestCheckCoordinator())
+	(&metadataContestChecker{poller: poller, coordinator: poller.contestCheckCoordinator(), currentSong: currentSong}).Check(activeTime)
 
 	if voiceCalls != 0 {
 		t.Errorf("Expected 0 voice calls due to daily limit, got %d", voiceCalls)
@@ -573,7 +573,7 @@ func TestPoller_checkMetadataWithCoordinator_RequiresDifferentArtistBetweenCampa
 		}))
 		defer server.Close()
 		poller.APIURL = server.URL
-		poller.checkMetadataWithCoordinator(currentSong, when, poller.contestCheckCoordinator())
+		(&metadataContestChecker{poller: poller, coordinator: poller.contestCheckCoordinator(), currentSong: currentSong}).Check(when)
 	}
 
 	simulateSong("BTS", "Dynamite", activeTime)

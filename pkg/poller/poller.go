@@ -161,27 +161,15 @@ type metadataContestChecker struct {
 	currentSong *SongInfo
 }
 
-func (c *metadataContestChecker) Check(now time.Time) {
-	c.poller.checkMetadataWithCoordinator(c.currentSong, now, c.coordinator)
-}
-
 type fingerprintContestChecker struct {
 	poller      *Poller
 	coordinator *ContestCheckCoordinator
-}
-
-func (c *fingerprintContestChecker) Check(now time.Time) {
-	c.poller.checkFingerprintWithCoordinator(now, c.coordinator)
 }
 
 type transcriptionContestChecker struct {
 	poller      *Poller
 	coordinator *ContestCheckCoordinator
 	lastVersion int64
-}
-
-func (c *transcriptionContestChecker) Check(now time.Time) {
-	c.poller.checkTranscriptionWithCoordinator(now, c.coordinator, c)
 }
 
 var (
@@ -643,7 +631,10 @@ func (p *Poller) prepareStartState() bool {
 	return true
 }
 
-func (p *Poller) checkMetadataWithCoordinator(currentSong *SongInfo, now time.Time, coordinator *ContestCheckCoordinator) {
+func (c *metadataContestChecker) Check(now time.Time) {
+	p := c.poller
+	coordinator := c.coordinator
+	currentSong := c.currentSong
 	if !coordinator.CanCheck(now) {
 		return
 	}
@@ -1004,7 +995,9 @@ func runPeriodicChecker(p *Poller, checker ContestChecker) {
 	}
 }
 
-func (p *Poller) checkFingerprintWithCoordinator(now time.Time, coordinator *ContestCheckCoordinator) {
+func (c *fingerprintContestChecker) Check(now time.Time) {
+	p := c.poller
+	coordinator := c.coordinator
 	if !coordinator.CanCheck(now) {
 		return
 	}
@@ -1056,7 +1049,10 @@ func (p *Poller) checkFingerprintWithCoordinator(now time.Time, coordinator *Con
 	})
 }
 
-func (p *Poller) checkTranscriptionWithCoordinator(now time.Time, coordinator *ContestCheckCoordinator, checker *transcriptionContestChecker) {
+func (c *transcriptionContestChecker) Check(now time.Time) {
+	p := c.poller
+	coordinator := c.coordinator
+	checker := c
 	if p.Transcribe == nil || (p.StreamingTranscriptionActive != nil && p.StreamingTranscriptionActive()) || !coordinator.CanCheck(now) || !p.canRunContestChecker(now) {
 		return
 	}
