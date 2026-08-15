@@ -623,7 +623,7 @@ func TestE2E(t *testing.T) {
 			t.Fatalf("failed to seed secondary sender session: %v", err)
 		}
 		if err := os.Remove(filepath.Join(env.AudiosDir, sampleAudioName)); err != nil {
-			t.Fatalf("failed to clear canonical audio pool: %v", err)
+			t.Fatalf("failed to clear audio pool: %v", err)
 		}
 
 		_ = env.startManagedApp(t)
