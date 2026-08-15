@@ -17,7 +17,7 @@ func TestHandleAudioUploadRejectsNonOGG(t *testing.T) {
 	audiosDir := t.TempDir()
 	server := &TelemetryServer{audiosDir: audiosDir}
 
-	ctx, rec := newAudioUploadContext(t, CanonicalSenderPhone, "note.mp3", []byte("fake-mp3"))
+	ctx, rec := newAudioUploadContext(t, "+40734788254", "note.mp3", []byte("fake-mp3"))
 
 	if err := server.handleAudioUpload(ctx); err != nil {
 		t.Fatalf("handleAudioUpload returned error: %v", err)
@@ -61,11 +61,12 @@ func TestHandleAudioUploadStoresInPerPhonePool(t *testing.T) {
 	}
 }
 
-func TestHandleAudioUploadStoresCanonicalInRootPool(t *testing.T) {
+func TestHandleAudioUploadStoresInPhoneDirectory(t *testing.T) {
 	audiosDir := t.TempDir()
 	server := &TelemetryServer{audiosDir: audiosDir}
+	phone := "+40734788254"
 
-	ctx, rec := newAudioUploadContext(t, CanonicalSenderPhone, "canon.ogg", []byte("canon"))
+	ctx, rec := newAudioUploadContext(t, phone, "canon.ogg", []byte("canon"))
 
 	if err := server.handleAudioUpload(ctx); err != nil {
 		t.Fatalf("handleAudioUpload returned error: %v", err)
@@ -75,23 +76,24 @@ func TestHandleAudioUploadStoresCanonicalInRootPool(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	activePath := filepath.Join(audiosDir, "canon.ogg")
+	activePath := filepath.Join(audiosDir, "40734788254", "canon.ogg")
 	if _, err := os.Stat(activePath); err != nil {
-		t.Fatalf("expected canonical upload at %s: %v", activePath, err)
+		t.Fatalf("expected upload at %s: %v", activePath, err)
 	}
 }
 
 func TestHandleAudioUploadRejectsUsedNameCollisions(t *testing.T) {
 	audiosDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(audiosDir, "used"), 0755); err != nil {
+	phoneDir := filepath.Join(audiosDir, "40734788254")
+	if err := os.MkdirAll(filepath.Join(phoneDir, "used"), 0755); err != nil {
 		t.Fatalf("mkdir used: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(audiosDir, "used", "taken.ogg"), []byte("old"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(phoneDir, "used", "taken.ogg"), []byte("old"), 0644); err != nil {
 		t.Fatalf("seed used file: %v", err)
 	}
 
 	server := &TelemetryServer{audiosDir: audiosDir}
-	ctx, rec := newAudioUploadContext(t, CanonicalSenderPhone, "taken.ogg", []byte("new"))
+	ctx, rec := newAudioUploadContext(t, "+40734788254", "taken.ogg", []byte("new"))
 
 	if err := server.handleAudioUpload(ctx); err != nil {
 		t.Fatalf("handleAudioUpload returned error: %v", err)

@@ -578,20 +578,6 @@ func (p *Poller) prepareStartState() bool {
 			totalUnused += phoneStats.Unused
 			totalUsed += phoneStats.Used
 		}
-		// Also add canonical phone stats if not in connections
-		canonicalStats := stats[CanonicalSenderPhone]
-		canonicalInConns := false
-		for _, conn := range s.Connections {
-			if conn.Phone == CanonicalSenderPhone {
-				canonicalInConns = true
-				break
-			}
-		}
-		if !canonicalInConns {
-			totalUnused += canonicalStats.Unused
-			totalUsed += canonicalStats.Used
-		}
-
 		s.UnusedAudios = totalUnused
 		s.UsedAudios = totalUsed
 	})
@@ -687,20 +673,6 @@ func (c *metadataContestChecker) Check(now time.Time) {
 			totalUnused += phoneStats.Unused
 			totalUsed += phoneStats.Used
 		}
-
-		canonicalStats := stats[CanonicalSenderPhone]
-		canonicalInConns := false
-		for _, conn := range s.Connections {
-			if conn.Phone == CanonicalSenderPhone {
-				canonicalInConns = true
-				break
-			}
-		}
-		if !canonicalInConns {
-			totalUnused += canonicalStats.Unused
-			totalUsed += canonicalStats.Used
-		}
-
 		s.UnusedAudios = totalUnused
 		s.UsedAudios = totalUsed
 	})
@@ -942,18 +914,6 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist string, now ti
 			s.Connections[i].UsedAudios = phoneStats.Used
 			totalUnused += phoneStats.Unused
 			totalUsed += phoneStats.Used
-		}
-		canonicalStats := stats[CanonicalSenderPhone]
-		canonicalInConns := false
-		for _, conn := range s.Connections {
-			if conn.Phone == CanonicalSenderPhone {
-				canonicalInConns = true
-				break
-			}
-		}
-		if !canonicalInConns {
-			totalUnused += canonicalStats.Unused
-			totalUsed += canonicalStats.Used
 		}
 		s.UnusedAudios = totalUnused
 		s.UsedAudios = totalUsed

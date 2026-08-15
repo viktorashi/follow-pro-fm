@@ -13,11 +13,6 @@ import (
 	"time"
 )
 
-const (
-	CanonicalSenderPhone           = "+40734788254"
-	CanonicalSenderPhoneNormalized = "40734788254"
-)
-
 func NormalizePhone(phone string) string {
 	normalized := strings.ReplaceAll(phone, " ", "")
 	normalized = strings.ReplaceAll(normalized, "+", "")
@@ -272,10 +267,9 @@ func listUsedAudioFiles(rootDir string) ([]string, error) {
 
 func GetAudioDirForPhone(phone string, rootDir string) string {
 	normalized := NormalizePhone(phone)
-	if normalized == CanonicalSenderPhoneNormalized {
+	if normalized == "" {
 		return rootDir
 	}
-	// ensure the directory exists
 	dir := filepath.Join(rootDir, normalized)
 	_ = InitAudioPool(dir)
 	return dir
@@ -288,47 +282,36 @@ type PhoneAudioStats struct {
 
 func GetAudioStatsPerPhone(conns []WAConnectionState, rootDir string) map[string]PhoneAudioStats {
 	stats := make(map[string]PhoneAudioStats)
-
-	// Always ensure canonical phone has an entry
-	stats[CanonicalSenderPhone] = PhoneAudioStats{}
 	for _, conn := range conns {
 		stats[conn.Phone] = PhoneAudioStats{}
 	}
 
 	_ = filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
+		if err != nil || d.IsDir() {
 			return nil
 		}
 		if strings.HasSuffix(strings.ToLower(d.Name()), ".ogg") {
 			isUsed := filepath.Base(filepath.Dir(path)) == "used"
 
-			// Determine which phone this belongs to
 			rel, err := filepath.Rel(rootDir, path)
 			if err != nil {
 				return nil
 			}
 			parts := strings.Split(rel, string(os.PathSeparator))
+			if len(parts) == 0 {
+				return nil
+			}
 
-			phone := CanonicalSenderPhone
-			// If the file is in a subdirectory (other than "used" directly under rootDir), it belongs to a specific phone pool
-			if len(parts) > 1 && parts[0] != "used" {
-				normalized := parts[0]
-				// Find matching phone in conns
-				found := false
-				for _, conn := range conns {
-					if NormalizePhone(conn.Phone) == normalized {
-						phone = conn.Phone
-						found = true
-						break
-					}
-				}
-				if !found {
-					// Fallback if directory exists but phone not in conns
-					// We construct a pseudo-phone number to track it
-					phone = "+" + normalized
+			normalized := parts[0]
+			if normalized == "used" || normalized == "." {
+				return nil
+			}
+
+			phone := "+" + normalized
+			for _, conn := range conns {
+				if NormalizePhone(conn.Phone) == normalized {
+					phone = conn.Phone
+					break
 				}
 			}
 

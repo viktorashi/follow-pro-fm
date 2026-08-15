@@ -720,9 +720,6 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 									for _, phone := range phones {
 										<option value={ phone }>
 											{ phone }
-											if phone == CanonicalSenderPhone {
-												{ " (canonical)" }
-											}
 										</option>
 									}
 								</select>
