@@ -432,6 +432,23 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 	return wrapper, nil
 }
 
+func retryWhatsAppOperation[T any](operationName string, action func() (T, error)) (T, error) {
+	var result T
+	var err error
+	for i := 0; i < 3; i++ {
+		result, err = action()
+		if err == nil {
+			break
+		}
+		if strings.Contains(err.Error(), "463") || strings.Contains(err.Error(), "ReachoutTimelocked") {
+			break
+		}
+		fmt.Printf("   ⚠️ %s attempt %d failed: %v. Retrying in 2s...\n", operationName, i+1, err)
+		time.Sleep(2 * time.Second)
+	}
+	return result, err
+}
+
 // normalizePhoneNumber normalizes Romanian and international numbers to numbers-only format
 func normalizePhoneNumber(phone string) string {
 	phone = strings.ReplaceAll(phone, " ", "")
@@ -529,19 +546,9 @@ func SendVoiceNote(client WhatsAppClient, phone string, audioPath string) error 
 	}
 
 	// Upload to WhatsApp servers
-	var uploaded whatsmeow.UploadResponse
-	var uploadErr error
-	for i := 0; i < 3; i++ {
-		uploaded, uploadErr = client.Upload(context.Background(), audioData, whatsmeow.MediaAudio)
-		if uploadErr == nil {
-			break
-		}
-		if strings.Contains(uploadErr.Error(), "463") || strings.Contains(uploadErr.Error(), "ReachoutTimelocked") {
-			break
-		}
-		fmt.Printf("   ⚠️ Upload attempt %d failed: %v. Retrying in 2s...\n", i+1, uploadErr)
-		time.Sleep(2 * time.Second)
-	}
+	uploaded, uploadErr := retryWhatsAppOperation("Upload", func() (whatsmeow.UploadResponse, error) {
+		return client.Upload(context.Background(), audioData, whatsmeow.MediaAudio)
+	})
 	if uploadErr != nil {
 		return fmt.Errorf("failed to upload audio to WhatsApp after retries: %w", uploadErr)
 	}
@@ -570,19 +577,9 @@ func SendVoiceNote(client WhatsAppClient, phone string, audioPath string) error 
 	}
 
 	// Send message
-	var resp whatsmeow.SendResponse
-	var sendErr error
-	for i := 0; i < 3; i++ {
-		resp, sendErr = client.SendMessage(context.Background(), targetJID, msg)
-		if sendErr == nil {
-			break
-		}
-		if strings.Contains(sendErr.Error(), "463") || strings.Contains(sendErr.Error(), "ReachoutTimelocked") {
-			break
-		}
-		fmt.Printf("   ⚠️ Send message attempt %d failed: %v. Retrying in 2s...\n", i+1, sendErr)
-		time.Sleep(2 * time.Second)
-	}
+	resp, sendErr := retryWhatsAppOperation("Send message", func() (whatsmeow.SendResponse, error) {
+		return client.SendMessage(context.Background(), targetJID, msg)
+	})
 	if sendErr != nil {
 		return fmt.Errorf("failed to send message to %s after retries: %w", targetJID, sendErr)
 	}
