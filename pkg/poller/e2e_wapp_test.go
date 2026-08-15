@@ -45,10 +45,10 @@ func TestPoller_E2E(t *testing.T) {
 
 	wappClients := make(map[string]WhatsAppClient)
 
-	// Add Canonical
-	canonical, err := InitWhatsApp("+40734788254", dbPath, stateMgr, multiAlerter, "")
+	// Add initial sender client
+	primaryClient, err := InitWhatsApp("+40734788254", dbPath, stateMgr, multiAlerter, "")
 	if err == nil {
-		wappClients["+40734788254"] = canonical
+		wappClients["+40734788254"] = primaryClient
 		ensureConn("+40734788254")
 	}
 
