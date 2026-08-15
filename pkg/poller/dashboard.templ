@@ -468,7 +468,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 				}
 
 				const data = new FormData();
-				data.append('phone', form.phone.value);
+				data.append('person_slug', form.person_slug.value);
 				for (const file of stagedAudioFiles) {
 					data.append('audio', file, file.name);
 				}
