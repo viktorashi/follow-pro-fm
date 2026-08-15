@@ -122,6 +122,7 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.GET("/api/signatures/file", s.handleSignatureFile)
 	protected.POST("/api/signatures/transcribe", s.handleTranscribeSignature)
 	protected.POST("/unreviewed/crop", s.handleUnreviewedCrop)
+	protected.POST("/unreviewed/delete", s.handleUnreviewedDelete)
 	protected.POST("/api/unreviewed/remux-all", s.handleRemuxAllUnreviewed)
 }
 
@@ -869,6 +870,29 @@ func (s *TelemetryServer) handleUnreviewedCrop(c *echo.Context) error {
 		if transcript != "" {
 			_ = s.dbMgr.UpdateSignatureTranscript(c.Request().Context(), "canonical", filename, transcript)
 		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
+}
+
+func (s *TelemetryServer) handleUnreviewedDelete(c *echo.Context) error {
+	filename := c.FormValue("filename")
+	if !isSafeFilename(filename) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid filename"})
+	}
+
+	unreviewedDir := filepath.Join(s.dataDir, "signatures", "unreviewed")
+	targetPath := filepath.Join(unreviewedDir, filename)
+
+	if _, err := os.Stat(targetPath); err != nil {
+		if os.IsNotExist(err) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "file not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	if err := os.Remove(targetPath); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to delete file: " + err.Error()})
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
