@@ -612,24 +612,6 @@ func TestPoller_matchingCampaignArtistRequiresActualCampaignMatch(t *testing.T) 
 	}
 }
 
-func TestPoller_consumeIgnoredMetadataTrigger(t *testing.T) {
-	poller := &Poller{
-		ignoredTrigger: parseFingerprintTrigger("BTS - Butter.mp3"),
-	}
-
-	if !poller.consumeIgnoredMetadataTrigger(SongInfo{Artist: "BTS", Title: "CONCURS FOLLOW PROFM 2026 MUNCHEN - BUTTER"}) {
-		t.Fatal("Expected metadata trigger for the same campaign turn to be consumed after a fingerprint match")
-	}
-	if poller.ignoredTrigger.signatureName != "" {
-		t.Fatal("Expected ignored trigger to be cleared after consuming the matching metadata event")
-	}
-
-	poller.ignoredTrigger = parseFingerprintTrigger("BTS - Butter.mp3")
-	if poller.consumeIgnoredMetadataTrigger(SongInfo{Artist: "Kamrad", Title: "BE MINE"}) {
-		t.Fatal("Expected unrelated metadata trigger to remain eligible")
-	}
-}
-
 func TestPoller_captureContestAudioSharesOneSnapshotAndMetadata(t *testing.T) {
 	buffer := NewCircularAudioBuffer("", 16)
 	buffer.writeBytes([]byte("live audio"))
@@ -665,81 +647,6 @@ func TestPoller_matchingCampaignPhraseRequiresAnActiveCampaignPhrase(t *testing.
 	}
 	if _, _, matched := poller.matchingCampaignPhrase(now, "unrelated radio chat"); matched {
 		t.Fatal("unrelated transcription must not trigger a contest")
-	}
-}
-
-func TestPoller_checkSongFingerprintTriggeredTurnSkipsMetadataDashcamSave(t *testing.T) {
-	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
-	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"data": map[string]any{
-				"epg": map[string]string{
-					"playerExtendedSongTitle":    "BTS",
-					"playerExtendedSongSubtitle": "Butter",
-				},
-			},
-		})
-	}))
-	defer api.Close()
-
-	stateMgr := createMockStateMgr()
-	stateMgr.Update(func(s *AppState) {
-		s.GatheringSignatures = true
-	})
-
-	audioBuffer := NewCircularAudioBuffer("", 8)
-	audioBuffer.writeBytes([]byte("preroll"))
-
-	poller := &Poller{
-		APIURL:          api.URL,
-		ActiveCampaigns: []Campaign{{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"}},
-		StateMgr:        stateMgr,
-		AudioBuffer:     audioBuffer,
-		AudiosDir:       t.TempDir(),
-		SignaturesDir:   t.TempDir(),
-		ignoredTrigger:  parseFingerprintTrigger("BTS - Butter.mp3"),
-		SendVoiceNote: func(senderPhone, targetPhone, audioPath string) error {
-			t.Fatal("metadata path should have been ignored after fingerprint trigger")
-			return nil
-		},
-	}
-
-	currentSong := SongInfo{}
-	poller.checkSong(&currentSong, activeTime)
-
-	audioBuffer.mu.Lock()
-	isRecording := audioBuffer.isRecording
-	audioBuffer.mu.Unlock()
-
-	if isRecording {
-		t.Fatal("expected metadata-triggered dashcam save to stay off for a fingerprint-triggered turn")
-	}
-	if poller.ignoredTrigger.signatureName != "" {
-		t.Fatal("expected consumed fingerprint trigger to be cleared")
-	}
-}
-
-func TestPoller_resolveFingerprintSongUsesLiveMetadata(t *testing.T) {
-	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"data": map[string]any{
-				"epg": map[string]string{
-					"playerExtendedSongTitle":    "BTS",
-					"playerExtendedSongSubtitle": "2026 - Butter",
-				},
-			},
-		})
-	}))
-	defer api.Close()
-
-	poller := &Poller{APIURL: api.URL}
-	got := poller.resolveFingerprintSong(fingerprintTrigger{artist: "BTS", title: "Unknown"})
-
-	if got.Artist != "BTS" {
-		t.Fatalf("resolveFingerprintSong() artist = %q, want %q", got.Artist, "BTS")
-	}
-	if got.Title != "Butter" {
-		t.Fatalf("resolveFingerprintSong() title = %q, want %q", got.Title, "Butter")
 	}
 }
 
@@ -823,7 +730,7 @@ func TestPoller_doTriggerVoiceNote_ReportsOnlySuccessAfterSend(t *testing.T) {
 		},
 	}
 
-	poller.doTriggerVoiceNote(triggerSourceFingerprint, "BTS", "BTS", "Dynamite", bucharestTime(2026, time.June, 17, 12, 0, 0), 1, 0)
+	poller.doTriggerVoiceNote(triggerSourceFingerprint, "BTS", bucharestTime(2026, time.June, 17, 12, 0, 0), 1, 0)
 
 	if sendCalls != 1 {
 		t.Fatalf("SendVoiceNote() calls = %d, want 1", sendCalls)
@@ -861,7 +768,7 @@ func TestPoller_doTriggerVoiceNote_ReportsOnlyFailureAfterSendError(t *testing.T
 		},
 	}
 
-	poller.doTriggerVoiceNote(triggerSourceMetadata, "BTS", "BTS", "Dynamite", bucharestTime(2026, time.June, 17, 12, 0, 0), 1, 0)
+	poller.doTriggerVoiceNote(triggerSourceMetadata, "BTS", bucharestTime(2026, time.June, 17, 12, 0, 0), 1, 0)
 
 	if sendCalls != 1 {
 		t.Fatalf("SendVoiceNote() calls = %d, want 1", sendCalls)

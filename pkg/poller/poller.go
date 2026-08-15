@@ -130,13 +130,11 @@ type Poller struct {
 	matchesToday int
 	lastCheckDay int
 
-	ignoredTriggerMu sync.Mutex
-	ignoredTrigger   fingerprintTrigger
-	sendMu           sync.Mutex
-	checkerMu        sync.Mutex
-	checker          *ContestCheckCoordinator
-	captureMu        sync.Mutex
-	capture          *contestCapture
+	sendMu    sync.Mutex
+	checkerMu sync.Mutex
+	checker   *ContestCheckCoordinator
+	captureMu sync.Mutex
+	capture   *contestCapture
 }
 
 // contestCapture is the one shared observation of a live audio window. A tag
@@ -155,12 +153,6 @@ type contestTag struct {
 	CampaignArtist string
 	Phrase         string
 	SignatureName  string
-}
-
-type fingerprintTrigger struct {
-	signatureName string
-	artist        string
-	title         string
 }
 
 type metadataContestChecker struct {
@@ -286,38 +278,6 @@ func TriggerValuesMatch(left, right string) bool {
 	return strings.Contains(left, right) || strings.Contains(right, left)
 }
 
-func parseFingerprintTrigger(signatureName string) fingerprintTrigger {
-	base := strings.TrimSuffix(filepath.Base(signatureName), filepath.Ext(signatureName))
-	parts := strings.SplitN(base, " - ", 2)
-	trigger := fingerprintTrigger{signatureName: signatureName, artist: base, title: "Unknown"}
-	if len(parts) == 2 {
-		trigger.artist = parts[0]
-		trigger.title = parts[1]
-	}
-	return trigger
-}
-
-func isUnknownSongValue(value string) bool {
-	value = strings.TrimSpace(strings.ToLower(value))
-	return value == "" || strings.HasPrefix(value, "unknown")
-}
-
-func (p *Poller) resolveFingerprintSong(trigger fingerprintTrigger) SongInfo {
-	song := SongInfo{Artist: trigger.artist, Title: trigger.title}
-
-	nowPlaying, err := p.getNowPlaying()
-	if err != nil {
-		return song
-	}
-	if !isUnknownSongValue(nowPlaying.Artist) {
-		song.Artist = nowPlaying.Artist
-	}
-	if !isUnknownSongValue(nowPlaying.Title) {
-		song.Title = nowPlaying.Title
-	}
-	return song
-}
-
 func hasExistingSignatureForSong(dir string, prefix string) (bool, string) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -435,21 +395,6 @@ func (p *Poller) reportSavedUnreviewedChunk(song SongInfo, filename string, reco
 		ActionLabel: "View Dashboard",
 		ActionURL:   p.BaseURL,
 	})
-}
-
-func (p *Poller) consumeIgnoredMetadataTrigger(song SongInfo) bool {
-	p.ignoredTriggerMu.Lock()
-	defer p.ignoredTriggerMu.Unlock()
-
-	if p.ignoredTrigger.signatureName == "" {
-		return false
-	}
-
-	ignored := TriggerValuesMatch(p.ignoredTrigger.artist, song.Artist) || TriggerValuesMatch(p.ignoredTrigger.title, song.Title)
-	if ignored {
-		p.ignoredTrigger = fingerprintTrigger{}
-	}
-	return ignored
 }
 
 func (p *Poller) matchingCampaignArtist(now time.Time, song SongInfo) (string, bool) {
@@ -750,13 +695,8 @@ func (p *Poller) checkSongWithCoordinator(currentSong *SongInfo, now time.Time, 
 			if p.hasReachedDailyLimit(now) {
 				log.Printf("   [INFO] Daily limit of %d matches reached. Ignoring further campaign matches for today.", MaxDailyMatches)
 			} else {
-				if !coordinator.Claim(now, triggerSourceMetadata) {
-					return
-				}
-				if p.consumeIgnoredMetadataTrigger(song) {
-					log.Printf("   [INFO] Ignoring metadata trigger for '%s - %s' because it was already triggered by fingerprint.", song.Artist, song.Title)
-				} else {
-					p.evaluateAndTriggerCampaign(now, song, campaignArtist, triggerSourceMetadata, currentRadioLogID, fmt.Sprintf("%q", campaignArtist), func(matchIndex int, currentRadioLogID int64) {
+				if !p.wasSongPlayedRecently(song.Artist, song.Title) && coordinator.Claim(now, triggerSourceMetadata) {
+					p.evaluateAndTriggerCampaign(now, campaignArtist, triggerSourceMetadata, currentRadioLogID, fmt.Sprintf("%q", campaignArtist), func(matchIndex int, currentRadioLogID int64) {
 						if p.StateMgr != nil && p.StateMgr.Get().GatheringSignatures && p.AudioBuffer != nil {
 							// Metadata-only detections extend the preserved pre-roll by 4 minutes.
 							p.AudioBuffer.Trigger(dashcamAfterDuration, func(data []byte) {
@@ -827,7 +767,7 @@ func (p *Poller) wasSongPlayedRecently(artist, title string) bool {
 	return played
 }
 
-func (p *Poller) claimScheduledMatch(now time.Time, artist, title string) (int, bool) {
+func (p *Poller) claimScheduledMatch(now time.Time, campaignArtist string) (int, bool) {
 	p.matchesMu.Lock()
 	if now.YearDay() != p.lastCheckDay {
 		p.matchesToday = 0
@@ -845,11 +785,11 @@ func (p *Poller) claimScheduledMatch(now time.Time, artist, title string) (int, 
 
 	selected, err := IsMatchSelectedToday(p.DBMgr, now, matchIndex)
 	if err != nil {
-		log.Printf("   ⚠️ Failed to evaluate RNG schedule for %s (%s - %s): %v", now.Format("2006-01-02"), artist, title, err)
+		log.Printf("   ⚠️ Failed to evaluate RNG schedule for %s (Campaign: %s): %v", now.Format("2006-01-02"), campaignArtist, err)
 		return matchIndex, false
 	}
 	if !selected {
-		log.Printf("   [RNG] Match #%d for '%s - %s' is not scheduled today. Skipping send.", matchIndex, artist, title)
+		log.Printf("   [RNG] Match #%d for campaign %q is not scheduled today. Skipping send.", matchIndex, campaignArtist)
 		return matchIndex, false
 	}
 
@@ -881,26 +821,22 @@ func (p *Poller) checkCampaignResendGate(campaignArtist string, currentRadioLogI
 	return allowed, currentRadioLogID
 }
 
-func (p *Poller) evaluateAndTriggerCampaign(now time.Time, song SongInfo, campaignArtist, triggerSource string, currentRadioLogID int64, logLabel string, onSuccess func(matchIndex int, currentRadioLogID int64)) {
-	if p.wasSongPlayedRecently(song.Artist, song.Title) {
-		return
-	}
-
+func (p *Poller) evaluateAndTriggerCampaign(now time.Time, campaignArtist, triggerSource string, currentRadioLogID int64, logLabel string, onSuccess func(matchIndex int, currentRadioLogID int64)) {
 	allowed, currentRadioLogID := p.checkCampaignResendGate(campaignArtist, currentRadioLogID, logLabel)
 	if !allowed {
 		return
 	}
 
-	matchIndex, selected := p.claimScheduledMatch(now, song.Artist, song.Title)
+	matchIndex, selected := p.claimScheduledMatch(now, campaignArtist)
 	if selected {
-		p.doTriggerVoiceNote(triggerSource, campaignArtist, song.Artist, song.Title, now, matchIndex, currentRadioLogID)
+		p.doTriggerVoiceNote(triggerSource, campaignArtist, now, matchIndex, currentRadioLogID)
 		if onSuccess != nil {
 			onSuccess(matchIndex, currentRadioLogID)
 		}
 	}
 }
 
-func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist, artist, title string, now time.Time, matchIndex int, currentRadioLogID int64) {
+func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist string, now time.Time, matchIndex int, currentRadioLogID int64) {
 	p.sendMu.Lock()
 	defer p.sendMu.Unlock()
 
@@ -914,13 +850,11 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist, artist, title
 	msg := dedent.Dedent(fmt.Sprintf(`
 							🎉 [VEZI BAA ca se aude piesa]
 							Trigger: %s
-							Artistu: %s
-
-							Piesa: %s
+							Campanie: %s
 
 							(Match-ul %d/%d de azi)
 								`,
-		triggerSource, artist, title, matchIndex, MaxDailyMatches))
+		triggerSource, campaignArtist, matchIndex, MaxDailyMatches))
 	log.Println("   " + msg)
 
 	p.StateMgr.Update(func(s *AppState) {
@@ -952,10 +886,10 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist, artist, title
 			s.Status = StatusAudioExhausted
 			s.LastError = "No unused audios available!"
 		})
-		log.Printf("   ❌ NO UNUSED AUDIO FOUND FOR %s!", artist)
+		log.Printf("   ❌ NO UNUSED AUDIO FOUND FOR %s!", campaignArtist)
 		_ = p.Alerter.AlertCritical(AlertEvent{
 			Title:       "AUDIO POOL EXHAUSTED",
-			Message:     "Cannot send voice note for " + artist + "\nNo unused audio files found in " + p.AudiosDir,
+			Message:     "Cannot send voice note for " + campaignArtist + "\nNo unused audio files found in " + p.AudiosDir,
 			ActionLabel: "View Dashboard",
 			ActionURL:   p.BaseURL,
 		})
@@ -987,13 +921,13 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist, artist, title
 
 			_ = p.Alerter.AlertCritical(AlertEvent{
 				Title:       "Voice Note Failed",
-				Message:     fmt.Sprintf("Could not send voice note to %s from %s\nTrigger: %s\nArtist: %s\nPiesa: %s\nEroare: %v", p.TargetPhone, job.Phone, triggerSource, artist, title, err),
+				Message:     fmt.Sprintf("Could not send voice note to %s from %s\nTrigger: %s\nCampanie: %s\nEroare: %v", p.TargetPhone, job.Phone, triggerSource, campaignArtist, err),
 				ActionLabel: "View Dashboard",
 				ActionURL:   p.BaseURL,
 			})
 		} else {
 			if p.DBMgr != nil {
-				if err := p.DBMgr.RecordSuccessfulSend(context.Background(), campaignArtist, artist, title, job.AudioHash, currentRadioLogID, now); err != nil {
+				if err := p.DBMgr.RecordSuccessfulSend(context.Background(), campaignArtist, campaignArtist, triggerSource, job.AudioHash, currentRadioLogID, now); err != nil {
 					log.Printf("   ❌ Voice note sent from %s but persistence update failed: %v\n", job.Phone, err)
 					lastErr = err
 					continue
@@ -1011,11 +945,10 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist, artist, title
 		msg := dedent.Dedent(fmt.Sprintf(`
 			S-au trimis %d vocal(uri) pe Wapp la nr: %s
 			Trigger: %s
-			Artist: %s
-			Piesa: %s
+			Campanie: %s
 			Fisiere audio trimise:
 			%s
-			`, len(sentFiles), p.TargetPhone, triggerSource, artist, title, filesStr))
+			`, len(sentFiles), p.TargetPhone, triggerSource, campaignArtist, filesStr))
 		log.Println("✅", msg)
 		_ = p.Alerter.AlertSuccess(AlertEvent{
 			Title:       "Voice Note(s) Sent",
@@ -1118,25 +1051,9 @@ func (p *Poller) checkFingerprintWithCoordinator(now time.Time, coordinator *Con
 		return
 	}
 
-	trigger := fingerprintTrigger{signatureName: name, artist: campaignArtist, title: "Unknown"}
-	song := p.resolveFingerprintSong(trigger)
-	p.tagCapture(capture, contestTag{Source: triggerSourceFingerprint, CampaignArtist: campaignArtist, SignatureName: name})
-
-	p.ignoredTriggerMu.Lock()
-	if p.ignoredTrigger.signatureName == name {
-		p.ignoredTriggerMu.Unlock()
-		return
-	}
-	p.ignoredTrigger = trigger
-	p.ignoredTriggerMu.Unlock()
-
-	if p.Alerter != nil {
-		msg := fmt.Sprintf("🎵 Contest Song Detected (via Fingerprint)!\nArtist: %s\nTitle: %s\n\n(This is an instant notification; automatic send rules apply independently.)", song.Artist, song.Title)
-		_ = p.Alerter.AlertSuccess(AlertEvent{Title: "Contest Song Playing", Message: msg})
-	}
-
-	log.Printf("   [FINGERPRINT MATCH] Matched signature: %s -> %s - %s", name, song.Artist, song.Title)
-	p.evaluateAndTriggerCampaign(now, song, campaignArtist, triggerSourceFingerprint, 0, fmt.Sprintf("fingerprint match %q", name), func(matchIndex int, currentRadioLogID int64) {
+	log.Printf("   [FINGERPRINT MATCH] Matched signature: %s", name)
+	p.evaluateAndTriggerCampaign(now, campaignArtist, triggerSourceFingerprint, 0, fmt.Sprintf("fingerprint match %q", name), func(matchIndex int, currentRadioLogID int64) {
+		p.tagCapture(capture, contestTag{Source: triggerSourceFingerprint, CampaignArtist: campaignArtist, SignatureName: name})
 		if p.StateMgr != nil && p.StateMgr.Get().GatheringSignatures {
 			p.saveCapturedChunkForReview(capture, contestTag{Source: triggerSourceFingerprint, CampaignArtist: campaignArtist, SignatureName: name})
 		}
@@ -1197,16 +1114,12 @@ func (p *Poller) handleTranscriptWithCoordinator(now time.Time, coordinator *Con
 	}
 	tag := contestTag{Source: triggerSourceTranscription, CampaignArtist: campaignArtist, Phrase: phrase}
 	p.tagCapture(capture, tag)
-	song := capture.Metadata
-	if song == (SongInfo{}) {
-		song = p.resolveFingerprintSong(fingerprintTrigger{artist: campaignArtist, title: phrase})
-	}
 
 	if p.Alerter != nil {
 		msg := fmt.Sprintf("🎵 Contest Phrase Detected (via Transcription)!\nPhrase: %s\nCampaign: %s\n\n(This is an instant notification; automatic send rules apply independently.)", phrase, campaignArtist)
 		_ = p.Alerter.AlertSuccess(AlertEvent{Title: "Contest Song Playing", Message: msg})
 	}
-	p.evaluateAndTriggerCampaign(now, song, campaignArtist, triggerSourceTranscription, 0, "transcription match", func(matchIndex int, currentRadioLogID int64) {
+	p.evaluateAndTriggerCampaign(now, campaignArtist, triggerSourceTranscription, 0, fmt.Sprintf("transcription match %q", phrase), func(matchIndex int, currentRadioLogID int64) {
 		log.Printf("   [TRANSCRIPTION MATCH] %q matched campaign phrase %q", transcript, phrase)
 		if p.StateMgr != nil && p.StateMgr.Get().GatheringSignatures {
 			p.saveCapturedChunkForReview(capture, tag)
