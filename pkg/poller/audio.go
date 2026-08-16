@@ -22,7 +22,7 @@ func NormalizePhone(phone string) string {
 // InitAudioPool ensures the used directory exists.
 func InitAudioPool(audiosDir string) error {
 	usedDir := filepath.Join(audiosDir, "used")
-	return os.MkdirAll(usedDir, 0755)
+	return os.MkdirAll(usedDir, 0o755)
 }
 
 // GetAudioStats returns the count of unused and used audio files.
@@ -143,7 +143,7 @@ func MarkAudioUsed(audioPath string) error {
 	base := filepath.Base(audioPath)
 	usedDir := filepath.Join(dir, "used")
 
-	if err := os.MkdirAll(usedDir, 0755); err != nil {
+	if err := os.MkdirAll(usedDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create used directory: %w", err)
 	}
 
@@ -279,7 +279,7 @@ func MoveAudioFiles(sourceDir, targetDir string, filenames []string) error {
 	if err := InitAudioPool(targetDir); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Join(targetDir, "used"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(targetDir, "used"), 0o755); err != nil {
 		return err
 	}
 
@@ -333,11 +333,11 @@ func ListAudioFilesForPerson(personSlug string, rootDir string) ([]string, []str
 	return active, used, nil
 }
 
-func GetAudioStatsPerPerson(persons []Person, rootDir string) map[string]PhoneAudioStats {
-	stats := make(map[string]PhoneAudioStats)
+func GetAudioStatsPerPerson(persons []Person, rootDir string) map[string]PersonAudioStats {
+	stats := make(map[string]PersonAudioStats)
 	for _, p := range persons {
 		unused, used := GetAudioStats(GetAudioDirForPerson(p.Slug, rootDir))
-		stats[p.Slug] = PhoneAudioStats{Unused: unused, Used: used}
+		stats[p.Slug] = PersonAudioStats{Unused: unused, Used: used}
 	}
 	return stats
 }
@@ -352,56 +352,7 @@ func GetAudioDirForPhone(phone string, rootDir string) string {
 	return dir
 }
 
-type PhoneAudioStats struct {
+type PersonAudioStats struct {
 	Unused int
 	Used   int
-}
-
-func GetAudioStatsPerPhone(conns []WAConnectionState, rootDir string) map[string]PhoneAudioStats {
-	stats := make(map[string]PhoneAudioStats)
-	for _, conn := range conns {
-		stats[conn.Phone] = PhoneAudioStats{}
-	}
-
-	_ = filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		if strings.HasSuffix(strings.ToLower(d.Name()), ".ogg") {
-			isUsed := filepath.Base(filepath.Dir(path)) == "used"
-
-			rel, err := filepath.Rel(rootDir, path)
-			if err != nil {
-				return nil
-			}
-			parts := strings.Split(rel, string(os.PathSeparator))
-			if len(parts) == 0 {
-				return nil
-			}
-
-			normalized := parts[0]
-			if normalized == "used" || normalized == "." {
-				return nil
-			}
-
-			phone := "+" + normalized
-			for _, conn := range conns {
-				if NormalizePhone(conn.Phone) == normalized {
-					phone = conn.Phone
-					break
-				}
-			}
-
-			s := stats[phone]
-			if isUsed {
-				s.Used++
-			} else {
-				s.Unused++
-			}
-			stats[phone] = s
-		}
-		return nil
-	})
-
-	return stats
 }
