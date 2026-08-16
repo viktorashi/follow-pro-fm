@@ -564,13 +564,13 @@ func (p *Poller) runMetadataChecker(checker ContestChecker, checkImmediately boo
 }
 
 func (p *Poller) refreshAudioStats(s *AppState) {
-	personStats := make(map[string]PhoneAudioStats)
+	personStats := make(map[string]PersonAudioStats)
 	totalUnused := 0
 	totalUsed := 0
 
 	for _, person := range s.Persons {
 		unused, used := GetAudioStats(GetAudioDirForPerson(person.Slug, p.AudiosDir))
-		personStats[person.Slug] = PhoneAudioStats{Unused: unused, Used: used}
+		personStats[person.Slug] = PersonAudioStats{Unused: unused, Used: used}
 		totalUnused += unused
 		totalUsed += used
 	}
