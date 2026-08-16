@@ -163,6 +163,7 @@ func initSchema(db *sql.DB) error {
 
 	// Migrations
 	_, _ = db.Exec(`ALTER TABLE signature_files ADD COLUMN transcript TEXT DEFAULT '';`)
+	_, _ = db.Exec(`ALTER TABLE signature_files ADD COLUMN tags TEXT DEFAULT '';`)
 	_, _ = db.Exec(`ALTER TABLE played_songs RENAME COLUMN played_date TO played_datetime;`)
 	_, _ = db.Exec(`ALTER TABLE sender_sessions ADD COLUMN person_id INTEGER REFERENCES persons(id) ON DELETE SET NULL;`)
 
@@ -729,22 +730,25 @@ type SignatureFile struct {
 	RecordedAt     time.Time
 	CampaignArtist string
 	Transcript     string
+	Tags           string
 }
 
-func (m *DBManager) UpsertSignatureFile(ctx context.Context, bucket, filename string, recordedAt time.Time, campaignArtist, transcript string) error {
+func (m *DBManager) UpsertSignatureFile(ctx context.Context, bucket, filename string, recordedAt time.Time, campaignArtist, transcript, tags string) error {
 	_, err := m.db.ExecContext(
 		ctx,
-		`INSERT INTO signature_files (bucket, filename, recorded_at, campaign_artist, transcript)
-		 VALUES (?, ?, ?, ?, ?)
+		`INSERT INTO signature_files (bucket, filename, recorded_at, campaign_artist, transcript, tags)
+		 VALUES (?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(bucket, filename) DO UPDATE SET
 		   recorded_at = excluded.recorded_at,
 		   campaign_artist = excluded.campaign_artist,
-		   transcript = excluded.transcript`,
+		   transcript = excluded.transcript,
+		   tags = excluded.tags`,
 		bucket,
 		filename,
 		recordedAt.Format(time.RFC3339),
 		campaignArtist,
 		transcript,
+		tags,
 	)
 	return err
 }
@@ -765,12 +769,12 @@ func (m *DBManager) GetSignatureFile(ctx context.Context, bucket, filename strin
 	var recordedAt string
 	err := m.db.QueryRowContext(
 		ctx,
-		`SELECT bucket, filename, recorded_at, campaign_artist, transcript
+		`SELECT bucket, filename, recorded_at, campaign_artist, transcript, tags
 		 FROM signature_files
 		 WHERE bucket = ? AND filename = ?`,
 		bucket,
 		filename,
-	).Scan(&meta.Bucket, &meta.Filename, &recordedAt, &meta.CampaignArtist, &meta.Transcript)
+	).Scan(&meta.Bucket, &meta.Filename, &recordedAt, &meta.CampaignArtist, &meta.Transcript, &meta.Tags)
 	if err != nil {
 		return SignatureFile{}, err
 	}
@@ -787,7 +791,7 @@ func (m *DBManager) CopySignatureFile(ctx context.Context, fromBucket, toBucket,
 	if err != nil {
 		return err
 	}
-	return m.UpsertSignatureFile(ctx, toBucket, filename, meta.RecordedAt, meta.CampaignArtist, meta.Transcript)
+	return m.UpsertSignatureFile(ctx, toBucket, filename, meta.RecordedAt, meta.CampaignArtist, meta.Transcript, meta.Tags)
 }
 
 func (m *DBManager) AddCampaignPhrase(ctx context.Context, campaignArtist, phrase string) error {
