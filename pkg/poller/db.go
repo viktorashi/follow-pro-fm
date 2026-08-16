@@ -812,3 +812,31 @@ func (m *DBManager) GetCampaignPhrases(ctx context.Context, campaignArtist strin
 	}
 	return phrases, rows.Err()
 }
+
+type CampaignPhrase struct {
+	CampaignArtist string `json:"campaign_artist"`
+	Phrase         string `json:"phrase"`
+}
+
+func (m *DBManager) ListAllCampaignPhrases(ctx context.Context) (map[string][]CampaignPhrase, error) {
+	rows, err := m.db.QueryContext(ctx, "SELECT campaign_artist, phrase FROM campaign_phrases ORDER BY campaign_artist, phrase")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	phrases := make(map[string][]CampaignPhrase)
+	for rows.Next() {
+		var p CampaignPhrase
+		if err := rows.Scan(&p.CampaignArtist, &p.Phrase); err != nil {
+			return nil, err
+		}
+		phrases[p.CampaignArtist] = append(phrases[p.CampaignArtist], p)
+	}
+	return phrases, rows.Err()
+}
+
+func (m *DBManager) DeleteCampaignPhrase(ctx context.Context, campaignArtist, phrase string) error {
+	_, err := m.db.ExecContext(ctx, "DELETE FROM campaign_phrases WHERE campaign_artist = ? AND phrase = ?", normalizeCampaignArtistKey(campaignArtist), strings.ToLower(strings.TrimSpace(phrase)))
+	return err
+}
