@@ -673,7 +673,7 @@ func TestPoller_saveUnreviewedChunkForReviewAlertsOnceWhenSaved(t *testing.T) {
 		BaseURL:       "http://localhost:8080",
 	}
 
-	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"), "")
+	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"), "", contestTag{})
 
 	if len(alerter.infoEvents) != 1 {
 		t.Fatalf("AlertInfo() calls = %d, want 1", len(alerter.infoEvents))
@@ -706,7 +706,7 @@ func TestPoller_saveUnreviewedChunkForReviewStoresCampaignOwnership(t *testing.T
 	}
 
 	t.Setenv("BYPASS_CAMPAIGN_TIME_CHECKS", "true")
-	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"), "")
+	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"), "", contestTag{})
 
 	files, err := os.ReadDir(filepath.Join(signaturesDir, BucketUnreviewed))
 	if err != nil {

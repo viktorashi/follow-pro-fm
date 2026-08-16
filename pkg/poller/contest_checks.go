@@ -27,6 +27,7 @@ type ContestCheckCoordinator struct {
 	lastClaimedAt    time.Time
 	lastClaimedBy    string
 	lastClaimPattern string
+	lateMatches      []ClaimDetails
 }
 
 func NewContestCheckCoordinator(cooldown time.Duration) *ContestCheckCoordinator {
@@ -49,9 +50,9 @@ func (c *ContestCheckCoordinator) Claim(now time.Time, source string, pattern st
 	defer c.mu.Unlock()
 
 	if now.Before(c.until) {
-		// It's already claimed, but log telemetry if it was claimed recently
 		diff := now.Sub(c.lastClaimedAt)
 		if diff <= 60*time.Second && c.lastClaimedBy != source {
+			c.lateMatches = append(c.lateMatches, ClaimDetails{Source: source, Pattern: pattern, ClaimedAt: now})
 			log.Printf("   📊 [TELEMETRY] Checker %q (%q) triggered %v after the first checker (%q: %q)", source, pattern, diff.Round(10*time.Millisecond), c.lastClaimedBy, c.lastClaimPattern)
 		}
 		return false
@@ -62,5 +63,39 @@ func (c *ContestCheckCoordinator) Claim(now time.Time, source string, pattern st
 	c.lastClaimedAt = now
 	c.lastClaimedBy = source
 	c.lastClaimPattern = pattern
+	c.lateMatches = nil // reset for new claim
 	return true
+}
+
+// ClaimDetails holds the winner's identity for loser diagnostics.
+type ClaimDetails struct {
+	Source    string
+	Pattern   string
+	ClaimedAt time.Time
+}
+
+// ActiveClaim returns the current winner's info if we're still inside the
+// 60-second telemetry window after a claim. Returns false if no recent claim
+// exists (losers outside the window should not dump).
+func (c *ContestCheckCoordinator) ActiveClaim(now time.Time) (ClaimDetails, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if now.Before(c.until) && now.Sub(c.lastClaimedAt) <= 60*time.Second {
+		return ClaimDetails{
+			Source:    c.lastClaimedBy,
+			Pattern:   c.lastClaimPattern,
+			ClaimedAt: c.lastClaimedAt,
+		}, true
+	}
+	return ClaimDetails{}, false
+}
+
+// GetLateMatches returns all late matches that occurred during the 60s telemetry window of a specific claim.
+func (c *ContestCheckCoordinator) GetLateMatches(claimedAt time.Time) []ClaimDetails {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.lastClaimedAt.Equal(claimedAt) {
+		return append([]ClaimDetails(nil), c.lateMatches...)
+	}
+	return nil
 }
