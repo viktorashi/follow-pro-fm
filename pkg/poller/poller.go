@@ -61,15 +61,14 @@ type Campaign struct {
 	StartDate string // Format: "02-01-2006"
 	EndDate   string // Format: "02-01-2006"
 	Artist    string
-	Phrases   []string // Spoken contest phrases accepted for this campaign.
 }
 
 // DefaultActiveCampaigns defines the active campaign dates, artists, and phrases.
 var DefaultActiveCampaigns = []Campaign{
-	{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS", Phrases: []string{"follow profm"}},
-	{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana", Phrases: []string{"follow profm"}},
-	{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd", Phrases: []string{"follow profm"}},
-	{StartDate: "7-09-2026", EndDate: "18-09-2026", Artist: "Shakira", Phrases: []string{"follow profm"}},
+	{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
+	{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana"},
+	{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd"},
+	{StartDate: "7-09-2026", EndDate: "18-09-2026", Artist: "Shakira"},
 }
 
 // IsActive checks if the current time falls within the campaign date period
@@ -1087,7 +1086,7 @@ func (p *Poller) matchingCampaignPhrase(now time.Time, transcript string) (strin
 		if !campaign.IsActive(now) {
 			continue
 		}
-		phrases := append([]string(nil), campaign.Phrases...)
+		phrases := []string(nil)
 		if p.DBMgr != nil {
 			dbPhrases, _ := p.DBMgr.GetCampaignPhrases(context.Background(), campaign.Artist)
 			phrases = append(phrases, dbPhrases...)
