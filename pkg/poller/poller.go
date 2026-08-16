@@ -189,23 +189,26 @@ func (p *Poller) captureContestAudio(now time.Time, metadata SongInfo) *contestC
 	if p.AudioBuffer == nil {
 		return nil
 	}
+
+	p.captureMu.Lock()
+	defer p.captureMu.Unlock()
+	if p.capture != nil && now.Sub(p.capture.CapturedAt) < contestCaptureWindow {
+		if metadata != (SongInfo{}) {
+			p.capture.Metadata = metadata
+		}
+		return p.capture
+	}
+
+	// New capture window — take the expensive snapshots only here.
 	snapshot := p.AudioBuffer.Snapshot()
 	if len(snapshot.Data) == 0 {
 		return nil
 	}
-
 	var transcripts []TimedItem[string]
 	if p.TranscriptionBuffer != nil {
 		transcripts = p.TranscriptionBuffer.GetWindow(now.Add(-10*time.Minute), now)
 	}
-
-	p.captureMu.Lock()
-	defer p.captureMu.Unlock()
-	if p.capture == nil || now.Sub(p.capture.CapturedAt) >= contestCaptureWindow {
-		p.capture = &contestCapture{Audio: snapshot, CapturedAt: now, Metadata: metadata, Transcripts: transcripts}
-	} else if metadata != (SongInfo{}) {
-		p.capture.Metadata = metadata
-	}
+	p.capture = &contestCapture{Audio: snapshot, CapturedAt: now, Metadata: metadata, Transcripts: transcripts}
 	return p.capture
 }
 
