@@ -120,6 +120,7 @@ type Poller struct {
 	AudiosDir                    string
 	SignaturesDir                string
 	AudioBuffer                  *CircularAudioBuffer
+	TranscriptionBuffer          *TimeSeriesBuffer[string]
 	DBMgr                        *DBManager
 	BaseURL                      string
 	ContestCheckCooldown         time.Duration
@@ -141,11 +142,11 @@ type Poller struct {
 // can only exist on this captured evidence, and every tag is consumed by a
 // checker before it can affect sending or signature review.
 type contestCapture struct {
-	Audio      AudioSnapshot
-	CapturedAt time.Time
-	Metadata   SongInfo
-	Tags       []contestTag
-	Transcript string
+	Audio       AudioSnapshot
+	CapturedAt  time.Time
+	Metadata    SongInfo
+	Tags        []contestTag
+	Transcripts []TimedItem[string]
 }
 
 type contestTag struct {
@@ -192,10 +193,16 @@ func (p *Poller) captureContestAudio(now time.Time, metadata SongInfo) *contestC
 	if len(snapshot.Data) == 0 {
 		return nil
 	}
+
+	var transcripts []TimedItem[string]
+	if p.TranscriptionBuffer != nil {
+		transcripts = p.TranscriptionBuffer.GetWindow(now.Add(-10*time.Minute), now)
+	}
+
 	p.captureMu.Lock()
 	defer p.captureMu.Unlock()
 	if p.capture == nil || now.Sub(p.capture.CapturedAt) >= contestCaptureWindow {
-		p.capture = &contestCapture{Audio: snapshot, CapturedAt: now, Metadata: metadata}
+		p.capture = &contestCapture{Audio: snapshot, CapturedAt: now, Metadata: metadata, Transcripts: transcripts}
 	} else if metadata != (SongInfo{}) {
 		p.capture.Metadata = metadata
 	}
@@ -302,7 +309,10 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte, transc
 						ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 						defer cancel()
 						if t, err := p.Transcribe(ctx, audioData); err == nil && t != "" && p.DBMgr != nil {
-							_ = p.DBMgr.UpdateSignatureTranscript(context.Background(), BucketUnreviewed, f, t)
+							items := []TimedItem[string]{{Timestamp: time.Now(), Value: t}}
+							if b, err := json.Marshal(items); err == nil {
+								_ = p.DBMgr.UpdateSignatureTranscript(context.Background(), BucketUnreviewed, f, string(b))
+							}
 						}
 					}(data, filename)
 				}
@@ -326,7 +336,10 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte, transc
 						ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 						defer cancel()
 						if t, err := p.Transcribe(ctx, audioData); err == nil && t != "" && p.DBMgr != nil {
-							_ = p.DBMgr.UpdateSignatureTranscript(context.Background(), BucketUnreviewed, f, t)
+							items := []TimedItem[string]{{Timestamp: time.Now(), Value: t}}
+							if b, err := json.Marshal(items); err == nil {
+								_ = p.DBMgr.UpdateSignatureTranscript(context.Background(), BucketUnreviewed, f, string(b))
+							}
 						}
 					}(data, filename)
 				}
@@ -347,7 +360,15 @@ func (p *Poller) saveCapturedChunkForReview(capture *contestCapture, tag contest
 	if song == (SongInfo{}) {
 		song = SongInfo{Artist: tag.CampaignArtist, Title: tag.Phrase}
 	}
-	p.saveUnreviewedChunkForReview(song, capture.Audio.Data, capture.Transcript)
+
+	var transcriptJSON string
+	if len(capture.Transcripts) > 0 {
+		if b, err := json.Marshal(capture.Transcripts); err == nil {
+			transcriptJSON = string(b)
+		}
+	}
+
+	p.saveUnreviewedChunkForReview(song, capture.Audio.Data, transcriptJSON)
 }
 
 func (p *Poller) reportSavedUnreviewedChunk(song SongInfo, filename string, recordedAt time.Time, transcript string) {
@@ -664,7 +685,7 @@ func (c *metadataContestChecker) Check(now time.Time) {
 			if p.hasReachedDailyLimit(now) {
 				log.Printf("   [INFO] Daily limit of %d matches reached. Ignoring further campaign matches for today.", MaxDailyMatches)
 			} else {
-				if !p.wasSongPlayedRecently(song.Artist, song.Title) && coordinator.Claim(now, triggerSourceMetadata) {
+				if !p.wasSongPlayedRecently(song.Artist, song.Title) && coordinator.Claim(now, triggerSourceMetadata, campaignArtist) {
 					p.evaluateAndTriggerCampaign(now, campaignArtist, triggerSourceMetadata, currentRadioLogID, fmt.Sprintf("%q", campaignArtist), func(matchIndex int, currentRadioLogID int64) {
 						if p.StateMgr != nil && p.StateMgr.Get().GatheringSignatures && p.AudioBuffer != nil {
 							// Metadata-only detections extend the preserved pre-roll by 4 minutes.
@@ -982,7 +1003,7 @@ func (c *fingerprintContestChecker) Check(now time.Time) {
 		log.Printf("   ⚠️ Fingerprint matching failed: %v", err)
 		return
 	}
-	if !matched || !coordinator.Claim(now, triggerSourceFingerprint) {
+	if !matched || !coordinator.Claim(now, triggerSourceFingerprint, name) {
 		return
 	}
 
@@ -1044,6 +1065,9 @@ func (c *transcriptionContestChecker) Check(now time.Time) {
 // coordinator and persistence safeguards as the batch fallback.
 func (p *Poller) HandleStreamingTranscript(transcript string) {
 	now := time.Now()
+	if p.TranscriptionBuffer != nil {
+		p.TranscriptionBuffer.Append(transcript, now)
+	}
 	if !p.canRunContestChecker(now) {
 		return
 	}
@@ -1054,12 +1078,9 @@ func (p *Poller) handleTranscriptWithCoordinator(now time.Time, coordinator *Con
 	if capture == nil || !coordinator.CanCheck(now) || p.hasReachedDailyLimit(now) {
 		return
 	}
-	p.captureMu.Lock()
-	capture.Transcript = transcript
-	p.captureMu.Unlock()
 
 	campaignArtist, phrase, matched := p.matchingCampaignPhrase(now, transcript)
-	if !matched || !coordinator.Claim(now, triggerSourceTranscription) {
+	if !matched || !coordinator.Claim(now, triggerSourceTranscription, phrase) {
 		return
 	}
 	tag := contestTag{Source: triggerSourceTranscription, CampaignArtist: campaignArtist, Phrase: phrase}

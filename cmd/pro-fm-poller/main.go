@@ -493,6 +493,7 @@ func main() {
 		AudiosDir:            audiosDir,
 		SignaturesDir:        filepath.Join(filepath.Dir(audiosDir), poller.DirSignatures),
 		AudioBuffer:          audioBuffer,
+		TranscriptionBuffer:  poller.NewTimeSeriesBuffer[string](10 * time.Minute),
 		DBMgr:                dbMgr,
 		BaseURL:              baseURL,
 		ContestCheckCooldown: contestCheckCooldown,

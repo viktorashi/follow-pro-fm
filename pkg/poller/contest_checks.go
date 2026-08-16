@@ -21,11 +21,12 @@ type ContestChecker interface {
 // ContestCheckCoordinator gives every detection source one shared cooldown.
 // A checker claims it only after finding a campaign candidate.
 type ContestCheckCoordinator struct {
-	mu            sync.Mutex
-	cooldown      time.Duration
-	until         time.Time
-	lastClaimedAt time.Time
-	lastClaimedBy string
+	mu               sync.Mutex
+	cooldown         time.Duration
+	until            time.Time
+	lastClaimedAt    time.Time
+	lastClaimedBy    string
+	lastClaimPattern string
 }
 
 func NewContestCheckCoordinator(cooldown time.Duration) *ContestCheckCoordinator {
@@ -43,7 +44,7 @@ func (c *ContestCheckCoordinator) CanCheck(now time.Time) bool {
 	return !now.Before(c.until) || now.Sub(c.lastClaimedAt) <= 60*time.Second
 }
 
-func (c *ContestCheckCoordinator) Claim(now time.Time, source string) bool {
+func (c *ContestCheckCoordinator) Claim(now time.Time, source string, pattern string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -51,14 +52,15 @@ func (c *ContestCheckCoordinator) Claim(now time.Time, source string) bool {
 		// It's already claimed, but log telemetry if it was claimed recently
 		diff := now.Sub(c.lastClaimedAt)
 		if diff <= 60*time.Second && c.lastClaimedBy != source {
-			log.Printf("   📊 [TELEMETRY] Checker %q triggered %v after the first checker (%q)", source, diff.Round(10*time.Millisecond), c.lastClaimedBy)
+			log.Printf("   📊 [TELEMETRY] Checker %q (%q) triggered %v after the first checker (%q: %q)", source, pattern, diff.Round(10*time.Millisecond), c.lastClaimedBy, c.lastClaimPattern)
 		}
 		return false
 	}
 
-	log.Printf("   📊 [TELEMETRY] Checker %q was the FIRST to trigger!", source)
+	log.Printf("   📊 [TELEMETRY] Checker %q (%q) was the FIRST to trigger!", source, pattern)
 	c.until = now.Add(c.cooldown)
 	c.lastClaimedAt = now
 	c.lastClaimedBy = source
+	c.lastClaimPattern = pattern
 	return true
 }
