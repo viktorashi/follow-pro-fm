@@ -642,9 +642,18 @@ func TestPoller_captureContestAudioSharesOneSnapshotAndMetadata(t *testing.T) {
 }
 
 func TestPoller_matchingCampaignPhraseRequiresAnActiveCampaignPhrase(t *testing.T) {
-	poller := &Poller{ActiveCampaigns: []Campaign{{
-		StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS",
-	}}}
+	dbMgr, err := NewDBManager(":memory:")
+	if err != nil {
+		t.Fatalf("NewDBManager() error = %v", err)
+	}
+	_ = dbMgr.AddCampaignPhrase(context.Background(), "BTS", "follow profm")
+
+	poller := &Poller{
+		ActiveCampaigns: []Campaign{{
+			StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS",
+		}},
+		DBMgr: dbMgr,
+	}
 	now := bucharestTime(2026, time.June, 17, 12, 0, 0)
 	artist, phrase, matched := poller.matchingCampaignPhrase(now, "Acum asculta follow profm si castiga cu noi")
 	if !matched || artist != "BTS" || phrase != "follow profm" {
