@@ -78,6 +78,7 @@ func NewTelemetryServer(authMgr *AuthManager, stateMgr *StateManager, broadcaste
 
 	ts.registerRoutes()
 	e.POST("/api/campaigns/phrases", ts.handleAddCampaignPhrase, ts.authMgr.RequireAuth())
+	e.DELETE("/api/campaigns/phrases", ts.handleDeleteCampaignPhrase, ts.authMgr.RequireAuth())
 
 	return ts
 }
@@ -230,7 +231,18 @@ func (s *TelemetryServer) handleDashboardView(c *echo.Context) error {
 	s.refreshStatePersons(c.Request().Context())
 	state = s.stateMgr.Get()
 
-	return Render(c, http.StatusOK, Dashboard(state, chunks, canonicalChunks, dashboardUploadPhones(state.Connections), schedules, s.getCampaignArtists(), persons, personAudios))
+	campaignArtists := s.getCampaignArtists()
+	campaignPhrases := make(map[string][]string)
+	if s.dbMgr != nil {
+		for _, artist := range campaignArtists {
+			phrases, _ := s.dbMgr.GetCampaignPhrases(c.Request().Context(), artist)
+			if len(phrases) > 0 {
+				campaignPhrases[artist] = phrases
+			}
+		}
+	}
+
+	return Render(c, http.StatusOK, Dashboard(state, chunks, canonicalChunks, dashboardUploadPhones(state.Connections), schedules, campaignArtists, campaignPhrases, persons, personAudios))
 }
 
 func (s *TelemetryServer) getCampaignArtists() []string {
@@ -484,13 +496,14 @@ type FileInfo struct {
 }
 
 type ReviewChunk struct {
-	Name            string  `json:"name"`
-	Size            int64   `json:"size"`
-	ModTime         string  `json:"mod_time"`
-	PlayURL         string  `json:"play_url"`
-	Transcript      string  `json:"transcript"`
-	CampaignArtist  string  `json:"campaign_artist"`
-	DurationSeconds float64 `json:"duration_seconds"`
+	Name              string              `json:"name"`
+	Size              int64               `json:"size"`
+	ModTime           string              `json:"mod_time"`
+	PlayURL           string              `json:"play_url"`
+	ParsedTranscripts []TimedItem[string] `json:"parsed_transcripts"`
+	CampaignArtist    string              `json:"campaign_artist"`
+	DurationSeconds   float64             `json:"duration_seconds"`
+	ParsedTags        []ContestTag        `json:"parsed_tags"`
 }
 
 func (s *TelemetryServer) handleDataView(c *echo.Context) error {
@@ -1147,6 +1160,14 @@ func (s *TelemetryServer) handleUnreviewedCrop(c *echo.Context) error {
 		if err := s.dbMgr.CopySignatureFile(c.Request().Context(), BucketUnreviewed, BucketCanonical, filename); err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
+
+		savePhrase := strings.TrimSpace(c.FormValue("save_phrase"))
+		if savePhrase != "" {
+			meta, err := s.dbMgr.GetSignatureFile(c.Request().Context(), BucketCanonical, filename)
+			if err == nil && meta.CampaignArtist != "" {
+				_ = s.dbMgr.AddCampaignPhrase(c.Request().Context(), meta.CampaignArtist, savePhrase)
+			}
+		}
 		if transcript != "" {
 			_ = s.dbMgr.UpdateSignatureTranscript(c.Request().Context(), BucketCanonical, filename, transcript)
 		}
@@ -1198,26 +1219,33 @@ func (s *TelemetryServer) listChunks(bucket string) ([]ReviewChunk, error) {
 			continue
 		}
 
-		var transcript string
+		var parsedTranscripts []TimedItem[string]
 		var campaignArtist string
+		var parsedTags []ContestTag
 		if s.dbMgr != nil {
 			meta, err := s.dbMgr.GetSignatureFile(context.Background(), bucket, entry.Name())
 			if err == nil {
-				transcript = meta.Transcript
+				if meta.Transcript != "" {
+					_ = json.Unmarshal([]byte(meta.Transcript), &parsedTranscripts)
+				}
 				campaignArtist = meta.CampaignArtist
+				if meta.Tags != "" {
+					_ = json.Unmarshal([]byte(meta.Tags), &parsedTags)
+				}
 			}
 		}
 
 		duration, _ := GetAudioDuration(filepath.Join(dir, entry.Name()))
 
 		chunks = append(chunks, ReviewChunk{
-			Name:            entry.Name(),
-			Size:            info.Size(),
-			ModTime:         info.ModTime().Format("2006-01-02 15:04:05"),
-			PlayURL:         "/api/signatures/file?bucket=" + url.QueryEscape(bucket) + "&name=" + url.QueryEscape(entry.Name()) + "&t=" + fmt.Sprintf("%d", info.ModTime().Unix()),
-			Transcript:      transcript,
-			CampaignArtist:  campaignArtist,
-			DurationSeconds: duration.Seconds(),
+			Name:              entry.Name(),
+			Size:              info.Size(),
+			ModTime:           info.ModTime().Format("2006-01-02 15:04:05"),
+			PlayURL:           "/api/signatures/file?bucket=" + url.QueryEscape(bucket) + "&name=" + url.QueryEscape(entry.Name()) + "&t=" + fmt.Sprintf("%d", info.ModTime().Unix()),
+			ParsedTranscripts: parsedTranscripts,
+			CampaignArtist:    campaignArtist,
+			DurationSeconds:   duration.Seconds(),
+			ParsedTags:        parsedTags,
 		})
 	}
 
@@ -1247,7 +1275,33 @@ func (s *TelemetryServer) handleAddCampaignPhrase(c *echo.Context) error {
 	if err := s.dbMgr.AddCampaignPhrase(c.Request().Context(), req.CampaignArtist, req.Phrase); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
-	return c.NoContent(http.StatusOK)
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *TelemetryServer) handleDeleteCampaignPhrase(c *echo.Context) error {
+	var req struct {
+		CampaignArtist string `json:"campaign_artist"`
+		Phrase         string `json:"phrase"`
+	}
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+	}
+
+	req.CampaignArtist = strings.TrimSpace(req.CampaignArtist)
+	req.Phrase = strings.TrimSpace(req.Phrase)
+
+	if req.Phrase == "" || req.CampaignArtist == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "artist and phrase required"})
+	}
+
+	if s.dbMgr == nil {
+		return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "DB not initialized"})
+	}
+
+	if err := s.dbMgr.DeleteCampaignPhrase(c.Request().Context(), req.CampaignArtist, req.Phrase); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func isSafeFilename(name string) bool {
