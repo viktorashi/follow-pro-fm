@@ -7,6 +7,22 @@ import (
 	"time"
 )
 
+func isWordHighlighted(word string, tags []ContestTag) bool {
+	cleanWord := strings.Trim(strings.ToLower(word), ".,!?\"'")
+	for _, tag := range tags {
+		if tag.Source == triggerSourceTranscription && tag.Phrase != "" {
+			phraseWords := strings.Fields(tag.Phrase)
+			for _, pw := range phraseWords {
+				cleanPw := strings.Trim(strings.ToLower(pw), ".,!?\"'")
+				if cleanWord == cleanPw {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 templ Layout(title string) {
 	<!DOCTYPE html>
 	<html lang="en" data-theme="dark">
@@ -62,7 +78,7 @@ templ Login() {
 	}
 }
 
-templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChunk, phones []string, schedules []ScheduleEntry, campaignArtists []string, persons []Person, personAudios map[string]PersonAudioFiles) {
+templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChunk, phones []string, schedules []ScheduleEntry, campaignArtists []string, campaignPhrases map[string][]string, persons []Person, personAudios map[string]PersonAudioFiles) {
 	@Layout("Dashboard - ProFM Jaguare") {
 		<script>
 			function toggleGathering() {
@@ -185,6 +201,28 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 				});
 				return false;
 			}
+			function cropAndSavePhrase(chunkName) {
+				const phrase = prompt("Enter the phrase to save (it will be added as a manual phrase for the primary campaign artist):");
+				if (phrase === null) return;
+				const form = document.getElementById('form-crop-' + chunkName);
+				const data = new FormData(form);
+				if (phrase.trim() !== "") {
+					data.append('save_phrase', phrase.trim());
+				}
+				fetch('/unreviewed/crop', {
+					method: 'POST',
+					body: data
+				}).then(async res => {
+					if (!res.ok) {
+						const payload = await res.json().catch(() => ({}));
+						throw new Error(payload.error || 'Crop failed');
+					}
+					window.location.reload();
+				}).catch(err => {
+					alert(err.message);
+				});
+			}
+
 			function deleteUnreviewed(filename) {
 				if (!confirm('Are you sure you want to delete this unreviewed signature?')) return;
 				const data = new FormData();
@@ -231,6 +269,23 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 				}).catch(err => alert(err.message));
 				return false;
 			}
+			function deleteCampaignPhrase(artist, phrase) {
+				if (!confirm(`Are you sure you want to delete the phrase "${phrase}" for ${artist}?`)) return;
+				fetch('/api/campaigns/phrases', {
+					method: 'DELETE',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						campaign_artist: artist,
+						phrase: phrase
+					})
+				}).then(async res => {
+					if (!res.ok) {
+						const payload = await res.json().catch(() => ({}));
+						throw new Error(payload.error || 'Delete phrase failed');
+					}
+					window.location.reload();
+				}).catch(err => alert(err.message));
+			}
 			function transcribeChunk(name, bucket) {
 				const btn = event.target;
 				const origText = btn.textContent;
@@ -256,21 +311,26 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 
 			window.waveSurfers = window.waveSurfers || {};
 			window.initWaveformEditor = function(chunkName, url, duration) {
+				const container = document.getElementById('editor-container-' + chunkName);
 				document.getElementById('loader-btn-' + chunkName).style.display = 'none';
-				document.getElementById('editor-container-' + chunkName).classList.remove('hidden');
+				container.classList.remove('hidden');
 				
+				const wsContainer = document.getElementById('waveform-' + chunkName);
 				const ws = WaveSurfer.create({
-					container: document.getElementById('waveform-' + chunkName),
+					container: wsContainer,
 					waveColor: 'rgba(255, 255, 255, 0.4)',
 					progressColor: '#3b82f6',
 					url: url,
-					height: 96
+					height: 120,
+					autoScroll: true,
+					autoCenter: true
 				});
 				
 				const wsRegions = ws.registerPlugin(WaveSurfer.Regions.create());
+				let currentRegion = null;
 				
 				ws.on('ready', () => {
-					const region = wsRegions.addRegion({
+					currentRegion = wsRegions.addRegion({
 						start: 0,
 						end: duration,
 						color: 'rgba(59, 130, 246, 0.3)',
@@ -278,20 +338,53 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 						drag: true
 					});
 					
-					region.on('update', () => {
-						document.getElementById('start-input-' + chunkName).value = region.start;
-						document.getElementById('start-val-' + chunkName).textContent = region.start.toFixed(2);
-						document.getElementById('end-input-' + chunkName).value = region.end;
-						document.getElementById('end-val-' + chunkName).textContent = region.end.toFixed(2);
+					currentRegion.on('update', () => {
+						document.getElementById('start-input-' + chunkName).value = currentRegion.start;
+						document.getElementById('start-val-' + chunkName).textContent = currentRegion.start.toFixed(2);
+						document.getElementById('end-input-' + chunkName).value = currentRegion.end;
+						document.getElementById('end-val-' + chunkName).textContent = currentRegion.end.toFixed(2);
 					});
 				});
+
+				container.tabIndex = 0; // Make focusable for keyboard events
+				container.addEventListener('keydown', (e) => {
+					if (!currentRegion) return;
+					if (e.code === 'Space') {
+						e.preventDefault();
+						ws.playPause();
+					} else if (e.code === 'ArrowLeft') {
+						e.preventDefault();
+						if (e.shiftKey) currentRegion.onResize(-0.1, 'start');
+						else currentRegion.onResize(-0.1, 'end');
+					} else if (e.code === 'ArrowRight') {
+						e.preventDefault();
+						if (e.shiftKey) currentRegion.onResize(0.1, 'start');
+						else currentRegion.onResize(0.1, 'end');
+					}
+				});
 				
-				window.waveSurfers[chunkName] = ws;
+				window.waveSurfers[chunkName] = { ws, container };
+			};
+
+			window.toggleFullscreenEditor = function(chunkName) {
+				const editor = window.waveSurfers[chunkName];
+				if (!editor) return;
+				const isFullscreen = editor.container.classList.contains('fixed');
+				if (isFullscreen) {
+					editor.container.classList.remove('fixed', 'inset-0', 'z-50', 'bg-black/95', 'p-8', 'flex', 'flex-col', 'justify-center');
+					editor.container.classList.add('bg-black/30', 'p-2', 'mb-3');
+				} else {
+					editor.container.classList.remove('bg-black/30', 'p-2', 'mb-3');
+					editor.container.classList.add('fixed', 'inset-0', 'z-50', 'bg-black/95', 'p-8', 'flex', 'flex-col', 'justify-center');
+					editor.container.focus(); // Focus for keyboard shortcuts
+				}
+				// Force resize on WaveSurfer
+				setTimeout(() => { editor.ws.drawBuffer(); }, 50);
 			};
 
 			window.playPauseWaveform = function(chunkName) {
-				const ws = window.waveSurfers[chunkName];
-				if (ws) ws.playPause();
+				const editor = window.waveSurfers[chunkName];
+				if (editor && editor.ws) editor.ws.playPause();
 			};
 
 			function showTab(tabName) {
@@ -818,7 +911,33 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 											<div class="flex justify-between items-center gap-4 mb-3">
 												<div>
 													<div class="font-semibold break-all">{ chunk.Name }</div>
-													<div class="text-xs text-muted">{ fmt.Sprintf("%.2f MB", float64(chunk.Size)/(1024*1024)) } ({ fmt.Sprintf("%.0fs", chunk.DurationSeconds) }) · { chunk.ModTime }</div>
+													<div class="text-xs text-muted mb-2">{ fmt.Sprintf("%.2f MB", float64(chunk.Size)/(1024*1024)) } ({ fmt.Sprintf("%.0fs", chunk.DurationSeconds) }) · { chunk.ModTime }</div>
+													if len(chunk.ParsedTags) > 0 {
+														<div class="text-xs border border-white/10 bg-black/40 p-2 rounded">
+															<div class="font-medium text-primary mb-1">Diagnostic Context:</div>
+															for i, tag := range chunk.ParsedTags {
+																<div class="mb-1">
+																	if i == 0 {
+																		<strong>Winner:</strong> { tag.Source } 
+																		if tag.Source == triggerSourceTranscription {
+																			("{ tag.Phrase }")
+																		} else if tag.Source == triggerSourceFingerprint {
+																			("{ tag.SignatureName }")
+																		} else {
+																			("{ tag.CampaignArtist }")
+																		}
+																	} else {
+																		<strong>Late Matcher:</strong> { tag.Source }
+																		if tag.Source == triggerSourceTranscription {
+																			("{ tag.Phrase }")
+																		} else if tag.Source == triggerSourceFingerprint {
+																			("{ tag.SignatureName }")
+																		}
+																	}
+																</div>
+															}
+														</div>
+													}
 												</div>
 												<div class="flex gap-2">
 													<a href={ templ.URL(chunk.PlayURL) } target="_blank" class="btn btn-secondary btn-sm">Open</a>
@@ -828,7 +947,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 											<div id={ "editor-container-" + chunk.Name } class="w-full bg-black/30 rounded p-2 mb-3 hidden">
 												<div id={ "waveform-" + chunk.Name } class="w-full h-24 mb-2"></div>
 												
-												<form onsubmit="return cropUnreviewed(event, this)" class="flex flex-col gap-2">
+												<form id={ "form-crop-" + chunk.Name } onsubmit="return cropUnreviewed(event, this)" class="flex flex-col gap-2">
 													<input type="hidden" name="filename" value={ chunk.Name }/>
 													<input type="hidden" name="start_seconds" id={ "start-input-" + chunk.Name } value="0"/>
 													<input type="hidden" name="end_seconds" id={ "end-input-" + chunk.Name } value={ fmt.Sprintf("%.1f", chunk.DurationSeconds) }/>
@@ -839,10 +958,20 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 													</div>
 													
 													<div class="flex justify-between mt-2">
-														<button type="button" class="btn btn-secondary btn-sm"
-															data-name={ chunk.Name }
-															onclick="window.playPauseWaveform(this.dataset.name)">Play / Pause</button>
-														<button type="submit" class="btn btn-primary btn-sm">Crop to Canonical</button>
+														<div class="flex gap-2">
+															<button type="button" class="btn btn-secondary btn-sm"
+																data-name={ chunk.Name }
+																onclick="window.playPauseWaveform(this.dataset.name)">Play / Pause</button>
+															<button type="button" class="btn btn-secondary btn-sm"
+																data-name={ chunk.Name }
+																onclick="window.toggleFullscreenEditor(this.dataset.name)">⛶ Fullscreen</button>
+														</div>
+														<div class="flex gap-2">
+															<button type="button" class="btn btn-primary btn-sm bg-success/80 border-success hover:bg-success"
+																data-name={ chunk.Name }
+																onclick="window.cropAndSavePhrase(this.dataset.name)">Crop &amp; Save Phrase</button>
+															<button type="submit" class="btn btn-primary btn-sm">Crop to Canonical</button>
+														</div>
 													</div>
 												</form>
 											</div>
@@ -857,10 +986,17 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 												</button>
 											</div>
 
-											if chunk.Transcript != "" {
+											if len(chunk.ParsedTranscripts) > 0 {
 												<div class="bg-black/20 p-3 rounded font-mono text-sm border-l-2 border-primary">
 													<div class="text-xs text-muted mb-1 uppercase tracking-wider">Transcription:</div>
-													"{ chunk.Transcript }"
+													<div class="flex flex-wrap gap-1">
+														for _, t := range chunk.ParsedTranscripts {
+															<span class={
+																"px-1 rounded",
+																templ.KV("bg-warning/30 text-warning", isWordHighlighted(t.Value, chunk.ParsedTags)),
+															}>{ t.Value }</span>
+														}
+													</div>
 												</div>
 											} else {
 												<div class="flex items-center justify-between gap-4 bg-black/10 p-3 rounded">
@@ -894,15 +1030,45 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 								</form>
 							</div>
 
+							<div class="border border-white/10 rounded p-4 mb-6 bg-black/20">
+								<div class="font-semibold text-sm mb-2 text-primary">Existing Manual Phrases</div>
+								if len(campaignPhrases) == 0 {
+									<div class="text-xs text-muted">No manual phrases saved yet.</div>
+								} else {
+									<div class="space-y-3">
+										for artist, phrases := range campaignPhrases {
+											<div>
+												<div class="text-xs font-semibold uppercase text-muted mb-1">{ artist }</div>
+												<div class="flex flex-wrap gap-2">
+													for _, phrase := range phrases {
+														<div class="flex items-center gap-1 bg-black/40 border border-white/10 rounded px-2 py-1 text-sm">
+															<span>{ phrase }</span>
+															<button type="button" class="text-danger hover:text-danger/80 ml-1 font-bold" title="Delete Phrase"
+																onclick={ templ.ComponentScript{Call: fmt.Sprintf("deleteCampaignPhrase('%s', '%s')", artist, phrase)} }>✕</button>
+														</div>
+													}
+												</div>
+											</div>
+										}
+									</div>
+								}
+							</div>
+
 							if len(chunks) == 0 {
 								<div class="text-sm text-muted">No transcriptions waiting for manual review.</div>
 							} else {
 								<div class="space-y-4">
 									for _, chunk := range chunks {
-										if chunk.Transcript != "" {
+										if len(chunk.ParsedTranscripts) > 0 {
 											<div class="border border-white/10 rounded p-4 mb-3">
 												<div class="font-semibold text-sm mb-2">Audio: { chunk.Name }</div>
-												<div class="bg-black/20 p-3 rounded font-mono text-sm mb-3">"{ chunk.Transcript }"</div>
+												<div class="bg-black/20 p-3 rounded font-mono text-sm mb-3">
+													<div class="flex flex-wrap gap-1">
+														for _, t := range chunk.ParsedTranscripts {
+															<span class="px-1 rounded">{ t.Value }</span>
+														}
+													</div>
+												</div>
 												<form onsubmit="return addCampaignPhrase(event, this)" class="flex gap-2 items-end">
 													<select name="campaign_artist" class="input flex-grow" required>
 														if chunk.CampaignArtist == "" {
@@ -912,7 +1078,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 															<option value={ artist } selected?={ strings.EqualFold(artist, chunk.CampaignArtist) }>{ artist }</option>
 														}
 													</select>
-													<input type="text" name="phrase" value={ chunk.Transcript } class="input flex-grow" required />
+													<input type="text" name="phrase" class="input flex-grow" required />
 													<button type="submit" class="btn btn-primary btn-sm">Add Phrase</button>
 												</form>
 											</div>
@@ -938,10 +1104,14 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 													<a href={ templ.URL(chunk.PlayURL) } target="_blank" class="btn btn-secondary btn-sm">Listen</a>
 												</div>
 											</div>
-											if chunk.Transcript != "" {
+											if len(chunk.ParsedTranscripts) > 0 {
 												<div class="bg-black/20 p-3 rounded font-mono text-sm border-l-2 border-primary">
 													<div class="text-xs text-muted mb-1 uppercase tracking-wider">Transcription:</div>
-													"{ chunk.Transcript }"
+													<div class="flex flex-wrap gap-1">
+														for _, t := range chunk.ParsedTranscripts {
+															<span class="px-1 rounded">{ t.Value }</span>
+														}
+													</div>
 												</div>
 											} else {
 												<div class="flex items-center justify-between gap-4 bg-black/10 p-3 rounded">

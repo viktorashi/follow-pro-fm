@@ -145,11 +145,11 @@ type contestCapture struct {
 	Audio       AudioSnapshot
 	CapturedAt  time.Time
 	Metadata    SongInfo
-	Tags        []contestTag
+	Tags        []ContestTag
 	Transcripts []TimedItem[string]
 }
 
-type contestTag struct {
+type ContestTag struct {
 	Source                 string
 	CampaignArtist         string
 	Phrase                 string
@@ -215,7 +215,7 @@ func (p *Poller) captureContestAudio(now time.Time, metadata SongInfo) *contestC
 	return p.capture
 }
 
-func (p *Poller) tagCapture(capture *contestCapture, tag contestTag) {
+func (p *Poller) tagCapture(capture *contestCapture, tag ContestTag) {
 	if capture == nil {
 		return
 	}
@@ -249,7 +249,7 @@ func (p *Poller) triggerDashcamForWinner(now time.Time, winnerSource, campaignAr
 
 		lateMatches := p.contestCheckCoordinator().GetLateMatches(now)
 
-		tag := contestTag{Source: winnerSource, CampaignArtist: campaignArtist}
+		tag := ContestTag{Source: winnerSource, CampaignArtist: campaignArtist}
 		switch winnerSource {
 		case triggerSourceTranscription:
 			tag.Phrase = pattern
@@ -257,9 +257,9 @@ func (p *Poller) triggerDashcamForWinner(now time.Time, winnerSource, campaignAr
 			tag.SignatureName = pattern
 		}
 
-		tags := []contestTag{tag}
+		tags := []ContestTag{tag}
 		for _, lm := range lateMatches {
-			lateTag := contestTag{
+			lateTag := ContestTag{
 				Source:                 lm.Source,
 				CampaignArtist:         campaignArtist,
 				LateMatch:              true,
@@ -282,15 +282,7 @@ func (p *Poller) triggerDashcamForWinner(now time.Time, winnerSource, campaignAr
 			Transcripts: transcripts,
 		}
 
-		for _, t := range tags {
-			p.saveCapturedChunkForReview(c, t)
-		}
-	})
-}
-
-func captureHasTag(capture *contestCapture, tag contestTag) bool {
-	return slices.ContainsFunc(capture.Tags, func(candidate contestTag) bool {
-		return candidate == tag
+		p.saveCapturedChunkForReview(c)
 	})
 }
 
@@ -332,7 +324,7 @@ func hasExistingSignatureForSong(dir string, prefix string) (bool, string) {
 	return false, ""
 }
 
-func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte, transcript string, tag contestTag) {
+func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte, transcript string, tags []ContestTag) {
 	recordedAt := time.Now()
 	filename := fmt.Sprintf("%s - %s - %d.mp3", song.Artist, song.Title, recordedAt.Unix())
 	unreviewedDir := filepath.Join(p.SignaturesDir, BucketUnreviewed)
@@ -371,7 +363,7 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte, transc
 				return
 			}
 			if saved {
-				p.reportSavedUnreviewedChunk(song, filename, recordedAt, transcript, tag)
+				p.reportSavedUnreviewedChunk(song, filename, recordedAt, transcript, tags)
 				return
 			}
 			matchedName = name
@@ -386,7 +378,7 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte, transc
 					log.Printf("   ⚠️ Failed to save unreviewed chunk %q: %v", filename, err)
 					return
 				}
-				p.reportSavedUnreviewedChunk(song, filename, recordedAt, transcript, tag)
+				p.reportSavedUnreviewedChunk(song, filename, recordedAt, transcript, tags)
 				return
 			}
 			matchedName = name
@@ -396,13 +388,16 @@ func (p *Poller) saveUnreviewedChunkForReview(song SongInfo, data []byte, transc
 	log.Printf("   [SIGNATURE REVIEW] Skipped saving %q because it matches canonical signature %q", filename, matchedName)
 }
 
-func (p *Poller) saveCapturedChunkForReview(capture *contestCapture, tag contestTag) {
-	if capture == nil || !captureHasTag(capture, tag) {
+func (p *Poller) saveCapturedChunkForReview(capture *contestCapture) {
+	if capture == nil || len(capture.Tags) == 0 {
 		return
 	}
+
+	// Use the first tag as the primary one for missing metadata
+	primaryTag := capture.Tags[0]
 	song := capture.Metadata
 	if song == (SongInfo{}) {
-		song = SongInfo{Artist: tag.CampaignArtist, Title: tag.Phrase}
+		song = SongInfo{Artist: primaryTag.CampaignArtist, Title: primaryTag.Phrase}
 	}
 
 	var transcriptJSON string
@@ -412,13 +407,13 @@ func (p *Poller) saveCapturedChunkForReview(capture *contestCapture, tag contest
 		}
 	}
 
-	p.saveUnreviewedChunkForReview(song, capture.Audio.Data, transcriptJSON, tag)
+	p.saveUnreviewedChunkForReview(song, capture.Audio.Data, transcriptJSON, capture.Tags)
 }
 
-func (p *Poller) reportSavedUnreviewedChunk(song SongInfo, filename string, recordedAt time.Time, transcript string, tag contestTag) {
+func (p *Poller) reportSavedUnreviewedChunk(song SongInfo, filename string, recordedAt time.Time, transcript string, tags []ContestTag) {
 	if campaignArtist, ok := campaignArtistForTime(p.ActiveCampaigns, recordedAt); ok && p.DBMgr != nil {
-		tagJSON, _ := json.Marshal(tag)
-		_ = p.DBMgr.UpsertSignatureFile(context.Background(), BucketUnreviewed, filename, recordedAt, campaignArtist, transcript, string(tagJSON))
+		tagsJSON, _ := json.Marshal(tags)
+		_ = p.DBMgr.UpsertSignatureFile(context.Background(), BucketUnreviewed, filename, recordedAt, campaignArtist, transcript, string(tagsJSON))
 	}
 	log.Printf("   [SIGNATURE REVIEW] Saved unreviewed chunk %q for manual review", filename)
 	_ = p.Alerter.AlertInfo(AlertEvent{
@@ -1116,7 +1111,7 @@ func (p *Poller) handleTranscriptWithCoordinator(now time.Time, coordinator *Con
 	if !matched || !coordinator.Claim(now, triggerSourceTranscription, phrase) {
 		return
 	}
-	tag := contestTag{Source: triggerSourceTranscription, CampaignArtist: campaignArtist, Phrase: phrase}
+	tag := ContestTag{Source: triggerSourceTranscription, CampaignArtist: campaignArtist, Phrase: phrase}
 	p.tagCapture(capture, tag)
 
 	if p.Alerter != nil {

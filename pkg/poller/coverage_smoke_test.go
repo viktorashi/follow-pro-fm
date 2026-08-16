@@ -40,7 +40,7 @@ func TestRenderDashboardTemplates(t *testing.T) {
 	components := map[string]templ.Component{
 		"Layout":          Layout("T"),
 		"Login":           Login(),
-		"Dashboard":       Dashboard(state, chunks, nil, []string{"+40734788254"}, schedules, []string{"BTS", "Ariana", "The Weeknd"}, persons, personAudios),
+		"Dashboard":       Dashboard(state, chunks, nil, []string{"+40734788254"}, schedules, []string{"BTS", "Ariana", "The Weeknd"}, map[string][]string{}, persons, personAudios),
 		"StatusComponent": StatusComponent(state),
 		"SongComponent":   SongComponent(state.CurrentSong),
 		"AudioStats":      AudioStatsComponent(state),
@@ -78,7 +78,7 @@ func TestRenderDashboardTemplatesBodies(t *testing.T) {
 		{
 			name: "Dashboard",
 			render: func(buf *bytes.Buffer) error {
-				return Dashboard(state, nil, nil, []string{"+40734788254"}, []ScheduleEntry{{Date: "2026-06-23", TargetMatches: []int{1, 3}}}, []string{"BTS", "Ariana", "The Weeknd"}, persons, personAudios).Render(context.Background(), buf)
+				return Dashboard(state, nil, nil, []string{"+40734788254"}, []ScheduleEntry{{Date: "2026-06-23", TargetMatches: []int{1, 3}}}, []string{"BTS", "Ariana", "The Weeknd"}, map[string][]string{}, persons, personAudios).Render(context.Background(), buf)
 			},
 			want: "Daily RNG Schedule",
 		},
