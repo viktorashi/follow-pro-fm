@@ -217,22 +217,18 @@ func (b *TimeSeriesBuffer[T]) Append(item T, timestamp time.Time) {
 		Value:     item,
 	})
 
-	// Trim old items relative to the latest timestamp added
+	// Trim items older than maxAge relative to the latest timestamp.
 	cutoff := timestamp.Add(-b.maxAge)
-	trimIdx := 0
+	trimIdx := len(b.buffer) // assume all expired until proven otherwise
 	for i, v := range b.buffer {
-		if v.Timestamp.After(cutoff) || v.Timestamp.Equal(cutoff) {
+		if !v.Timestamp.Before(cutoff) {
 			trimIdx = i
 			break
 		}
 	}
 	if trimIdx > 0 {
 		n := copy(b.buffer, b.buffer[trimIdx:])
-		// Clear remainder for GC
-		for i := n; i < len(b.buffer); i++ {
-			var zero T
-			b.buffer[i] = TimedItem[T]{Value: zero}
-		}
+		clear(b.buffer[n:]) // zero tail so GC can collect values
 		b.buffer = b.buffer[:n]
 	}
 }
@@ -244,8 +240,7 @@ func (b *TimeSeriesBuffer[T]) GetWindow(start, end time.Time) []TimedItem[T] {
 
 	var result []TimedItem[T]
 	for _, v := range b.buffer {
-		if (v.Timestamp.Equal(start) || v.Timestamp.After(start)) &&
-			(v.Timestamp.Equal(end) || v.Timestamp.Before(end)) {
+		if !v.Timestamp.Before(start) && !v.Timestamp.After(end) {
 			result = append(result, v)
 		}
 	}
