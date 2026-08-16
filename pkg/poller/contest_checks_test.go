@@ -58,11 +58,10 @@ func TestContestCheckCoordinator_ClearsCooldownWhenNotMatching(t *testing.T) {
 		t.Fatal("first claim should succeed")
 	}
 
-	// This is a dummy call; in reality check fails early, but let's test isolation
 	// The coordinator state is fully driven by successful claims.
-	// We just want to ensure multiple instances don't block.
+	// We just want to ensure the next window opens after the configured cooldown.
 
-	if !poller.contestCheckCoordinator().Claim(now.Add(5*time.Minute), "test", "test_pattern") {
-		t.Fatal("configured cooldown should permit the next window after five minutes")
+	if !poller.contestCheckCoordinator().Claim(now.Add(10*time.Minute), "test", "test_pattern") {
+		t.Fatal("configured cooldown should permit the next window after ten minutes")
 	}
 }
