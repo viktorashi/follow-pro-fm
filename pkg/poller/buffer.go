@@ -185,3 +185,69 @@ func (cab *CircularAudioBuffer) Snapshot() AudioSnapshot {
 	copy(out[len(cab.buffer)-cab.writeIdx:], cab.buffer[:cab.writeIdx])
 	return AudioSnapshot{Data: out, Version: cab.totalWritten}
 }
+
+// TimedItem represents a value attached to a specific timestamp.
+type TimedItem[T any] struct {
+	Timestamp time.Time `json:"timestamp"`
+	Value     T         `json:"value"`
+}
+
+// TimeSeriesBuffer is a generic ring-like buffer for discrete events (like transcripts or metadata).
+// It retains items up to a specific max age to match the audio ring buffer's time window.
+type TimeSeriesBuffer[T any] struct {
+	mu     sync.Mutex
+	buffer []TimedItem[T]
+	maxAge time.Duration
+}
+
+// NewTimeSeriesBuffer creates a new buffer that trims items older than maxAge.
+func NewTimeSeriesBuffer[T any](maxAge time.Duration) *TimeSeriesBuffer[T] {
+	return &TimeSeriesBuffer[T]{
+		maxAge: maxAge,
+	}
+}
+
+// Append adds a new item at the given timestamp and trims old items.
+func (b *TimeSeriesBuffer[T]) Append(item T, timestamp time.Time) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.buffer = append(b.buffer, TimedItem[T]{
+		Timestamp: timestamp,
+		Value:     item,
+	})
+
+	// Trim old items relative to the latest timestamp added
+	cutoff := timestamp.Add(-b.maxAge)
+	trimIdx := 0
+	for i, v := range b.buffer {
+		if v.Timestamp.After(cutoff) || v.Timestamp.Equal(cutoff) {
+			trimIdx = i
+			break
+		}
+	}
+	if trimIdx > 0 {
+		n := copy(b.buffer, b.buffer[trimIdx:])
+		// Clear remainder for GC
+		for i := n; i < len(b.buffer); i++ {
+			var zero T
+			b.buffer[i] = TimedItem[T]{Value: zero}
+		}
+		b.buffer = b.buffer[:n]
+	}
+}
+
+// GetWindow returns a copy of all items that fall within [start, end].
+func (b *TimeSeriesBuffer[T]) GetWindow(start, end time.Time) []TimedItem[T] {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	var result []TimedItem[T]
+	for _, v := range b.buffer {
+		if (v.Timestamp.Equal(start) || v.Timestamp.After(start)) &&
+			(v.Timestamp.Equal(end) || v.Timestamp.Before(end)) {
+			result = append(result, v)
+		}
+	}
+	return result
+}
