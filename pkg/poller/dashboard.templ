@@ -23,6 +23,10 @@ func isWordHighlighted(word string, tags []ContestTag) bool {
 	return false
 }
 
+func templateSafe(s string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(s, "'", "\\'"), "\"", "\\\"")
+}
+
 templ Layout(title string) {
 	<!DOCTYPE html>
 	<html lang="en" data-theme="dark">
@@ -201,27 +205,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 				});
 				return false;
 			}
-			function cropAndSavePhrase(chunkName) {
-				const phrase = prompt("Enter the phrase to save (it will be added as a manual phrase for the primary campaign artist):");
-				if (phrase === null) return;
-				const form = document.getElementById('form-crop-' + chunkName);
-				const data = new FormData(form);
-				if (phrase.trim() !== "") {
-					data.append('save_phrase', phrase.trim());
-				}
-				fetch('/unreviewed/crop', {
-					method: 'POST',
-					body: data
-				}).then(async res => {
-					if (!res.ok) {
-						const payload = await res.json().catch(() => ({}));
-						throw new Error(payload.error || 'Crop failed');
-					}
-					window.location.reload();
-				}).catch(err => {
-					alert(err.message);
-				});
-			}
+
 
 			function deleteUnreviewed(filename) {
 				if (!confirm('Are you sure you want to delete this unreviewed signature?')) return;
@@ -285,6 +269,37 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 					}
 					window.location.reload();
 				}).catch(err => alert(err.message));
+			}
+			function snapSubtitles(chunkName, word, timestampUnix, audioStartUnix, duration) {
+				const editor = window.waveSurfers[chunkName];
+				if (!editor || !editor.ws) return;
+				
+				// Add the word to the phrase input
+				const phraseInput = document.getElementById('phrase-input-' + chunkName);
+				if (phraseInput) {
+					phraseInput.value = (phraseInput.value + ' ' + word).trim();
+				}
+				
+				// Calculate relative time
+				let relativeTime = timestampUnix - audioStartUnix;
+				if (relativeTime < 0) relativeTime = 0;
+				if (relativeTime > duration) relativeTime = duration;
+				
+				// Snap region boundaries (create a 2-second region around the word)
+				const wsRegions = editor.ws.getActivePlugins().find(p => p.addRegion);
+				if (wsRegions) {
+					const regions = wsRegions.getRegions();
+					if (regions.length > 0) {
+						const region = regions[0];
+						let start = relativeTime - 1.0;
+						let end = relativeTime + 1.0;
+						if (start < 0) start = 0;
+						if (end > duration) end = duration;
+						
+						region.onResize(start - region.start, 'start');
+						region.onResize(end - region.end, 'end');
+					}
+				}
 			}
 			function transcribeChunk(name, bucket) {
 				const btn = event.target;
@@ -957,20 +972,21 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 														<div>End: <span id={ "end-val-" + chunk.Name }>{ fmt.Sprintf("%.2f", chunk.DurationSeconds) }</span>s</div>
 													</div>
 													
-													<div class="flex justify-between mt-2">
-														<div class="flex gap-2">
-															<button type="button" class="btn btn-secondary btn-sm"
-																data-name={ chunk.Name }
-																onclick="window.playPauseWaveform(this.dataset.name)">Play / Pause</button>
-															<button type="button" class="btn btn-secondary btn-sm"
-																data-name={ chunk.Name }
-																onclick="window.toggleFullscreenEditor(this.dataset.name)">⛶ Fullscreen</button>
-														</div>
-														<div class="flex gap-2">
-															<button type="button" class="btn btn-primary btn-sm bg-success/80 border-success hover:bg-success"
-																data-name={ chunk.Name }
-																onclick="window.cropAndSavePhrase(this.dataset.name)">Crop &amp; Save Phrase</button>
-															<button type="submit" class="btn btn-primary btn-sm">Crop to Canonical</button>
+													<div class="flex flex-col gap-2 mt-2">
+														<input type="text" name="save_phrase" id={ "phrase-input-" + chunk.Name } placeholder="Click subtitles to build phrase, or type here..." class="input w-full" />
+														
+														<div class="flex justify-between">
+															<div class="flex gap-2">
+																<button type="button" class="btn btn-secondary btn-sm"
+																	data-name={ chunk.Name }
+																	onclick="window.playPauseWaveform(this.dataset.name)">Play / Pause</button>
+																<button type="button" class="btn btn-secondary btn-sm"
+																	data-name={ chunk.Name }
+																	onclick="window.toggleFullscreenEditor(this.dataset.name)">⛶ Fullscreen</button>
+															</div>
+															<div class="flex gap-2">
+																<button type="submit" class="btn btn-primary btn-sm bg-success/80 border-success hover:bg-success">Crop &amp; Save</button>
+															</div>
 														</div>
 													</div>
 												</form>
@@ -992,9 +1008,11 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 													<div class="flex flex-wrap gap-1">
 														for _, t := range chunk.ParsedTranscripts {
 															<span class={
-																"px-1 rounded",
+																"px-1 rounded cursor-pointer hover:bg-white/20 transition-colors",
 																templ.KV("bg-warning/30 text-warning", isWordHighlighted(t.Value, chunk.ParsedTags)),
-															}>{ t.Value }</span>
+															}
+															title={ fmt.Sprintf("Snap to %s", t.Timestamp.Format("15:04:05")) }
+															onclick={ templ.ComponentScript{Call: fmt.Sprintf("snapSubtitles('%s', '%s', %d, %d, %f)", chunk.Name, templateSafe(t.Value), t.Timestamp.Unix(), chunk.ModTimeUnix - int64(chunk.DurationSeconds), chunk.DurationSeconds)} }>{ t.Value }</span>
 														}
 													</div>
 												</div>
