@@ -664,6 +664,59 @@ func TestPoller_matchingCampaignPhraseRequiresAnActiveCampaignPhrase(t *testing.
 	}
 }
 
+func TestPoller_matchingCampaignPhraseRefreshesAfterPhraseEdits(t *testing.T) {
+	dbMgr := mustNewTestDBManager(t)
+	ctx := context.Background()
+	if err := dbMgr.AddCampaignPhrase(ctx, "BTS", "follow profm"); err != nil {
+		t.Fatal(err)
+	}
+	poller := &Poller{ActiveCampaigns: []Campaign{{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"}}, DBMgr: dbMgr}
+	now := bucharestTime(2026, time.June, 17, 12, 0, 0)
+
+	if _, phrase, matched := poller.matchingCampaignPhrase(now, "follow profm"); !matched || phrase != "follow profm" {
+		t.Fatalf("initial phrase = (%q, %v), want follow profm match", phrase, matched)
+	}
+	if err := dbMgr.DeleteCampaignPhrase(ctx, "BTS", "follow profm"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, matched := poller.matchingCampaignPhrase(now, "follow profm"); matched {
+		t.Fatal("deleted phrase still matched from cache")
+	}
+	if err := dbMgr.AddCampaignPhrase(ctx, "BTS", "trimite mesaj"); err != nil {
+		t.Fatal(err)
+	}
+	if _, phrase, matched := poller.matchingCampaignPhrase(now, "trimite mesaj acum"); !matched || phrase != "trimite mesaj" {
+		t.Fatalf("added phrase = (%q, %v), want trimite mesaj match", phrase, matched)
+	}
+}
+
+func TestPoller_transcriptionAlertsWhenAutomaticSendingIsBlocked(t *testing.T) {
+	t.Setenv("BYPASS_CAMPAIGN_TIME_CHECKS", "true")
+	dbMgr := mustNewTestDBManager(t)
+	if err := dbMgr.AddCampaignPhrase(context.Background(), "BTS", "follow profm"); err != nil {
+		t.Fatal(err)
+	}
+	stateMgr := createMockStateMgr()
+	stateMgr.Update(func(s *AppState) { s.KillSwitchActive = true })
+	alerter := &recordingAlerter{}
+	poller := &Poller{
+		ActiveCampaigns: []Campaign{{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"}},
+		DBMgr:           dbMgr,
+		StateMgr:        stateMgr,
+		Alerter:         alerter,
+		matchesToday:    MaxDailyMatches,
+		lastCheckDay:    time.Now().YearDay(),
+	}
+
+	poller.HandleStreamingTranscript("asculta follow profm acum")
+	if got := len(alerter.successEvents); got != 1 {
+		t.Fatalf("AlertSuccess() calls = %d, want 1", got)
+	}
+	if got := poller.matchesToday; got != MaxDailyMatches {
+		t.Fatalf("matchesToday = %d, want daily limit unchanged", got)
+	}
+}
+
 func TestPoller_saveUnreviewedChunkForReviewAlertsOnceWhenSaved(t *testing.T) {
 	alerter := &recordingAlerter{}
 	signaturesDir := t.TempDir()
