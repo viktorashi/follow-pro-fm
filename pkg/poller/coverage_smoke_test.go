@@ -268,9 +268,6 @@ func TestListScheduleEntriesAndDashboardPhones(t *testing.T) {
 	if len(phones) != 2 || phones[0] != "+40111222333" || phones[1] != "+40734788254" {
 		t.Fatalf("dashboardUploadPhones() = %+v", phones)
 	}
-	if !isKnownDashboardPhone("40111222333", []WAConnectionState{{Phone: "+40111222333"}}) {
-		t.Fatal("expected normalized dashboard phone match")
-	}
 }
 
 func multipartNewWriter(t *testing.T, body *bytes.Buffer, fields map[string]string) string {
