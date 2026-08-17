@@ -136,13 +136,39 @@ func getCachedSignature(canonicalDir, name string, info os.FileInfo) (*cachedSig
 	return cached, nil
 }
 
+type canonicalDirCacheEntry struct {
+	modTime time.Time
+	entries []os.DirEntry
+}
+
+var dirCache sync.Map // map[string]*canonicalDirCacheEntry
+
 func findMatchingCanonicalSignatureInSet(stream []byte, streamFormat, canonicalDir string, allowed map[string]struct{}) (bool, string, error) {
-	entries, err := os.ReadDir(canonicalDir)
+	dirInfo, err := os.Stat(canonicalDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, "", nil
 		}
 		return false, "", err
+	}
+
+	var entries []os.DirEntry
+	if val, ok := dirCache.Load(canonicalDir); ok {
+		cached := val.(*canonicalDirCacheEntry)
+		if cached.modTime.Equal(dirInfo.ModTime()) {
+			entries = cached.entries
+		}
+	}
+
+	if entries == nil {
+		entries, err = os.ReadDir(canonicalDir)
+		if err != nil {
+			return false, "", err
+		}
+		dirCache.Store(canonicalDir, &canonicalDirCacheEntry{
+			modTime: dirInfo.ModTime(),
+			entries: entries,
+		})
 	}
 
 	var firstDecodeErr error
