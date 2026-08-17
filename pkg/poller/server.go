@@ -936,16 +936,6 @@ func dashboardUploadPhones(conns []WAConnectionState) []string {
 	return phones
 }
 
-func isKnownDashboardPhone(phone string, conns []WAConnectionState) bool {
-	normalized := NormalizePhone(phone)
-	for _, candidate := range dashboardUploadPhones(conns) {
-		if NormalizePhone(candidate) == normalized {
-			return true
-		}
-	}
-	return false
-}
-
 func (s *TelemetryServer) handleMockScan(c *echo.Context) error {
 	if len(s.wappClients) == 0 {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "WhatsApp clients not set"})

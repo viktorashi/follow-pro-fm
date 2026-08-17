@@ -1,3 +1,6 @@
+//go:build e2e && nowapp
+// +build e2e,nowapp
+
 package poller
 
 import (

@@ -1,3 +1,6 @@
+//go:build e2e && nowapp
+// +build e2e,nowapp
+
 package poller
 
 import (
@@ -130,11 +133,12 @@ func TestWhisperContainerTranscription(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to resolve cache dir: %v", err)
 		}
-		if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 			t.Fatalf("failed to create cache dir: %v", err)
 		}
 
-		runCmd := exec.Command("docker", "run", "-d",
+		runCmd := exec.Command(
+			"docker", "run", "-d",
 			"-p", fmt.Sprintf("%d:8000", testPort),
 			"-v", fmt.Sprintf("%s:/root/.cache/huggingface", cacheDir),
 			"-e", "UVICORN_HOST=0.0.0.0",

@@ -1,3 +1,6 @@
+//go:build e2e && nowapp
+// +build e2e,nowapp
+
 package poller
 
 import (
@@ -356,16 +359,6 @@ func mustReadTestFile(t *testing.T, elems ...string) []byte {
 	}
 
 	return data
-}
-
-func mustNewTestDBManager(t *testing.T) *DBManager {
-	t.Helper()
-
-	dbMgr, err := NewDBManager(filepath.Join(t.TempDir(), "app.sqlite"))
-	if err != nil {
-		t.Fatalf("NewDBManager() error = %v", err)
-	}
-	return dbMgr
 }
 
 func writeFile(t *testing.T, path string, data []byte) {
