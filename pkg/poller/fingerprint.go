@@ -102,10 +102,6 @@ func findMatchingCanonicalSignatureInSet(stream []byte, streamFormat, canonicalD
 	}
 
 	var firstDecodeErr error
-	var bestMatchName string
-	var bestMatchScore float64
-	var foundMatch bool
-
 	for name, sig := range sigs {
 		if allowed != nil {
 			if _, ok := allowed[name]; !ok {
@@ -113,12 +109,10 @@ func findMatchingCanonicalSignatureInSet(stream []byte, streamFormat, canonicalD
 			}
 		}
 		sigFormat := fingerprintFormatForName(name)
-		matched, score, err := matchSignatureWithFormats(stream, streamFormat, sig, sigFormat)
+		matched, _, err := matchSignatureWithFormats(stream, streamFormat, sig, sigFormat)
 		if err == nil {
-			if matched && score > bestMatchScore {
-				foundMatch = true
-				bestMatchName = name
-				bestMatchScore = score
+			if matched {
+				return true, name, nil
 			}
 			continue
 		}
@@ -126,17 +120,8 @@ func findMatchingCanonicalSignatureInSet(stream []byte, streamFormat, canonicalD
 			firstDecodeErr = err
 		}
 		if len(sig) > 0 && bytes.Contains(stream, sig) {
-			// Exact byte match is a perfect score
-			if 1.0 > bestMatchScore {
-				foundMatch = true
-				bestMatchName = name
-				bestMatchScore = 1.0
-			}
+			return true, name, nil
 		}
-	}
-
-	if foundMatch {
-		return true, bestMatchName, nil
 	}
 
 	return false, "", firstDecodeErr

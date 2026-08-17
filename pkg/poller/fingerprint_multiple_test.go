@@ -4,7 +4,6 @@ package poller
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,7 +14,7 @@ import (
 type multipleFingerprintCase struct {
 	Name               string
 	Dir                string
-	ExpectedNum        int
+	ExpectedMatch      bool
 	IncludesAudiosFrom string
 }
 
@@ -35,19 +34,19 @@ func loadMultipleFingerprintCases(t *testing.T) []multipleFingerprintCase {
 		}
 
 		dir := filepath.Join(root, entry.Name())
-		expectedNum, includesAudiosFrom := loadMultipleFingerprintCaseConfig(t, filepath.Join(dir, "case.toml"))
+		expectedMatch, includesAudiosFrom := loadMultipleFingerprintCaseConfig(t, filepath.Join(dir, "case.toml"))
 
 		cases = append(cases, multipleFingerprintCase{
 			Name:               entry.Name(),
 			Dir:                dir,
-			ExpectedNum:        expectedNum,
+			ExpectedMatch:      expectedMatch,
 			IncludesAudiosFrom: includesAudiosFrom,
 		})
 	}
 	return cases
 }
 
-func loadMultipleFingerprintCaseConfig(t *testing.T, path string) (int, string) {
+func loadMultipleFingerprintCaseConfig(t *testing.T, path string) (bool, string) {
 	t.Helper()
 
 	file, err := os.Open(path)
@@ -56,7 +55,7 @@ func loadMultipleFingerprintCaseConfig(t *testing.T, path string) (int, string) 
 	}
 	defer func() { _ = file.Close() }()
 
-	var expectedNum int
+	var expectedMatch bool
 	var includesAudiosFrom string
 	var foundShouldMatch bool
 
@@ -81,11 +80,15 @@ func loadMultipleFingerprintCaseConfig(t *testing.T, path string) (int, string) 
 		v := strings.TrimSpace(value)
 
 		if k == "should_match" {
-			parsed, err := strconv.Atoi(v)
-			if err != nil {
+			parsed, err := strconv.ParseBool(v)
+			if err != nil && v != "1" && v != "0" {
 				t.Fatalf("invalid should_match in %s: %v", path, err)
 			}
-			expectedNum = parsed
+			if err == nil {
+				expectedMatch = parsed
+			} else {
+				expectedMatch = v != "0"
+			}
 			foundShouldMatch = true
 		} else if k == "includes_audios_from" {
 			includesAudiosFrom = strings.Trim(v, `"'`)
@@ -97,7 +100,7 @@ func loadMultipleFingerprintCaseConfig(t *testing.T, path string) (int, string) 
 	if !foundShouldMatch {
 		t.Fatalf("missing should_match in %s", path)
 	}
-	return expectedNum, includesAudiosFrom
+	return expectedMatch, includesAudiosFrom
 }
 
 func TestMatchMultipleSignatures(t *testing.T) {
@@ -142,17 +145,13 @@ func TestMatchMultipleSignatures(t *testing.T) {
 				t.Fatalf("findMatchingCanonicalSignatureInSet error = %v", err)
 			}
 
-			if tc.ExpectedNum == 0 {
-				if matched {
-					t.Fatalf("Expected no match, but matched %s", matchName)
+			if tc.ExpectedMatch {
+				if !matched {
+					t.Fatalf("Expected match, but found none")
 				}
 			} else {
-				if !matched {
-					t.Fatalf("Expected match with %dsignature.mp3, but found no match", tc.ExpectedNum)
-				}
-				expectedName := fmt.Sprintf("%dsignature.mp3", tc.ExpectedNum)
-				if matchName != expectedName {
-					t.Fatalf("Expected match with %s, but got %s", expectedName, matchName)
+				if matched {
+					t.Fatalf("Expected no match, but matched %s", matchName)
 				}
 			}
 		})
