@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -16,6 +17,8 @@ import (
 type DBManager struct {
 	db                *sql.DB
 	trustedEmailsPath string
+	phraseMu          sync.RWMutex
+	phraseCache       map[string][]string
 }
 
 type Person struct {
@@ -795,12 +798,29 @@ func (m *DBManager) CopySignatureFile(ctx context.Context, fromBucket, toBucket,
 }
 
 func (m *DBManager) AddCampaignPhrase(ctx context.Context, campaignArtist, phrase string) error {
-	_, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO campaign_phrases (campaign_artist, phrase) VALUES (?, ?)", normalizeCampaignArtistKey(campaignArtist), strings.ToLower(strings.TrimSpace(phrase)))
+	artist := normalizeCampaignArtistKey(campaignArtist)
+	_, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO campaign_phrases (campaign_artist, phrase) VALUES (?, ?)", artist, strings.ToLower(strings.TrimSpace(phrase)))
+	if err == nil {
+		m.invalidateCampaignPhraseCache(artist)
+	}
 	return err
 }
 
 func (m *DBManager) GetCampaignPhrases(ctx context.Context, campaignArtist string) ([]string, error) {
-	rows, err := m.db.QueryContext(ctx, "SELECT phrase FROM campaign_phrases WHERE campaign_artist = ?", normalizeCampaignArtistKey(campaignArtist))
+	artist := normalizeCampaignArtistKey(campaignArtist)
+	m.phraseMu.RLock()
+	cached, ok := m.phraseCache[artist]
+	m.phraseMu.RUnlock()
+	if ok {
+		return cached, nil
+	}
+
+	m.phraseMu.Lock()
+	defer m.phraseMu.Unlock()
+	if phrases, ok := m.phraseCache[artist]; ok {
+		return phrases, nil
+	}
+	rows, err := m.db.QueryContext(ctx, "SELECT phrase FROM campaign_phrases WHERE campaign_artist = ?", artist)
 	if err != nil {
 		return nil, err
 	}
@@ -814,7 +834,14 @@ func (m *DBManager) GetCampaignPhrases(ctx context.Context, campaignArtist strin
 		}
 		phrases = append(phrases, p)
 	}
-	return phrases, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if m.phraseCache == nil {
+		m.phraseCache = make(map[string][]string)
+	}
+	m.phraseCache[artist] = phrases
+	return phrases, nil
 }
 
 type CampaignPhrase struct {
@@ -841,6 +868,16 @@ func (m *DBManager) ListAllCampaignPhrases(ctx context.Context) (map[string][]Ca
 }
 
 func (m *DBManager) DeleteCampaignPhrase(ctx context.Context, campaignArtist, phrase string) error {
-	_, err := m.db.ExecContext(ctx, "DELETE FROM campaign_phrases WHERE campaign_artist = ? AND phrase = ?", normalizeCampaignArtistKey(campaignArtist), strings.ToLower(strings.TrimSpace(phrase)))
+	artist := normalizeCampaignArtistKey(campaignArtist)
+	_, err := m.db.ExecContext(ctx, "DELETE FROM campaign_phrases WHERE campaign_artist = ? AND phrase = ?", artist, strings.ToLower(strings.TrimSpace(phrase)))
+	if err == nil {
+		m.invalidateCampaignPhraseCache(artist)
+	}
 	return err
+}
+
+func (m *DBManager) invalidateCampaignPhraseCache(artist string) {
+	m.phraseMu.Lock()
+	delete(m.phraseCache, artist)
+	m.phraseMu.Unlock()
 }

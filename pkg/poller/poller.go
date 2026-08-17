@@ -1096,28 +1096,24 @@ func (p *Poller) HandleStreamingTranscript(transcript string) {
 	if p.TranscriptionBuffer != nil {
 		p.TranscriptionBuffer.Append(transcript, now)
 	}
-	if !p.canRunContestChecker(now) {
-		return
-	}
 	p.handleTranscriptWithCoordinator(now, p.contestCheckCoordinator(), p.captureContestAudio(now, SongInfo{}), transcript)
 }
 
 func (p *Poller) handleTranscriptWithCoordinator(now time.Time, coordinator *ContestCheckCoordinator, capture *contestCapture, transcript string) {
-	if capture == nil || !coordinator.CanCheck(now) || p.hasReachedDailyLimit(now) {
-		return
-	}
-
 	campaignArtist, phrase, matched := p.matchingCampaignPhrase(now, transcript)
-	if !matched || !coordinator.Claim(now, triggerSourceTranscription, phrase) {
+	if !matched || !coordinator.CanCheck(now) || !coordinator.Claim(now, triggerSourceTranscription, phrase) {
 		return
 	}
-	tag := ContestTag{Source: triggerSourceTranscription, CampaignArtist: campaignArtist, Phrase: phrase}
-	p.tagCapture(capture, tag)
 
 	if p.Alerter != nil {
 		msg := fmt.Sprintf("🎵 Contest Phrase Detected (via Transcription)!\nMatched Phrase: %s\nCampaign: %s\nTranscript: \"%s\"\n\n(This is an instant notification; automatic send rules apply independently.)", phrase, campaignArtist, transcript)
 		_ = p.Alerter.AlertSuccess(AlertEvent{Title: "Contest Song Playing", Message: msg})
 	}
+	if capture == nil || !p.canRunContestChecker(now) || p.hasReachedDailyLimit(now) {
+		return
+	}
+	tag := ContestTag{Source: triggerSourceTranscription, CampaignArtist: campaignArtist, Phrase: phrase}
+	p.tagCapture(capture, tag)
 	p.triggerDashcamForWinner(now, triggerSourceTranscription, campaignArtist, phrase)
 	p.evaluateAndTriggerCampaign(now, campaignArtist, triggerSourceTranscription, 0, fmt.Sprintf("transcription match %q", phrase), nil)
 }

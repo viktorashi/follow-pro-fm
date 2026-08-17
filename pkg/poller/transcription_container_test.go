@@ -94,6 +94,7 @@ func loadTranscriptionCases(t *testing.T) []transcriptionTestCase {
 }
 
 func TestWhisperContainerTranscription(t *testing.T) {
+	t.Setenv("BYPASS_CAMPAIGN_TIME_CHECKS", "true")
 	// Check if docker daemon is available
 	if err := exec.Command("docker", "info").Run(); err != nil {
 		t.Skip("Docker daemon not available, skipping Whisper container transcription E2E test")
@@ -179,7 +180,6 @@ func TestWhisperContainerTranscription(t *testing.T) {
 	if len(cases) == 0 {
 		t.Fatal("no transcription test cases found in testdata/transcription/cases")
 	}
-
 	for _, tc := range cases {
 		t.Run(tc.Name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
@@ -201,6 +201,23 @@ func TestWhisperContainerTranscription(t *testing.T) {
 
 			if !matched && overlap < 0.45 {
 				t.Fatalf("[%s] Live transcript %q did not match reference transcript %q (overlap: %.2f%%)", tc.Name, liveTranscript, tc.FullText, overlap*100)
+			}
+
+			for _, phrase := range tc.TrustedPhrases[1:] {
+				phraseDB, err := NewDBManager(filepath.Join(t.TempDir(), "phrases.sqlite"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				phrasePoller := &Poller{
+					ActiveCampaigns: []Campaign{{Artist: "Test Campaign"}},
+					DBMgr:           phraseDB,
+				}
+				if err := phraseDB.AddCampaignPhrase(context.Background(), "Test Campaign", phrase); err != nil {
+					t.Fatal(err)
+				}
+				if _, matchedPhrase, matched := phrasePoller.matchingCampaignPhrase(time.Now(), liveTranscript); !matched || matchedPhrase != phrase {
+					t.Fatalf("[%s] production matcher did not match phrase %q in live transcript %q", tc.Name, phrase, liveTranscript)
+				}
 			}
 		})
 	}
