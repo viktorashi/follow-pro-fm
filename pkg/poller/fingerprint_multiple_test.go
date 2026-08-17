@@ -13,9 +13,10 @@ import (
 )
 
 type multipleFingerprintCase struct {
-	Name        string
-	Dir         string
-	ExpectedNum int
+	Name               string
+	Dir                string
+	ExpectedNum        int
+	IncludesAudiosFrom string
 }
 
 func loadMultipleFingerprintCases(t *testing.T) []multipleFingerprintCase {
@@ -34,18 +35,19 @@ func loadMultipleFingerprintCases(t *testing.T) []multipleFingerprintCase {
 		}
 
 		dir := filepath.Join(root, entry.Name())
-		expectedNum := loadMultipleFingerprintCaseConfig(t, filepath.Join(dir, "case.toml"))
+		expectedNum, includesAudiosFrom := loadMultipleFingerprintCaseConfig(t, filepath.Join(dir, "case.toml"))
 
 		cases = append(cases, multipleFingerprintCase{
-			Name:        entry.Name(),
-			Dir:         dir,
-			ExpectedNum: expectedNum,
+			Name:               entry.Name(),
+			Dir:                dir,
+			ExpectedNum:        expectedNum,
+			IncludesAudiosFrom: includesAudiosFrom,
 		})
 	}
 	return cases
 }
 
-func loadMultipleFingerprintCaseConfig(t *testing.T, path string) int {
+func loadMultipleFingerprintCaseConfig(t *testing.T, path string) (int, string) {
 	t.Helper()
 
 	file, err := os.Open(path)
@@ -53,6 +55,10 @@ func loadMultipleFingerprintCaseConfig(t *testing.T, path string) int {
 		t.Fatalf("Open(%s) error = %v", path, err)
 	}
 	defer func() { _ = file.Close() }()
+
+	var expectedNum int
+	var includesAudiosFrom string
+	var foundShouldMatch bool
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -70,21 +76,28 @@ func loadMultipleFingerprintCaseConfig(t *testing.T, path string) int {
 		if !ok {
 			continue
 		}
-		if strings.TrimSpace(key) != "should_match" {
-			continue
-		}
 
-		parsed, err := strconv.Atoi(strings.TrimSpace(value))
-		if err != nil {
-			t.Fatalf("invalid should_match in %s: %v", path, err)
+		k := strings.TrimSpace(key)
+		v := strings.TrimSpace(value)
+
+		if k == "should_match" {
+			parsed, err := strconv.Atoi(v)
+			if err != nil {
+				t.Fatalf("invalid should_match in %s: %v", path, err)
+			}
+			expectedNum = parsed
+			foundShouldMatch = true
+		} else if k == "includes_audios_from" {
+			includesAudiosFrom = strings.Trim(v, `"'`)
 		}
-		return parsed
 	}
 	if err := scanner.Err(); err != nil {
 		t.Fatalf("Scanner(%s) error = %v", path, err)
 	}
-	t.Fatalf("missing should_match in %s", path)
-	return 0
+	if !foundShouldMatch {
+		t.Fatalf("missing should_match in %s", path)
+	}
+	return expectedNum, includesAudiosFrom
 }
 
 func TestMatchMultipleSignatures(t *testing.T) {
@@ -103,12 +116,24 @@ func TestMatchMultipleSignatures(t *testing.T) {
 				t.Fatalf("ReadDir(%s) error = %v", tc.Dir, err)
 			}
 
-			var signatureCount int
 			for _, entry := range entries {
 				if strings.HasSuffix(entry.Name(), "signature.mp3") {
 					data := mustReadTestFile(t, tc.Dir, entry.Name())
 					writeFile(t, filepath.Join(canonicalDir, entry.Name()), data)
-					signatureCount++
+				}
+			}
+
+			if tc.IncludesAudiosFrom != "" {
+				sharedDir := filepath.Join("testdata", "multiple_fingerprints", "shared", tc.IncludesAudiosFrom)
+				sharedEntries, err := os.ReadDir(sharedDir)
+				if err != nil {
+					t.Fatalf("ReadDir(%s) error = %v", sharedDir, err)
+				}
+				for _, entry := range sharedEntries {
+					if strings.HasSuffix(entry.Name(), "signature.mp3") {
+						data := mustReadTestFile(t, sharedDir, entry.Name())
+						writeFile(t, filepath.Join(canonicalDir, entry.Name()), data)
+					}
 				}
 			}
 
