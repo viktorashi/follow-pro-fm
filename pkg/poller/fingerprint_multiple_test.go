@@ -89,7 +89,7 @@ func loadMultipleFingerprintCaseConfig(t *testing.T, path string) int {
 
 func TestMatchMultipleSignatures(t *testing.T) {
 	if _, err := ffmpegBinaryPath(); err != nil {
-		t.Skip("ffmpeg not installed, skipping audio fingerprint validation")
+		t.Fatal("ffmpeg not installed...")
 	}
 
 	for _, tc := range loadMultipleFingerprintCases(t) {
