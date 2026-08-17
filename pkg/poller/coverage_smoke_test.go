@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v5"
@@ -27,7 +28,7 @@ func TestRenderDashboardTemplates(t *testing.T) {
 	chunks := []ReviewChunk{{
 		Name:    "BTS - Butter.mp3",
 		Size:    128,
-		ModTime: "2026-06-27 12:00:00",
+		ModTime: time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC),
 		PlayURL: "/api/unreviewed/file?name=BTS+-+Butter.mp3",
 	}}
 	schedules := []ScheduleEntry{{Date: "2026-06-23", TargetMatches: []int{1, 3, 5}}}
