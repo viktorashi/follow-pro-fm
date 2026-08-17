@@ -1,3 +1,6 @@
+//go:build e2e && nowapp
+// +build e2e,nowapp
+
 package poller
 
 import (
@@ -283,10 +286,6 @@ func multipartNewWriter(t *testing.T, body *bytes.Buffer, fields map[string]stri
 		t.Fatalf("Close() error = %v", err)
 	}
 	return w.FormDataContentType()
-}
-
-func newTestEcho() *echo.Echo {
-	return echo.New()
 }
 
 func nilContext() context.Context {

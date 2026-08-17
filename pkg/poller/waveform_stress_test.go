@@ -1,3 +1,6 @@
+//go:build e2e && nowapp
+// +build e2e,nowapp
+
 package poller
 
 import (
@@ -110,7 +113,7 @@ func TestExtractWaveform_Stress(t *testing.T) {
 
 	// Case 1: Empty file (size 0)
 	emptyPath := filepath.Join(tempDir, "empty.ogg")
-	if err := os.WriteFile(emptyPath, []byte{}, 0644); err != nil {
+	if err := os.WriteFile(emptyPath, []byte{}, 0o644); err != nil {
 		t.Fatalf("failed to write empty file: %v", err)
 	}
 	// ffmpeg fails on empty file, so expectError = true
@@ -118,7 +121,7 @@ func TestExtractWaveform_Stress(t *testing.T) {
 
 	// Case 2: Corrupt file (random bytes)
 	corruptPath := filepath.Join(tempDir, "corrupt.ogg")
-	if err := os.WriteFile(corruptPath, []byte("invalid ogg opus data containing garbage"), 0644); err != nil {
+	if err := os.WriteFile(corruptPath, []byte("invalid ogg opus data containing garbage"), 0o644); err != nil {
 		t.Fatalf("failed to write corrupt file: %v", err)
 	}
 	// ffmpeg fails on corrupt file, so expectError = true
