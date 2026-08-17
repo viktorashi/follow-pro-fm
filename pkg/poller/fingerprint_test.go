@@ -300,7 +300,7 @@ func fingerprintAudioFiles(t *testing.T, dir string) []string {
 
 	var names []string
 	for _, entry := range entries {
-		if entry.IsDir() || strings.EqualFold(entry.Name(), "case.toml") {
+		if entry.IsDir() || strings.EqualFold(entry.Name(), "case.toml") || strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
 		names = append(names, entry.Name())
