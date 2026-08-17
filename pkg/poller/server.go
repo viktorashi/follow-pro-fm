@@ -498,8 +498,7 @@ type FileInfo struct {
 type ReviewChunk struct {
 	Name              string              `json:"name"`
 	Size              int64               `json:"size"`
-	ModTime           string              `json:"mod_time"`
-	ModTimeUnix       int64               `json:"mod_time_unix"`
+	ModTime           time.Time           `json:"mod_time"`
 	PlayURL           string              `json:"play_url"`
 	ParsedTranscripts []TimedItem[string] `json:"parsed_transcripts"`
 	CampaignArtist    string              `json:"campaign_artist"`
@@ -1241,8 +1240,7 @@ func (s *TelemetryServer) listChunks(bucket string) ([]ReviewChunk, error) {
 		chunks = append(chunks, ReviewChunk{
 			Name:              entry.Name(),
 			Size:              info.Size(),
-			ModTime:           info.ModTime().Format("2006-01-02 15:04:05"),
-			ModTimeUnix:       info.ModTime().Unix(),
+			ModTime:           info.ModTime(),
 			PlayURL:           "/api/signatures/file?bucket=" + url.QueryEscape(bucket) + "&name=" + url.QueryEscape(entry.Name()) + "&t=" + fmt.Sprintf("%d", info.ModTime().Unix()),
 			ParsedTranscripts: parsedTranscripts,
 			CampaignArtist:    campaignArtist,
@@ -1251,8 +1249,9 @@ func (s *TelemetryServer) listChunks(bucket string) ([]ReviewChunk, error) {
 		})
 	}
 
+	// Sort newest first
 	sort.Slice(chunks, func(i, j int) bool {
-		return chunks[i].ModTime > chunks[j].ModTime
+		return chunks[i].ModTime.After(chunks[j].ModTime)
 	})
 	return chunks, nil
 }

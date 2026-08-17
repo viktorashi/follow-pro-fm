@@ -787,9 +787,9 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var39 string
-					templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(chunk.ModTime)
+					templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(chunk.ModTime.Format("2006-01-02 15:04:05"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 929, Col: 178}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 929, Col: 208}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 					if templ_7745c5c3_Err != nil {
@@ -1216,7 +1216,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templ.RenderScriptItems(ctx, templ_7745c5c3_Buffer, templ.ComponentScript{Call: fmt.Sprintf("snapSubtitles('%s', '%s', %d, %d, %f)", chunk.Name, templateSafe(t.Value), t.Timestamp.Unix(), chunk.ModTimeUnix-int64(chunk.DurationSeconds), chunk.DurationSeconds)})
+							templ_7745c5c3_Err = templ.RenderScriptItems(ctx, templ_7745c5c3_Buffer, templ.ComponentScript{Call: fmt.Sprintf("snapSubtitles('%s', '%s', %d, %d, %f)", chunk.Name, templateSafe(t.Value), t.Timestamp.Unix(), chunk.ModTime.Unix()-int64(chunk.DurationSeconds), chunk.DurationSeconds)})
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -1250,7 +1250,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							var templ_7745c5c3_Var69 templ.ComponentScript = templ.ComponentScript{Call: fmt.Sprintf("snapSubtitles('%s', '%s', %d, %d, %f)", chunk.Name, templateSafe(t.Value), t.Timestamp.Unix(), chunk.ModTimeUnix-int64(chunk.DurationSeconds), chunk.DurationSeconds)}
+							var templ_7745c5c3_Var69 templ.ComponentScript = templ.ComponentScript{Call: fmt.Sprintf("snapSubtitles('%s', '%s', %d, %d, %f)", chunk.Name, templateSafe(t.Value), t.Timestamp.Unix(), chunk.ModTime.Unix()-int64(chunk.DurationSeconds), chunk.DurationSeconds)}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var69.Call)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
@@ -1262,7 +1262,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							var templ_7745c5c3_Var70 string
 							templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(t.Value)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1015, Col: 246}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1015, Col: 249}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var70))
 							if templ_7745c5c3_Err != nil {
@@ -1594,9 +1594,9 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var84 string
-					templ_7745c5c3_Var84, templ_7745c5c3_Err = templ.JoinStringErrs(chunk.ModTime)
+					templ_7745c5c3_Var84, templ_7745c5c3_Err = templ.JoinStringErrs(chunk.ModTime.Format("2006-01-02 15:04:05"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1119, Col: 173}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1119, Col: 203}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var84))
 					if templ_7745c5c3_Err != nil {

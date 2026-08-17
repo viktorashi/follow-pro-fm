@@ -926,7 +926,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 											<div class="flex justify-between items-center gap-4 mb-3">
 												<div>
 													<div class="font-semibold break-all">{ chunk.Name }</div>
-													<div class="text-xs text-muted mb-2">{ fmt.Sprintf("%.2f MB", float64(chunk.Size)/(1024*1024)) } ({ fmt.Sprintf("%.0fs", chunk.DurationSeconds) }) · { chunk.ModTime }</div>
+													<div class="text-xs text-muted mb-2">{ fmt.Sprintf("%.2f MB", float64(chunk.Size)/(1024*1024)) } ({ fmt.Sprintf("%.0fs", chunk.DurationSeconds) }) · { chunk.ModTime.Format("2006-01-02 15:04:05") }</div>
 													if len(chunk.ParsedTags) > 0 {
 														<div class="text-xs border border-white/10 bg-black/40 p-2 rounded">
 															<div class="font-medium text-primary mb-1">Diagnostic Context:</div>
@@ -1012,7 +1012,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 																templ.KV("bg-warning/30 text-warning", isWordHighlighted(t.Value, chunk.ParsedTags)),
 															}
 															title={ fmt.Sprintf("Snap to %s", t.Timestamp.Format("15:04:05")) }
-															onclick={ templ.ComponentScript{Call: fmt.Sprintf("snapSubtitles('%s', '%s', %d, %d, %f)", chunk.Name, templateSafe(t.Value), t.Timestamp.Unix(), chunk.ModTimeUnix - int64(chunk.DurationSeconds), chunk.DurationSeconds)} }>{ t.Value }</span>
+															onclick={ templ.ComponentScript{Call: fmt.Sprintf("snapSubtitles('%s', '%s', %d, %d, %f)", chunk.Name, templateSafe(t.Value), t.Timestamp.Unix(), chunk.ModTime.Unix() - int64(chunk.DurationSeconds), chunk.DurationSeconds)} }>{ t.Value }</span>
 														}
 													</div>
 												</div>
@@ -1116,7 +1116,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 											<div class="flex justify-between items-center gap-4 mb-3">
 												<div>
 													<div class="font-semibold break-all">{ chunk.Name }</div>
-													<div class="text-xs text-muted">{ fmt.Sprintf("%.2f MB", float64(chunk.Size)/(1024*1024)) } ({ fmt.Sprintf("%.0fs", chunk.DurationSeconds) }) · { chunk.ModTime }</div>
+													<div class="text-xs text-muted">{ fmt.Sprintf("%.2f MB", float64(chunk.Size)/(1024*1024)) } ({ fmt.Sprintf("%.0fs", chunk.DurationSeconds) }) · { chunk.ModTime.Format("2006-01-02 15:04:05") }</div>
 												</div>
 												<div class="flex gap-2">
 													<a href={ templ.URL(chunk.PlayURL) } target="_blank" class="btn btn-secondary btn-sm">Listen</a>
