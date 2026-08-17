@@ -39,12 +39,12 @@ test-cover: build-ffmpeg generate
     go tool cover -html=coverage.out
 
 test-cover-e2e-nowapp: build-ffmpeg generate
-    PATH="./bin:$PATH" go test -v -coverprofile=coverage.out -tags="e2e,nowapp" ./pkg/...
+    PATH="./bin:$PATH" go test -v -coverprofile=coverage.out -tags=e2e ./pkg/...
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
 
 test-cover-e2e-all: build-ffmpeg generate
-    PATH="./bin:$PATH" go test -v -coverprofile=coverage.out -tags=e2e ./pkg/...
+    PATH="./bin:$PATH" go test -v -coverprofile=coverage.out -tags="e2e,wapp" ./pkg/...
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
 
@@ -80,7 +80,7 @@ fly-ssh:
 # Usage:
 #   just push-audios                        (pushes local 'data/audios' to remote '/data/audios')
 #   just push-files                         (alias for push-audios)
-#   just push-audios ./my_audios 40771234567 (pushes to '/data/audios/40771234567/')
+# just push-audios ./my_audios 40771234567 (pushes to '/data/audios/40771234567/')
 push-audios LOCAL_DIR="data/audios" PHONE="":
     #!/usr/bin/env bash
     set -e
