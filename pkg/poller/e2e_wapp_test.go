@@ -1,5 +1,5 @@
-//go:build e2e && !nowapp
-// +build e2e,!nowapp
+//go:build e2e && wapp
+// +build e2e,wapp
 
 package poller
 

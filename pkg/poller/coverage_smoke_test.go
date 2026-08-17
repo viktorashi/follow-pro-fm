@@ -1,5 +1,5 @@
-//go:build e2e && nowapp
-// +build e2e,nowapp
+//go:build e2e
+// +build e2e
 
 package poller
 
@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
-	"github.com/labstack/echo/v5"
 )
 
 func TestRenderDashboardTemplates(t *testing.T) {
