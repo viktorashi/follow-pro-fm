@@ -104,12 +104,8 @@ type cachedSignature struct {
 
 var signatureCache sync.Map // map[string]*cachedSignature
 
-func getCachedSignature(canonicalDir, name string) (*cachedSignature, error) {
+func getCachedSignature(canonicalDir, name string, info os.FileInfo) (*cachedSignature, error) {
 	path := filepath.Join(canonicalDir, name)
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, err
-	}
 
 	cacheKey := path
 	if val, ok := signatureCache.Load(cacheKey); ok {
@@ -165,7 +161,12 @@ func findMatchingCanonicalSignatureInSet(stream []byte, streamFormat, canonicalD
 			}
 		}
 
-		cached, err := getCachedSignature(canonicalDir, name)
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		cached, err := getCachedSignature(canonicalDir, name, info)
 		if err != nil {
 			continue
 		}
