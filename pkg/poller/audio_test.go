@@ -141,3 +141,30 @@ func TestMoveAudioFilesRejectsDestinationCollisions(t *testing.T) {
 		})
 	}
 }
+
+func TestAudioInventoryPerPerson(t *testing.T) {
+	rootDir := t.TempDir()
+	person := Person{Name: "Alice", Slug: "alice"}
+	dir := GetAudioDirForPerson(person.Slug, rootDir)
+	if err := os.WriteFile(filepath.Join(dir, "active.OGG"), []byte("active"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ignored.mp3"), []byte("ignored"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "used", "sent.ogg"), []byte("used"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	active, used, err := ListAudioFilesForPerson(person.Slug, rootDir)
+	if err != nil || len(active) != 1 || active[0] != "active.OGG" || len(used) != 1 || used[0] != "sent.ogg" {
+		t.Fatalf("inventory = %v, %v, %v", active, used, err)
+	}
+	stats := GetAudioStatsPerPerson([]Person{person}, rootDir)[person.Slug]
+	if stats.Unused != 1 || stats.Used != 1 {
+		t.Fatalf("stats = %+v", stats)
+	}
+	if got := GetAudioDirForPhone("+40 700", rootDir); got != filepath.Join(rootDir, "40700") {
+		t.Fatalf("phone audio dir = %q", got)
+	}
+}

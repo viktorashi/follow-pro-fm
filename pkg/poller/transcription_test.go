@@ -2,6 +2,7 @@ package poller
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -37,5 +38,31 @@ func TestNewHTTPTranscriberPostsAudioAndReadsText(t *testing.T) {
 	text, err := NewHTTPTranscriber(server.URL)(context.Background(), []byte("radio"))
 	if err != nil || text != "follow profm" {
 		t.Fatalf("transcribe = (%q, %v)", text, err)
+	}
+}
+
+func TestNewHTTPTranscriberErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		handler http.HandlerFunc
+	}{
+		{name: "server status", handler: func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "no", http.StatusBadGateway) }},
+		{name: "invalid json", handler: func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("not json")) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(tt.handler)
+			defer server.Close()
+			if _, err := NewHTTPTranscriber(server.URL)(context.Background(), []byte("radio")); err == nil {
+				t.Fatal("transcription succeeded unexpectedly")
+			}
+		})
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := NewHTTPTranscriber("http://127.0.0.1:1")(ctx, []byte("radio"))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled transcription error = %v", err)
 	}
 }
