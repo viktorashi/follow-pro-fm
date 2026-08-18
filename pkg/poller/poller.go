@@ -64,7 +64,7 @@ type Campaign struct {
 	Artist    string
 }
 
-// DefaultActiveCampaigns defines the active campaign dates, artists, and phrases.
+// DefaultActiveCampaigns is the single runtime source of contest dates and artists.
 var DefaultActiveCampaigns = []Campaign{
 	{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
 	{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana"},
