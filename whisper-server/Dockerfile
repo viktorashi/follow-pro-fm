@@ -6,6 +6,9 @@ ENV WHISPER_MODEL=base
 RUN uv run python -c "import os; from faster_whisper import download_model; download_model(os.environ['WHISPER_MODEL'])"
 
 FROM ${WHISPER_IMAGE}
+ARG FASTER_WHISPER_VERSION=1.2.1
+RUN uv pip install --python /root/faster-whisper-server/.venv/bin/python "faster-whisper==${FASTER_WHISPER_VERSION}"
+
 # Copy only the downloaded model cache, leaving behind any uv/pip download cache
 COPY --from=downloader /root/.cache/huggingface /root/.cache/huggingface
 
@@ -17,3 +20,5 @@ ENV UVICORN_HOST="0.0.0.0" \
     DEFAULT_LANGUAGE="ro" \
     MIN_DURATION="9" \
     OMP_NUM_THREADS="4"
+
+CMD ["uv", "run", "--no-sync", "uvicorn", "--factory", "faster_whisper_server.main:create_app"]
