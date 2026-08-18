@@ -738,6 +738,11 @@ func (m *DBManager) CopySignatureFile(ctx context.Context, fromBucket, toBucket,
 	return m.UpsertSignatureFile(ctx, toBucket, filename, meta.RecordedAt, meta.CampaignArtist, meta.Transcript, meta.Tags)
 }
 
+func (m *DBManager) DeleteSignatureFile(ctx context.Context, bucket, filename string) error {
+	_, err := m.db.ExecContext(ctx, "DELETE FROM signature_files WHERE bucket = ? AND filename = ?", bucket, filename)
+	return err
+}
+
 func (m *DBManager) AddCampaignPhrase(ctx context.Context, campaignArtist, phrase string) error {
 	artist := normalizeCampaignArtistKey(campaignArtist)
 	_, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO campaign_phrases (campaign_artist, phrase) VALUES (?, ?)", artist, strings.ToLower(strings.TrimSpace(phrase)))
