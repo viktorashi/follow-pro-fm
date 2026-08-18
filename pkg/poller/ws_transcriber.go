@@ -66,7 +66,7 @@ func NewWebSocketTranscriber(url string, onTranscript func(string)) *WebSocketTr
 		done:           make(chan struct{}),
 		onTranscript:   onTranscript,
 		retryDelay:     2 * time.Second,
-		requestTimeout: 30 * time.Second,
+		requestTimeout: 2 * time.Minute,
 	}
 }
 
