@@ -81,39 +81,21 @@ fly-ssh:
 # Audio files in local 'used/' directories will be published to the root of their respective remote pool.
 # Production code will automatically hash and skip any audios that have already been used in prod.
 # Usage:
-#   just push-audios                        (pushes local 'data/audios' to remote '/data/audios')
-#   just push-files                         (alias for push-audios)
-# just push-audios ./my_audios 40771234567 (pushes to '/data/audios/40771234567/')
-push-audios LOCAL_DIR="data/audios" PHONE="":
+#   just push-audios  (pushes every person's local audio pool)
+#   just push-files   (alias for push-audios)
+push-audios:
     #!/usr/bin/env bash
     set -e
-    LOCAL="{{ LOCAL_DIR }}"
-    PHONE="{{ PHONE }}"
-
-    # If the user accidentally specifies 'data', forcefully correct it to 'data/audios'
-    if [ "$LOCAL" = "data" ]; then
-        LOCAL="data/audios"
-    fi
-
-    if [ ! -d "$LOCAL" ]; then
-        echo "❌ Local directory '$LOCAL' does not exist."
+    if [ ! -d data/audios ]; then
+        echo "❌ Local directory 'data/audios' does not exist."
         exit 1
-    fi
-
-    if [ -z "$PHONE" ] || [ "$PHONE" = "/" ]; then
-        TARGET="/data/audios"
-        echo "Uploading local '$LOCAL' folder to Fly persistent volume at $TARGET..."
-    else
-        PHONE=$(echo "$PHONE" | sed 's/+//g' | sed 's/ //g')
-        TARGET="/data/audios/$PHONE"
-        echo "Pushing audios from $LOCAL to phone $PHONE at $TARGET..."
     fi
 
     TMP_STAGING=$(mktemp -d)
     trap 'rm -rf "$TMP_STAGING"' EXIT
 
     # Copy files into temporary staging directory
-    cp -R "$LOCAL/." "$TMP_STAGING/"
+    cp -R data/audios/. "$TMP_STAGING/"
 
     # Publish files inside any local 'used/' directories to the root of their respective parent pool
     find "$TMP_STAGING" -type d -name "used" | while read -r used_dir; do
@@ -125,10 +107,10 @@ push-audios LOCAL_DIR="data/audios" PHONE="":
         rm -rf "$used_dir"
     done
 
-    flyctl ssh console -C "mkdir -p $TARGET"
+    flyctl ssh console -C "mkdir -p /data/audios"
     # STRICTLY forbid any database files from ever being uploaded
-    env COPYFILE_DISABLE=1 tar -cf - --exclude='*.sqlite*' --exclude='*.db' --exclude='._*' -C "$TMP_STAGING" . | flyctl ssh console -C "tar -xf - -C $TARGET"
-    echo "✅ Audios uploaded (locally used files published to root pool)."
+    env COPYFILE_DISABLE=1 tar -cf - --exclude='*.sqlite*' --exclude='*.db' --exclude='._*' -C "$TMP_STAGING" . | flyctl ssh console -C "tar -xf - -C /data/audios"
+    echo "✅ Every person's audios uploaded (locally used files published to their pool)."
 
 alias push-files := push-audios
 
