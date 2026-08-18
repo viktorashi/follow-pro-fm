@@ -6,6 +6,10 @@ on:
     types: [completed]
     branches: [main]
 
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -16,6 +20,9 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           submodules: recursive
+
+      - name: Verify tested commit is still main
+        run: test "$(git ls-remote origin refs/heads/main | cut -f1)" = "${{ github.event.workflow_run.head_sha }}"
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
