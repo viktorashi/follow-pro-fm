@@ -115,12 +115,14 @@ func (m *MultiAlerter) AlertSuccess(event AlertEvent) error {
 type TelegramAlerter struct {
 	BotToken string
 	ChatID   string
+	Client   *http.Client
 }
 
 func NewTelegramAlerter(token, chatID string) *TelegramAlerter {
 	return &TelegramAlerter{
 		BotToken: token,
 		ChatID:   chatID,
+		Client:   http.DefaultClient,
 	}
 }
 
@@ -154,7 +156,11 @@ func (t *TelegramAlerter) send(prefix string, event AlertEvent) error {
 	}
 	body, _ := json.Marshal(payload)
 
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+	client := t.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Post(url, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		return err
 	}
