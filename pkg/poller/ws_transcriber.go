@@ -11,6 +11,8 @@ import (
 	"github.com/coder/websocket"
 )
 
+const transcriptionSessionBytes = 15 * 16000 * 2
+
 // WebSocketTranscriber maintains a live PCM transcription connection. Its
 // bounded input intentionally prefers current radio audio after reconnects.
 type WebSocketTranscriber struct {
@@ -47,9 +49,9 @@ func (t *WebSocketTranscriber) setConnected(connected bool) {
 func (t *WebSocketTranscriber) Start(ctx context.Context) {
 	go func() {
 		for ctx.Err() == nil {
-			_ = t.run(ctx)
+			err := t.run(ctx)
 
-			if ctx.Err() == nil {
+			if ctx.Err() == nil && err != nil {
 				time.Sleep(2 * time.Second)
 			}
 		}
@@ -80,7 +82,8 @@ func (t *WebSocketTranscriber) run(ctx context.Context) error {
 		}
 	}()
 
-	for {
+	sent := 0
+	for sent < transcriptionSessionBytes {
 		select {
 		case <-ctx.Done():
 			return nil
@@ -88,9 +91,19 @@ func (t *WebSocketTranscriber) run(ctx context.Context) error {
 			return nil
 		case audio := <-t.audio:
 			if err := conn.Write(ctx, websocket.MessageBinary, audio); err != nil {
-				return nil
+				return err
 			}
+			sent += len(audio)
 		}
+	}
+
+	// Let Whisper's one-second inactivity timeout flush the current text. Audio
+	// keeps buffering for the next connection instead of growing one huge ASR job.
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-readDone:
+		return nil
 	}
 }
 
