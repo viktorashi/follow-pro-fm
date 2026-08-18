@@ -12,6 +12,15 @@ import (
 )
 
 func TestPoller_E2E_NoWhatsApp(t *testing.T) {
+	rootDir := E2EProjectRoot(t)
+	LoadE2EEnv(rootDir)
+	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
+	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
+	if telegramToken == "" || telegramChatID == "" {
+		t.Fatal("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required for this E2E test")
+	}
+	telegram := &telegramE2EAlerter{delegate: NewTelegramAlerter(telegramToken, telegramChatID)}
+
 	audiosDir := filepath.Join(t.TempDir(), "audios")
 	dbMgr, err := NewDBManager(":memory:")
 	if err != nil {
@@ -55,7 +64,7 @@ func TestPoller_E2E_NoWhatsApp(t *testing.T) {
 		},
 		TargetPhone: "+40700000001",
 		StateMgr:    stateMgr,
-		Alerter:     &recordingAlerter{},
+		Alerter:     telegram,
 		AudiosDir:   audiosDir,
 		DBMgr:       dbMgr,
 		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
@@ -72,4 +81,34 @@ func TestPoller_E2E_NoWhatsApp(t *testing.T) {
 	if poller.matchesToday != 1 || sent != 1 {
 		t.Fatalf("matches = %d, sends = %d; want one of each", poller.matchesToday, sent)
 	}
+	if telegram.calls < 2 || len(telegram.errs) != 0 {
+		t.Fatalf("Telegram deliveries = %d, errors = %v; want at least two successful alerts", telegram.calls, telegram.errs)
+	}
+}
+
+type telegramE2EAlerter struct {
+	delegate *TelegramAlerter
+	calls    int
+	errs     []error
+}
+
+func (a *telegramE2EAlerter) send(fn func(AlertEvent) error, event AlertEvent) error {
+	a.calls++
+	err := fn(event)
+	if err != nil {
+		a.errs = append(a.errs, err)
+	}
+	return err
+}
+
+func (a *telegramE2EAlerter) AlertCritical(event AlertEvent) error {
+	return a.send(a.delegate.AlertCritical, event)
+}
+
+func (a *telegramE2EAlerter) AlertInfo(event AlertEvent) error {
+	return a.send(a.delegate.AlertInfo, event)
+}
+
+func (a *telegramE2EAlerter) AlertSuccess(event AlertEvent) error {
+	return a.send(a.delegate.AlertSuccess, event)
 }

@@ -32,5 +32,8 @@ go test -count=1 -coverprofile=coverage.out -tags=e2e ./pkg/poller
 
 The saved local HTML report generated at `3af6530` showed 72.2% for
 `alerter.go` because the old E2E test loaded the real `.env` and traversed live
-Telegram and email delivery branches. That result is not a safe reproducible
-baseline. Commit `7650183` covers those branches with injected local fakes.
+Telegram and email delivery branches while also using mutable production data.
+That result is not a clean reproducible baseline. Commit `7650183` covers the
+delivery branches with injected local fakes; `TestPoller_E2E_NoWhatsApp` still
+requires and verifies real Telegram delivery while keeping its database and
+audio pool temporary.
