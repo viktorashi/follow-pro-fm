@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +13,32 @@ import (
 )
 
 const transcriptionSessionBytes = 15 * 16000 * 2
+
+// StartStreamingTranscription connects any MP3 chunk source to the production
+// ffmpeg and Whisper WebSocket pipeline.
+func StartStreamingTranscription(ctx context.Context, mp3 <-chan []byte, rawURL string, onTranscript func(string)) *WebSocketTranscriber {
+	transcriber := NewWebSocketTranscriber(transcriptionWebSocketURL(rawURL), onTranscript)
+	transcriber.Start(ctx)
+	NewPCMConverter(mp3, transcriber.Audio()).Start(ctx)
+	return transcriber
+}
+
+func transcriptionWebSocketURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	switch u.Scheme {
+	case "http":
+		u.Scheme = "ws"
+	case "https":
+		u.Scheme = "wss"
+	}
+	q := u.Query()
+	q.Set("vad_filter", "true")
+	u.RawQuery = q.Encode()
+	return u.String()
+}
 
 // WebSocketTranscriber maintains a live PCM transcription connection. Its
 // bounded input intentionally prefers current radio audio after reconnects.

@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -282,7 +281,7 @@ func main() {
 	transcribe = poller.NewHTTPTranscriber(transcriptionURL)
 	streamingTranscriptionURL := os.Getenv("TRANSCRIPTION_WS_URL")
 	if streamingTranscriptionURL == "" {
-		streamingTranscriptionURL = websocketURL(transcriptionURL)
+		streamingTranscriptionURL = transcriptionURL
 	}
 
 	// 8. Start Web Dashboard (Telemetry Server)
@@ -530,30 +529,8 @@ func main() {
 			return nil
 		},
 	}
-	streamingTranscriber := poller.NewWebSocketTranscriber(streamingTranscriptionURL, p.HandleStreamingTranscript)
-	pcmConverter := poller.NewPCMConverter(pcmInput, streamingTranscriber.Audio())
-	streamingTranscriber.Start(context.Background())
-	pcmConverter.Start(context.Background())
+	poller.StartStreamingTranscription(context.Background(), pcmInput, streamingTranscriptionURL, p.HandleStreamingTranscript)
 	p.Start()
-}
-
-func websocketURL(transcriptionURL string) string {
-	u, err := url.Parse(transcriptionURL)
-	if err != nil {
-		return transcriptionURL
-	}
-	switch u.Scheme {
-	case "http":
-		u.Scheme = "ws"
-	case "https":
-		u.Scheme = "wss"
-	}
-
-	q := u.Query()
-	q.Set("vad_filter", "true")
-	u.RawQuery = q.Encode()
-
-	return u.String()
 }
 
 /// coaie de ce naiba nu vad aasta in git tracking?
