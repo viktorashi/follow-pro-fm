@@ -191,7 +191,4 @@ func TestAudioInventoryPerPerson(t *testing.T) {
 	if stats.Unused != 1 || stats.Used != 1 {
 		t.Fatalf("stats = %+v", stats)
 	}
-	if got := GetAudioDirForPhone("+40 700", rootDir); got != filepath.Join(rootDir, "40700") {
-		t.Fatalf("phone audio dir = %q", got)
-	}
 }

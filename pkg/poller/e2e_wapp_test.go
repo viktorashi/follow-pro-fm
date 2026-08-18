@@ -12,6 +12,7 @@ import (
 
 func TestPoller_E2E(t *testing.T) {
 	rootDir := E2EProjectRoot(t)
+	dataDir := filepath.Join(rootDir, "data")
 	appDBPath := filepath.Join(rootDir, "data/app.sqlite")
 
 	audiosDir := filepath.Join(rootDir, "data/audios")
@@ -39,55 +40,50 @@ func TestPoller_E2E(t *testing.T) {
 		})
 	}
 
-	dbPath := filepath.Join(rootDir, "data/wapp.sqlite")
-
 	t.Log("Initializing real WhatsApp clients...")
 
 	wappClients := make(map[string]WhatsAppClient)
 
-	// Add initial sender client
-	primaryClient, err := InitWhatsApp("+40734788254", dbPath, stateMgr, multiAlerter, "")
-	if err == nil {
-		wappClients["+40734788254"] = primaryClient
-		ensureConn("+40734788254")
-	}
-
 	// Make an in-memory DB for the rest of the app state for blazing fast tests
 	dbMgr, err := NewDBManager(":memory:")
+	if err != nil {
+		t.Fatalf("initialize test app database: %v", err)
+	}
 
 	// Open the physical DB to harvest WhatsApp session paths AND person assignments
-	importDbMgr, err2 := NewDBManager(appDBPath)
-	if err == nil && err2 == nil {
-		// Import persons
-		persons, persErr := importDbMgr.ListPersons(context.Background())
-		if persErr == nil {
-			for _, p := range persons {
-				_, _ = dbMgr.db.Exec("INSERT INTO persons (id, name, slug, created_at) VALUES (?, ?, ?, ?)", p.ID, p.Name, p.Slug, p.CreatedAt)
-			}
-		}
-
-		// Import sender_sessions WITH person_id
-		sessions, sessErr := importDbMgr.SenderSessions(context.Background())
-		if sessErr == nil {
-			for _, session := range sessions {
-				_, _ = dbMgr.db.Exec("INSERT INTO sender_sessions (phone, db_filename, person_id) VALUES (?, ?, ?)", session.Phone, session.DBFilename, session.PersonID)
-			}
+	importDbMgr, err := NewDBManager(appDBPath)
+	if err != nil {
+		t.Fatalf("open persisted app database: %v", err)
+	}
+	persons, err := importDbMgr.ListPersons(context.Background())
+	if err != nil {
+		t.Fatalf("load persisted persons: %v", err)
+	}
+	for _, p := range persons {
+		if _, err := dbMgr.db.Exec("INSERT INTO persons (id, name, slug, created_at) VALUES (?, ?, ?, ?)", p.ID, p.Name, p.Slug, p.CreatedAt); err != nil {
+			t.Fatalf("import person %q: %v", p.Name, err)
 		}
 	}
-	if err == nil {
-		sessions, err := dbMgr.SenderSessions(context.Background())
-		if err == nil {
-			for _, session := range sessions {
-				if _, exists := wappClients[session.Phone]; !exists {
-					dbForPhone := filepath.Join(filepath.Dir(dbPath), session.DBFilename)
-					client, err := InitWhatsApp(session.Phone, dbForPhone, stateMgr, multiAlerter, "")
-					if err == nil {
-						wappClients[session.Phone] = client
-						ensureConn(session.Phone)
-					}
-				}
-			}
+
+	sessions, err := importDbMgr.SenderSessions(context.Background())
+	if err != nil {
+		t.Fatalf("load persisted sender sessions: %v", err)
+	}
+	if len(sessions) == 0 {
+		t.Fatal("no persisted sender sessions available for WhatsApp E2E")
+	}
+	for _, session := range sessions {
+		if _, err := dbMgr.db.Exec("INSERT INTO sender_sessions (phone, db_filename, person_id) VALUES (?, ?, ?)", session.Phone, session.DBFilename, session.PersonID); err != nil {
+			t.Fatalf("import sender session %s: %v", session.Phone, err)
 		}
+
+		dbForPhone := filepath.Join(dataDir, session.DBFilename)
+		client, err := InitWhatsApp(session.Phone, dbForPhone, stateMgr, multiAlerter, "")
+		if err != nil {
+			t.Fatalf("initialize WhatsApp sender %s: %v", session.Phone, err)
+		}
+		wappClients[session.Phone] = client
+		ensureConn(session.Phone)
 	}
 
 	// Hydrate connections with PersonSlug/PersonID/PersonName from DB

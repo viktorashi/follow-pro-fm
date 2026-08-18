@@ -354,16 +354,6 @@ func GetAudioStatsPerPerson(persons []Person, rootDir string) map[string]PersonA
 	return stats
 }
 
-func GetAudioDirForPhone(phone string, rootDir string) string {
-	normalized := NormalizePhone(phone)
-	if normalized == "" {
-		return rootDir
-	}
-	dir := filepath.Join(rootDir, normalized)
-	_ = InitAudioPool(dir)
-	return dir
-}
-
 type PersonAudioStats struct {
 	Unused int
 	Used   int
