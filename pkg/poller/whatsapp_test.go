@@ -24,7 +24,7 @@ func TestSendVoiceNote_Success(t *testing.T) {
 	}
 	defer func() { _ = os.RemoveAll(tempDir) }()
 
-	dbPath := filepath.Join(tempDir, "mock_wapp.sqlite")
+	dbPath := filepath.Join(tempDir, "wapp_40700000001.sqlite")
 	messagesJsonPath := filepath.Join(tempDir, "mock_sent_messages.json")
 
 	// Set env vars
@@ -32,7 +32,7 @@ func TestSendVoiceNote_Success(t *testing.T) {
 	t.Setenv("MOCK_SENT_MESSAGES_PATH", messagesJsonPath)
 
 	stateMgr := NewStateManager()
-	client, err := InitWhatsApp("+40734788254", dbPath, stateMgr, nil, "")
+	client, err := InitWhatsApp("+40700000001", dbPath, stateMgr, nil, "")
 	if err != nil {
 		t.Fatalf("failed to init WhatsApp: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestSendVoiceNote_Errors(t *testing.T) {
 	}
 	defer func() { _ = os.RemoveAll(tempDir) }()
 
-	dbPath := filepath.Join(tempDir, "mock_wapp.sqlite")
+	dbPath := filepath.Join(tempDir, "wapp_40700000001.sqlite")
 	testAudio := filepath.Join("testdata", "waveform_sample.ogg")
 	if _, err := os.Stat(testAudio); err != nil {
 		t.Skipf("skipping test because test audio is not available at %s", testAudio)

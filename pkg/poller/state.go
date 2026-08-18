@@ -27,29 +27,39 @@ type WAConnectionState struct {
 	QRCodeData        string
 	UnusedAudios      int
 	UsedAudios        int
+	PersonID          *int64
+	PersonName        string
+	PersonSlug        string
 }
 
 type AppState struct {
-	GatheringSignatures bool
-	Status              AppStatus
-	WhatsAppConnected   bool
-	Connections         []WAConnectionState
-	KillSwitchActive    bool
-	CurrentSong         string
-	UnusedAudios        int
-	UsedAudios          int
-	LastError           string
-	LastVoiceNoteSentAt time.Time
+	GatheringSignatures   bool
+	Status                AppStatus
+	WhatsAppConnected     bool
+	Connections           []WAConnectionState
+	Persons               []Person
+	UnassignedPhonesCount int
+	HasMegaCriticalAlert  bool
+	KillSwitchActive      bool
+	CurrentSong           string
+	UnusedAudios          int
+	UsedAudios            int
+	LastError             string
+	LastVoiceNoteSentAt   time.Time
 }
 
 func (s *AppState) reconcileConnectionState() {
 	anyConnected := false
 	anyPairingRequired := false
 	anyError := false
+	unassigned := 0
 
 	for _, conn := range s.Connections {
 		if conn.WhatsAppConnected {
 			anyConnected = true
+		}
+		if conn.PersonID == nil || *conn.PersonID == 0 || conn.PersonSlug == "" {
+			unassigned++
 		}
 		switch conn.Status {
 		case StatusPairingRequired:
@@ -58,12 +68,16 @@ func (s *AppState) reconcileConnectionState() {
 			anyError = true
 		}
 	}
+	s.UnassignedPhonesCount = unassigned
+	s.HasMegaCriticalAlert = len(s.Persons) == 0 && len(s.Connections) > 0
 
 	s.WhatsAppConnected = anyConnected
 
 	switch s.Status {
 	case StatusInitializing, StatusConnected, StatusPairingRequired, StatusError:
 		switch {
+		case len(s.Connections) == 0:
+			s.Status = StatusInitializing
 		case anyPairingRequired:
 			s.Status = StatusPairingRequired
 		case anyConnected:
@@ -99,12 +113,13 @@ func (sm *StateManager) Update(fn func(state *AppState)) {
 	defer sm.mu.Unlock()
 
 	fn(&sm.state)
+	sm.state = cloneAppState(sm.state)
 	sm.state.reconcileConnectionState()
 
 	// Broadcast
 	for ch := range sm.subscribers {
 		select {
-		case ch <- sm.state:
+		case ch <- cloneAppState(sm.state):
 		default:
 			// If channel is blocked, skip it to avoid blocking the state machine
 		}
@@ -127,7 +142,7 @@ func (sm *StateManager) UpdateConnection(phone string, fn func(conn *WAConnectio
 	// Broadcast
 	for ch := range sm.subscribers {
 		select {
-		case ch <- sm.state:
+		case ch <- cloneAppState(sm.state):
 		default:
 		}
 	}
@@ -160,7 +175,7 @@ func (sm *StateManager) RemoveConnection(phone string) {
 	// Broadcast
 	for ch := range sm.subscribers {
 		select {
-		case ch <- sm.state:
+		case ch <- cloneAppState(sm.state):
 		default:
 		}
 	}
@@ -170,7 +185,19 @@ func (sm *StateManager) RemoveConnection(phone string) {
 func (sm *StateManager) Get() AppState {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
-	return sm.state
+	return cloneAppState(sm.state)
+}
+
+func cloneAppState(state AppState) AppState {
+	state.Persons = append([]Person(nil), state.Persons...)
+	state.Connections = append([]WAConnectionState(nil), state.Connections...)
+	for i := range state.Connections {
+		if state.Connections[i].PersonID != nil {
+			personID := *state.Connections[i].PersonID
+			state.Connections[i].PersonID = &personID
+		}
+	}
+	return state
 }
 
 // Subscribe returns a channel that receives state updates.

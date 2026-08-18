@@ -1,3 +1,6 @@
+//go:build e2e
+// +build e2e
+
 package poller
 
 import (
@@ -62,10 +65,10 @@ func TestAllowedCanonicalSignatureNamesUsesStoredCampaignOwnership(t *testing.T)
 	writeFile(t, filepath.Join(canonicalDir, "BTS - Dynamite.mp3"), []byte("signature"))
 	writeFile(t, filepath.Join(canonicalDir, "Ed Sheeran - Shape of You.mp3"), []byte("signature"))
 
-	if err := dbMgr.UpsertSignatureFile(ctx, "canonical", "BTS - Dynamite.mp3", bucharestTime(2026, time.June, 17, 12, 0, 0), "BTS", ""); err != nil {
+	if err := dbMgr.UpsertSignatureFile(ctx, BucketCanonical, "BTS - Dynamite.mp3", bucharestTime(2026, time.June, 17, 12, 0, 0), "BTS", "", ""); err != nil {
 		t.Fatalf("UpsertSignatureFile(BTS) error = %v", err)
 	}
-	if err := dbMgr.UpsertSignatureFile(ctx, "canonical", "Ed Sheeran - Shape of You.mp3", bucharestTime(2026, time.July, 22, 12, 0, 0), "Ariana", ""); err != nil {
+	if err := dbMgr.UpsertSignatureFile(ctx, BucketCanonical, "Ed Sheeran - Shape of You.mp3", bucharestTime(2026, time.July, 22, 12, 0, 0), "Ariana", "", ""); err != nil {
 		t.Fatalf("UpsertSignatureFile(Ed) error = %v", err)
 	}
 
@@ -101,7 +104,7 @@ func TestCampaignBoundFingerprintDetectionDoesNotTriggerOtherCampaignSignature(t
 	signature := mustReadFingerprintFixture(t, filepath.Join("testdata", "fingerprint", "cases", "quiet_match"), "signature")
 	writeFile(t, filepath.Join(canonicalDir, "Ariana - candidate.mp3"), signature)
 
-	if err := dbMgr.UpsertSignatureFile(ctx, "canonical", "Ariana - candidate.mp3", bucharestTime(2026, time.July, 22, 12, 0, 0), "Ariana", ""); err != nil {
+	if err := dbMgr.UpsertSignatureFile(ctx, BucketCanonical, "Ariana - candidate.mp3", bucharestTime(2026, time.July, 22, 12, 0, 0), "Ariana", "", ""); err != nil {
 		t.Fatalf("UpsertSignatureFile() error = %v", err)
 	}
 
@@ -297,7 +300,7 @@ func fingerprintAudioFiles(t *testing.T, dir string) []string {
 
 	var names []string
 	for _, entry := range entries {
-		if entry.IsDir() || strings.EqualFold(entry.Name(), "case.toml") {
+		if entry.IsDir() || strings.EqualFold(entry.Name(), "case.toml") || strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
 		names = append(names, entry.Name())
@@ -356,16 +359,6 @@ func mustReadTestFile(t *testing.T, elems ...string) []byte {
 	}
 
 	return data
-}
-
-func mustNewTestDBManager(t *testing.T) *DBManager {
-	t.Helper()
-
-	dbMgr, err := NewDBManager(filepath.Join(t.TempDir(), "app.sqlite"))
-	if err != nil {
-		t.Fatalf("NewDBManager() error = %v", err)
-	}
-	return dbMgr
 }
 
 func writeFile(t *testing.T, path string, data []byte) {

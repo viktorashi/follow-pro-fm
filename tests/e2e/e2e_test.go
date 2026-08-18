@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"pro-fm-poller/pkg/poller"
 	"strings"
 	"sync"
 	"testing"
@@ -36,7 +37,8 @@ const (
 type TestEnv struct {
 	TempDir               string
 	AudiosDir             string
-	WappDBPath            string
+	AudioPoolDir          string
+	SessionDBPath         string
 	AppDBPath             string
 	TrustedEmail          string
 	MockSentMsgPath       string
@@ -73,7 +75,8 @@ func setupTestEnv(t *testing.T) *TestEnv {
 	}
 
 	audiosDir := filepath.Join(tempDir, "audios")
-	err = os.MkdirAll(audiosDir, 0755)
+	audioPoolDir := filepath.Join(audiosDir, "test-sender")
+	err = os.MkdirAll(audioPoolDir, 0755)
 	if err != nil {
 		t.Fatalf("failed to create audios dir: %v", err)
 	}
@@ -82,7 +85,7 @@ func setupTestEnv(t *testing.T) *TestEnv {
 	if err != nil {
 		t.Fatalf("failed to read sample audio fixture: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(audiosDir, sampleAudioName), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(audioPoolDir, sampleAudioName), data, 0644); err != nil {
 		t.Fatalf("failed to seed sample audio fixture: %v", err)
 	}
 
@@ -97,13 +100,28 @@ func setupTestEnv(t *testing.T) *TestEnv {
 	env := &TestEnv{
 		TempDir:         tempDir,
 		AudiosDir:       audiosDir,
-		WappDBPath:      filepath.Join(tempDir, "wapp.sqlite"),
+		AudioPoolDir:    audioPoolDir,
+		SessionDBPath:   filepath.Join(tempDir, "wapp_40770661491.sqlite"),
 		AppDBPath:       filepath.Join(tempDir, "app.sqlite"),
 		TrustedEmail:    "smoke@example.com",
 		MockSentMsgPath: filepath.Join(tempDir, "mock_sent_messages.json"),
 		Port:            port,
 		MockArtist:      "Unknown Artist",
 		MockTitle:       "Unknown Song",
+	}
+	if err := os.WriteFile(env.SessionDBPath, nil, 0o644); err != nil {
+		t.Fatalf("failed to seed mock WhatsApp session: %v", err)
+	}
+	dbMgr, err := poller.NewDBManager(env.AppDBPath)
+	if err != nil {
+		t.Fatalf("failed to initialize app database: %v", err)
+	}
+	person, err := dbMgr.CreatePerson(context.Background(), "Test Sender")
+	if err != nil {
+		t.Fatalf("failed to seed sender person: %v", err)
+	}
+	if err := dbMgr.SetSenderSessionWithPerson(context.Background(), "+40770661491", filepath.Base(env.SessionDBPath), &person.ID); err != nil {
+		t.Fatalf("failed to seed sender session: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(filepath.Dir(env.AppDBPath), "trusted-emails.txt"), []byte(env.TrustedEmail+"\n"), 0644); err != nil {
 		t.Fatalf("failed to seed trusted emails file: %v", err)
@@ -172,7 +190,7 @@ func (e *TestEnv) cleanup() {
 func (e *TestEnv) markPaired(t *testing.T) {
 	t.Helper()
 
-	if err := os.WriteFile(e.WappDBPath, []byte("paired"), 0o644); err != nil {
+	if err := os.WriteFile(e.SessionDBPath, []byte("paired"), 0o644); err != nil {
 		t.Fatalf("failed to mark mock WhatsApp client paired: %v", err)
 	}
 }
@@ -205,13 +223,14 @@ func (e *TestEnv) startManagedApp(t *testing.T) *exec.Cmd {
 
 func (e *TestEnv) startApp(ctx context.Context) (*exec.Cmd, error) {
 	cmd := exec.Command(binPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("PORT=%s", e.Port),
 		fmt.Sprintf("PROFM_API_URL=%s/api/v1/radios/article/2918", e.MockServer.URL),
 		"MOCK_WHATSAPP=true",
 		"BYPASS_CAMPAIGN_TIME_CHECKS=true",
 		"BYPASS_RNG_SCHEDULE_CHECKS=true",
-		fmt.Sprintf("WAPP_DB_PATH=%s", e.WappDBPath),
 		fmt.Sprintf("APP_DB_PATH=%s", e.AppDBPath),
 		fmt.Sprintf("AUDIOS_DIR=%s", e.AudiosDir),
 		fmt.Sprintf("MOCK_SENT_MESSAGES_PATH=%s", e.MockSentMsgPath),
@@ -294,7 +313,7 @@ func TestE2E(t *testing.T) {
 			}
 
 			// Verify status transitions to pairing state
-			data, err := os.ReadFile(env.WappDBPath)
+			data, err := os.ReadFile(env.SessionDBPath)
 			if err != nil || string(data) != "paired" {
 				t.Fatalf("mock pairing state not saved correctly in database file: %v", err)
 			}
@@ -388,13 +407,13 @@ func TestE2E(t *testing.T) {
 			time.Sleep(3 * time.Second)
 
 			// Original audio file should no longer exist in the root of audios
-			origPath := filepath.Join(env.AudiosDir, sampleAudioName)
+			origPath := filepath.Join(env.AudioPoolDir, sampleAudioName)
 			if _, err := os.Stat(origPath); !os.IsNotExist(err) {
 				t.Errorf("original voice note still exists in root audios directory")
 			}
 
 			// Audio should be in the /used subdirectory
-			usedPath := filepath.Join(env.AudiosDir, "used", sampleAudioName)
+			usedPath := filepath.Join(env.AudioPoolDir, "used", sampleAudioName)
 			if _, err := os.Stat(usedPath); err != nil {
 				t.Errorf("voice note was not moved to the used directory: %v", err)
 			}
@@ -458,7 +477,7 @@ func TestE2E(t *testing.T) {
 			env.markPaired(t)
 
 			// Create a corrupted .ogg file
-			corruptPath := filepath.Join(env.AudiosDir, sampleAudioName)
+			corruptPath := filepath.Join(env.AudioPoolDir, sampleAudioName)
 			_ = os.WriteFile(corruptPath, []byte("THIS IS NOT A VALID OGG PACKET OR OPUS AUDIO STREAM"), 0644)
 
 			env.setMockSong("BTS", "Butter")
@@ -508,7 +527,6 @@ func TestE2E(t *testing.T) {
 				"MOCK_WHATSAPP=true",
 				"BYPASS_CAMPAIGN_TIME_CHECKS=true",
 				"BYPASS_RNG_SCHEDULE_CHECKS=true",
-				fmt.Sprintf("WAPP_DB_PATH=%s", env.WappDBPath),
 				fmt.Sprintf("APP_DB_PATH=%s", env.AppDBPath),
 				fmt.Sprintf("AUDIOS_DIR=%s", env.AudiosDir),
 				fmt.Sprintf("MOCK_SENT_MESSAGES_PATH=%s", env.MockSentMsgPath),
@@ -543,7 +561,7 @@ func TestE2E(t *testing.T) {
 			env.markPaired(t)
 
 			// Create a short 0.5s audio clip using ffmpeg from the template audio
-			shortPath := filepath.Join(env.AudiosDir, sampleAudioName)
+			shortPath := filepath.Join(env.AudioPoolDir, sampleAudioName)
 			_ = os.Remove(shortPath) // remove copied full audio
 
 			cmdCrop := exec.Command(bundledFFmpegPath(t), "-y", "-i", sampleAudioPath, "-t", "0.5", "-c", "copy", shortPath)
@@ -613,16 +631,27 @@ func TestE2E(t *testing.T) {
 
 	})
 
-	t.Run("Secondary_Uploaded_Audio_Can_Be_Sent", func(t *testing.T) {
+	t.Run("Additional_Person_Uploaded_Audio_Can_Be_Sent", func(t *testing.T) {
 		env := setupTestEnv(t)
 		defer env.cleanup()
 
 		env.markPaired(t)
 		if err := os.WriteFile(filepath.Join(env.TempDir, "wapp_40111222333.sqlite"), []byte("paired"), 0o644); err != nil {
-			t.Fatalf("failed to seed secondary sender session: %v", err)
+			t.Fatalf("failed to seed additional sender session: %v", err)
 		}
-		if err := os.Remove(filepath.Join(env.AudiosDir, sampleAudioName)); err != nil {
-			t.Fatalf("failed to clear canonical audio pool: %v", err)
+		if err := os.Remove(filepath.Join(env.AudioPoolDir, sampleAudioName)); err != nil {
+			t.Fatalf("failed to clear audio pool: %v", err)
+		}
+		dbMgr, err := poller.NewDBManager(env.AppDBPath)
+		if err != nil {
+			t.Fatalf("failed to open app database: %v", err)
+		}
+		person, err := dbMgr.CreatePerson(context.Background(), "Additional Sender")
+		if err != nil {
+			t.Fatalf("failed to create additional person: %v", err)
+		}
+		if err := dbMgr.SetSenderSessionWithPerson(context.Background(), "+40111222333", "wapp_40111222333.sqlite", &person.ID); err != nil {
+			t.Fatalf("failed to seed additional sender session: %v", err)
 		}
 
 		_ = env.startManagedApp(t)
@@ -634,8 +663,8 @@ func TestE2E(t *testing.T) {
 		}
 		var uploadBody bytes.Buffer
 		uploadWriter := multipart.NewWriter(&uploadBody)
-		if err := uploadWriter.WriteField("phone", "+40111222333"); err != nil {
-			t.Fatalf("failed to add upload phone: %v", err)
+		if err := uploadWriter.WriteField("person_slug", person.Slug); err != nil {
+			t.Fatalf("failed to add upload person: %v", err)
 		}
 		part, err := uploadWriter.CreateFormFile("audio", "fresh-upload.ogg")
 		if err != nil {
@@ -656,7 +685,7 @@ func TestE2E(t *testing.T) {
 		req.AddCookie(env.authCookie(t))
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			t.Fatalf("failed to upload secondary audio: %v", err)
+			t.Fatalf("failed to upload additional-person audio: %v", err)
 		}
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
@@ -673,16 +702,16 @@ func TestE2E(t *testing.T) {
 			_ = json.Unmarshal(data, &sent)
 		}
 		if len(sent) == 0 {
-			t.Fatal("expected a sent message after uploading only secondary sender audio")
+			t.Fatal("expected a sent message after uploading only additional-person audio")
 		}
 
-		activePath := filepath.Join(env.AudiosDir, "40111222333", "fresh-upload.ogg")
-		usedPath := filepath.Join(env.AudiosDir, "40111222333", "used", "fresh-upload.ogg")
+		activePath := filepath.Join(env.AudiosDir, person.Slug, "fresh-upload.ogg")
+		usedPath := filepath.Join(env.AudiosDir, person.Slug, "used", "fresh-upload.ogg")
 		if _, err := os.Stat(activePath); !os.IsNotExist(err) {
-			t.Fatalf("secondary uploaded audio should leave the active pool after send: %v", err)
+			t.Fatalf("additional-person uploaded audio should leave the active pool after send: %v", err)
 		}
 		if _, err := os.Stat(usedPath); err != nil {
-			t.Fatalf("secondary uploaded audio was not moved into used/: %v", err)
+			t.Fatalf("additional-person uploaded audio was not moved into used/: %v", err)
 		}
 	})
 
@@ -691,7 +720,7 @@ func TestE2E(t *testing.T) {
 		defer env.cleanup()
 
 		env.markPaired(t)
-		unreviewedDir := filepath.Join(env.TempDir, "signatures", "unreviewed")
+		unreviewedDir := filepath.Join(env.TempDir, poller.DirSignatures, poller.BucketUnreviewed)
 		if err := os.MkdirAll(unreviewedDir, 0o755); err != nil {
 			t.Fatalf("failed to create unreviewed dir: %v", err)
 		}
@@ -713,7 +742,7 @@ func TestE2E(t *testing.T) {
 			t.Fatalf("failed to open app database: %v", err)
 		}
 		defer func() { _ = db.Close() }()
-		if _, err := db.Exec(`INSERT INTO signature_files (bucket, filename, recorded_at, campaign_artist) VALUES (?, ?, ?, ?)`, "unreviewed", filename, time.Now().UTC().Format(time.RFC3339), "BTS"); err != nil {
+		if _, err := db.Exec(`INSERT INTO signature_files (bucket, filename, recorded_at, campaign_artist) VALUES (?, ?, ?, ?)`, poller.BucketUnreviewed, filename, time.Now().UTC().Format(time.RFC3339), "BTS"); err != nil {
 			t.Fatalf("failed to seed signature metadata row: %v", err)
 		}
 
@@ -765,7 +794,7 @@ func TestE2E(t *testing.T) {
 		}
 		_ = resp.Body.Close()
 
-		canonicalData, err := os.ReadFile(filepath.Join(env.TempDir, "signatures", "canonical", filename))
+		canonicalData, err := os.ReadFile(filepath.Join(env.TempDir, poller.DirSignatures, poller.BucketCanonical, filename))
 		if err != nil {
 			t.Fatalf("failed to read canonical crop: %v", err)
 		}

@@ -267,7 +267,7 @@ func TestPoller_getNowPlaying_BadURL(t *testing.T) {
 	}
 }
 
-func TestPoller_checkSong(t *testing.T) {
+func TestPoller_checkMetadataWithCoordinator(t *testing.T) {
 	// A Wednesday at 12:00 PM (Active time for campaigns)
 	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
 
@@ -358,7 +358,9 @@ func TestPoller_checkSong(t *testing.T) {
 			dbMgr, _ := NewDBManager(":memory:")
 
 			audiosDir := t.TempDir()
-			_ = os.WriteFile(audiosDir+"/test.ogg", []byte("fake"), 0644)
+			personDir := filepath.Join(audiosDir, "test-sender")
+			_ = os.MkdirAll(personDir, 0o755)
+			_ = os.WriteFile(filepath.Join(personDir, "test.ogg"), []byte("fake"), 0o644)
 			poller := &Poller{
 				APIURL:       server.URL,
 				PollInterval: 1 * time.Millisecond,
@@ -371,8 +373,8 @@ func TestPoller_checkSong(t *testing.T) {
 				AudiosDir:   audiosDir,
 				DBMgr:       dbMgr,
 				SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
-					if senderPhone != "+40734788254" {
-						t.Fatalf("SendVoiceNote senderPhone = %q, want %q", senderPhone, "+40734788254")
+					if senderPhone != "+40700000001" {
+						t.Fatalf("SendVoiceNote senderPhone = %q, want %q", senderPhone, "+40700000001")
 					}
 					if targetPhone != "+40770661491" {
 						t.Fatalf("SendVoiceNote targetPhone = %q, want %q", targetPhone, "+40770661491")
@@ -388,7 +390,7 @@ func TestPoller_checkSong(t *testing.T) {
 				},
 			}
 
-			poller.checkSong(tt.currentSong, activeTime)
+			(&metadataContestChecker{poller: poller, coordinator: poller.contestCheckCoordinator(), currentSong: tt.currentSong}).Check(activeTime)
 
 			if poller.matchesToday != tt.wantMatches {
 				t.Errorf("matchesToday = %v, want %v", poller.matchesToday, tt.wantMatches)
@@ -400,13 +402,15 @@ func TestPoller_checkSong(t *testing.T) {
 	}
 }
 
-func TestPoller_checkSong_Deduplication(t *testing.T) {
+func TestPoller_checkMetadataWithCoordinator_Deduplication(t *testing.T) {
 	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
 	dbMgr, _ := NewDBManager(":memory:")
 	audiosDir := t.TempDir()
-	_ = os.WriteFile(audiosDir+"/test1.ogg", []byte("fake-1"), 0644)
-	_ = os.WriteFile(audiosDir+"/test2.ogg", []byte("fake-2"), 0644)
-	_ = os.WriteFile(audiosDir+"/test3.ogg", []byte("fake-3"), 0644)
+	personDir := filepath.Join(audiosDir, "test-sender")
+	_ = os.MkdirAll(personDir, 0o755)
+	_ = os.WriteFile(filepath.Join(personDir, "test1.ogg"), []byte("fake-1"), 0o644)
+	_ = os.WriteFile(filepath.Join(personDir, "test2.ogg"), []byte("fake-2"), 0o644)
+	_ = os.WriteFile(filepath.Join(personDir, "test3.ogg"), []byte("fake-3"), 0o644)
 
 	voiceCalls := 0
 	poller := &Poller{
@@ -421,8 +425,8 @@ func TestPoller_checkSong_Deduplication(t *testing.T) {
 		AudiosDir:   audiosDir,
 		DBMgr:       dbMgr,
 		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
-			if senderPhone != "+40734788254" {
-				t.Fatalf("SendVoiceNote senderPhone = %q, want %q", senderPhone, "+40734788254")
+			if senderPhone != "+40700000001" {
+				t.Fatalf("SendVoiceNote senderPhone = %q, want %q", senderPhone, "+40700000001")
 			}
 			if targetPhone != "+40770661491" {
 				t.Fatalf("SendVoiceNote targetPhone = %q, want %q", targetPhone, "+40770661491")
@@ -443,7 +447,7 @@ func TestPoller_checkSong_Deduplication(t *testing.T) {
 		}))
 		defer server.Close()
 		poller.APIURL = server.URL
-		poller.checkSong(currentSong, when)
+		(&metadataContestChecker{poller: poller, coordinator: poller.contestCheckCoordinator(), currentSong: currentSong}).Check(when)
 	}
 
 	// 1. Play BTS - Dynamite (should trigger, voiceCalls = 1)
@@ -490,7 +494,7 @@ func TestPoller_checkSong_Deduplication(t *testing.T) {
 	}
 }
 
-func TestPoller_checkSong_DailyLimit(t *testing.T) {
+func TestPoller_checkMetadataWithCoordinator_DailyLimit(t *testing.T) {
 	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"data":{"epg":{"playerExtendedSongTitle":"BTS","playerExtendedSongSubtitle":"Dynamite"}}}`))
@@ -511,8 +515,8 @@ func TestPoller_checkSong_DailyLimit(t *testing.T) {
 		Alerter:      NewMultiAlerter(),
 		AudiosDir:    t.TempDir(),
 		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
-			if senderPhone != "+40734788254" {
-				t.Fatalf("SendVoiceNote senderPhone = %q, want %q", senderPhone, "+40734788254")
+			if senderPhone != "+40700000001" {
+				t.Fatalf("SendVoiceNote senderPhone = %q, want %q", senderPhone, "+40700000001")
 			}
 			if targetPhone != "+40770661491" {
 				t.Fatalf("SendVoiceNote targetPhone = %q, want %q", targetPhone, "+40770661491")
@@ -523,7 +527,7 @@ func TestPoller_checkSong_DailyLimit(t *testing.T) {
 	}
 
 	currentSong := &SongInfo{}
-	poller.checkSong(currentSong, activeTime)
+	(&metadataContestChecker{poller: poller, coordinator: poller.contestCheckCoordinator(), currentSong: currentSong}).Check(activeTime)
 
 	if voiceCalls != 0 {
 		t.Errorf("Expected 0 voice calls due to daily limit, got %d", voiceCalls)
@@ -533,7 +537,7 @@ func TestPoller_checkSong_DailyLimit(t *testing.T) {
 	}
 }
 
-func TestPoller_checkSong_RequiresDifferentArtistBetweenCampaignSends(t *testing.T) {
+func TestPoller_checkMetadataWithCoordinator_RequiresDifferentArtistBetweenCampaignSends(t *testing.T) {
 	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
 	dbMgr, err := NewDBManager(":memory:")
 	if err != nil {
@@ -541,10 +545,12 @@ func TestPoller_checkSong_RequiresDifferentArtistBetweenCampaignSends(t *testing
 	}
 
 	audiosDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(audiosDir, "test1.ogg"), []byte("first"), 0o644); err != nil {
+	personDir := filepath.Join(audiosDir, "test-sender")
+	_ = os.MkdirAll(personDir, 0o755)
+	if err := os.WriteFile(filepath.Join(personDir, "test1.ogg"), []byte("first"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(audiosDir, "test2.ogg"), []byte("second"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(personDir, "test2.ogg"), []byte("second"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
@@ -573,7 +579,7 @@ func TestPoller_checkSong_RequiresDifferentArtistBetweenCampaignSends(t *testing
 		}))
 		defer server.Close()
 		poller.APIURL = server.URL
-		poller.checkSong(currentSong, when)
+		(&metadataContestChecker{poller: poller, coordinator: poller.contestCheckCoordinator(), currentSong: currentSong}).Check(when)
 	}
 
 	simulateSong("BTS", "Dynamite", activeTime)
@@ -612,24 +618,6 @@ func TestPoller_matchingCampaignArtistRequiresActualCampaignMatch(t *testing.T) 
 	}
 }
 
-func TestPoller_consumeIgnoredMetadataTrigger(t *testing.T) {
-	poller := &Poller{
-		ignoredTrigger: parseFingerprintTrigger("BTS - Butter.mp3"),
-	}
-
-	if !poller.consumeIgnoredMetadataTrigger(SongInfo{Artist: "BTS", Title: "CONCURS FOLLOW PROFM 2026 MUNCHEN - BUTTER"}) {
-		t.Fatal("Expected metadata trigger for the same campaign turn to be consumed after a fingerprint match")
-	}
-	if poller.ignoredTrigger.signatureName != "" {
-		t.Fatal("Expected ignored trigger to be cleared after consuming the matching metadata event")
-	}
-
-	poller.ignoredTrigger = parseFingerprintTrigger("BTS - Butter.mp3")
-	if poller.consumeIgnoredMetadataTrigger(SongInfo{Artist: "Kamrad", Title: "BE MINE"}) {
-		t.Fatal("Expected unrelated metadata trigger to remain eligible")
-	}
-}
-
 func TestPoller_captureContestAudioSharesOneSnapshotAndMetadata(t *testing.T) {
 	buffer := NewCircularAudioBuffer("", 16)
 	buffer.writeBytes([]byte("live audio"))
@@ -654,10 +642,18 @@ func TestPoller_captureContestAudioSharesOneSnapshotAndMetadata(t *testing.T) {
 }
 
 func TestPoller_matchingCampaignPhraseRequiresAnActiveCampaignPhrase(t *testing.T) {
-	poller := &Poller{ActiveCampaigns: []Campaign{{
-		StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS",
-		Phrases: []string{"follow profm"},
-	}}}
+	dbMgr, err := NewDBManager(":memory:")
+	if err != nil {
+		t.Fatalf("NewDBManager() error = %v", err)
+	}
+	_ = dbMgr.AddCampaignPhrase(context.Background(), "BTS", "follow profm")
+
+	poller := &Poller{
+		ActiveCampaigns: []Campaign{{
+			StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS",
+		}},
+		DBMgr: dbMgr,
+	}
 	now := bucharestTime(2026, time.June, 17, 12, 0, 0)
 	artist, phrase, matched := poller.matchingCampaignPhrase(now, "Acum asculta follow profm si castiga cu noi")
 	if !matched || artist != "BTS" || phrase != "follow profm" {
@@ -668,78 +664,101 @@ func TestPoller_matchingCampaignPhraseRequiresAnActiveCampaignPhrase(t *testing.
 	}
 }
 
-func TestPoller_checkSongFingerprintTriggeredTurnSkipsMetadataDashcamSave(t *testing.T) {
-	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
-	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"data": map[string]any{
-				"epg": map[string]string{
-					"playerExtendedSongTitle":    "BTS",
-					"playerExtendedSongSubtitle": "Butter",
-				},
-			},
-		})
-	}))
-	defer api.Close()
-
-	stateMgr := createMockStateMgr()
-	stateMgr.Update(func(s *AppState) {
-		s.GatheringSignatures = true
-	})
-
-	audioBuffer := NewCircularAudioBuffer("", 8)
-	audioBuffer.writeBytes([]byte("preroll"))
+func TestPoller_matchingCampaignPhraseAllowsWhisperWordDrift(t *testing.T) {
+	dbMgr, err := NewDBManager(":memory:")
+	if err != nil {
+		t.Fatalf("NewDBManager() error = %v", err)
+	}
+	phrase := "Urmează Ariana Grande pe ProFM! Ascultă melodia și poți câștiga super premii în direct."
+	_ = dbMgr.AddCampaignPhrase(context.Background(), "Ariana", phrase)
 
 	poller := &Poller{
-		APIURL:          api.URL,
-		ActiveCampaigns: []Campaign{{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"}},
-		StateMgr:        stateMgr,
-		AudioBuffer:     audioBuffer,
-		AudiosDir:       t.TempDir(),
-		SignaturesDir:   t.TempDir(),
-		ignoredTrigger:  parseFingerprintTrigger("BTS - Butter.mp3"),
-		SendVoiceNote: func(senderPhone, targetPhone, audioPath string) error {
-			t.Fatal("metadata path should have been ignored after fingerprint trigger")
-			return nil
-		},
+		ActiveCampaigns: []Campaign{{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana"}},
+		DBMgr:           dbMgr,
 	}
-
-	currentSong := SongInfo{}
-	poller.checkSong(&currentSong, activeTime)
-
-	audioBuffer.mu.Lock()
-	isRecording := audioBuffer.isRecording
-	audioBuffer.mu.Unlock()
-
-	if isRecording {
-		t.Fatal("expected metadata-triggered dashcam save to stay off for a fingerprint-triggered turn")
-	}
-	if poller.ignoredTrigger.signatureName != "" {
-		t.Fatal("expected consumed fingerprint trigger to be cleared")
+	now := bucharestTime(2026, time.July, 21, 12, 0, 0)
+	artist, matchedPhrase, matched := poller.matchingCampaignPhrase(now, "Urmează ariana grandei pe profm, ascultă melodii ași poți că știga super premii indirect.")
+	if !matched || artist != "Ariana" || normalizeTriggerValue(matchedPhrase) != normalizeTriggerValue(phrase) {
+		t.Fatalf("matchingCampaignPhrase() = (%q, %q, %v), want fuzzy Ariana phrase match", artist, matchedPhrase, matched)
 	}
 }
 
-func TestPoller_resolveFingerprintSongUsesLiveMetadata(t *testing.T) {
-	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"data": map[string]any{
-				"epg": map[string]string{
-					"playerExtendedSongTitle":    "BTS",
-					"playerExtendedSongSubtitle": "2026 - Butter",
-				},
-			},
-		})
-	}))
-	defer api.Close()
-
-	poller := &Poller{APIURL: api.URL}
-	got := poller.resolveFingerprintSong(fingerprintTrigger{artist: "BTS", title: "Unknown"})
-
-	if got.Artist != "BTS" {
-		t.Fatalf("resolveFingerprintSong() artist = %q, want %q", got.Artist, "BTS")
+func TestPoller_matchingCampaignPhraseRefreshesAfterPhraseEdits(t *testing.T) {
+	dbMgr := mustNewTestDBManager(t)
+	ctx := context.Background()
+	if err := dbMgr.AddCampaignPhrase(ctx, "BTS", "follow profm"); err != nil {
+		t.Fatal(err)
 	}
-	if got.Title != "Butter" {
-		t.Fatalf("resolveFingerprintSong() title = %q, want %q", got.Title, "Butter")
+	poller := &Poller{ActiveCampaigns: []Campaign{{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"}}, DBMgr: dbMgr}
+	now := bucharestTime(2026, time.June, 17, 12, 0, 0)
+
+	if _, phrase, matched := poller.matchingCampaignPhrase(now, "follow profm"); !matched || phrase != "follow profm" {
+		t.Fatalf("initial phrase = (%q, %v), want follow profm match", phrase, matched)
+	}
+	if err := dbMgr.DeleteCampaignPhrase(ctx, "BTS", "follow profm"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, matched := poller.matchingCampaignPhrase(now, "follow profm"); matched {
+		t.Fatal("deleted phrase still matched from cache")
+	}
+	if err := dbMgr.AddCampaignPhrase(ctx, "BTS", "trimite mesaj"); err != nil {
+		t.Fatal(err)
+	}
+	if _, phrase, matched := poller.matchingCampaignPhrase(now, "trimite mesaj acum"); !matched || phrase != "trimite mesaj" {
+		t.Fatalf("added phrase = (%q, %v), want trimite mesaj match", phrase, matched)
+	}
+}
+
+func TestPoller_transcriptionMatchesAcrossRecentTranscriptWindow(t *testing.T) {
+	t.Setenv("BYPASS_CAMPAIGN_TIME_CHECKS", "true")
+	dbMgr := mustNewTestDBManager(t)
+	if err := dbMgr.AddCampaignPhrase(context.Background(), "The Weeknd", "ascultă hitul către barcelona trimite acum un mesaj audio pe whatsapp"); err != nil {
+		t.Fatal(err)
+	}
+	alerter := &recordingAlerter{}
+	poller := &Poller{
+		ActiveCampaigns:     []Campaign{{Artist: "The Weeknd"}},
+		DBMgr:               dbMgr,
+		Alerter:             alerter,
+		TranscriptionBuffer: NewTimeSeriesBuffer[string](10 * time.Minute),
+	}
+	coordinator := NewContestCheckCoordinator(time.Minute)
+	now := time.Now()
+
+	poller.handleTranscriptWithCoordinator(now, coordinator, nil, "ascultă hitul către barcelona")
+	if len(alerter.successEvents) != 0 {
+		t.Fatal("partial transcript triggered before phrase was complete")
+	}
+	poller.handleTranscriptWithCoordinator(now.Add(5*time.Second), coordinator, nil, "trimite acum un mesaj audio pe whatsapp")
+	if len(alerter.successEvents) != 1 {
+		t.Fatalf("AlertSuccess() calls = %d, want 1", len(alerter.successEvents))
+	}
+}
+
+func TestPoller_transcriptionAlertsWhenAutomaticSendingIsBlocked(t *testing.T) {
+	t.Setenv("BYPASS_CAMPAIGN_TIME_CHECKS", "true")
+	dbMgr := mustNewTestDBManager(t)
+	if err := dbMgr.AddCampaignPhrase(context.Background(), "BTS", "follow profm"); err != nil {
+		t.Fatal(err)
+	}
+	stateMgr := createMockStateMgr()
+	stateMgr.Update(func(s *AppState) { s.KillSwitchActive = true })
+	alerter := &recordingAlerter{}
+	poller := &Poller{
+		ActiveCampaigns: []Campaign{{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"}},
+		DBMgr:           dbMgr,
+		StateMgr:        stateMgr,
+		Alerter:         alerter,
+		matchesToday:    MaxDailyMatches,
+		lastCheckDay:    time.Now().YearDay(),
+	}
+
+	poller.HandleStreamingTranscript("asculta follow profm acum")
+	if got := len(alerter.successEvents); got != 1 {
+		t.Fatalf("AlertSuccess() calls = %d, want 1", got)
+	}
+	if got := poller.matchesToday; got != MaxDailyMatches {
+		t.Fatalf("matchesToday = %d, want daily limit unchanged", got)
 	}
 }
 
@@ -752,7 +771,7 @@ func TestPoller_saveUnreviewedChunkForReviewAlertsOnceWhenSaved(t *testing.T) {
 		BaseURL:       "http://localhost:8080",
 	}
 
-	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"), "")
+	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"), "", []ContestTag{})
 
 	if len(alerter.infoEvents) != 1 {
 		t.Fatalf("AlertInfo() calls = %d, want 1", len(alerter.infoEvents))
@@ -761,7 +780,7 @@ func TestPoller_saveUnreviewedChunkForReviewAlertsOnceWhenSaved(t *testing.T) {
 		t.Fatalf("AlertInfo().Title = %q, want %q", got, "Intro Chunk Needs Review")
 	}
 
-	files, err := os.ReadDir(filepath.Join(signaturesDir, "unreviewed"))
+	files, err := os.ReadDir(filepath.Join(signaturesDir, BucketUnreviewed))
 	if err != nil {
 		t.Fatalf("ReadDir() error = %v", err)
 	}
@@ -785,9 +804,9 @@ func TestPoller_saveUnreviewedChunkForReviewStoresCampaignOwnership(t *testing.T
 	}
 
 	t.Setenv("BYPASS_CAMPAIGN_TIME_CHECKS", "true")
-	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"), "")
+	poller.saveUnreviewedChunkForReview(SongInfo{Artist: "BTS", Title: "Butter"}, []byte("new intro chunk"), "", []ContestTag{})
 
-	files, err := os.ReadDir(filepath.Join(signaturesDir, "unreviewed"))
+	files, err := os.ReadDir(filepath.Join(signaturesDir, BucketUnreviewed))
 	if err != nil {
 		t.Fatalf("ReadDir() error = %v", err)
 	}
@@ -795,7 +814,7 @@ func TestPoller_saveUnreviewedChunkForReviewStoresCampaignOwnership(t *testing.T
 		t.Fatalf("saved review chunks = %d, want 1", len(files))
 	}
 
-	meta, err := dbMgr.GetSignatureFile(context.Background(), "unreviewed", files[0].Name())
+	meta, err := dbMgr.GetSignatureFile(context.Background(), BucketUnreviewed, files[0].Name())
 	if err != nil {
 		t.Fatalf("GetSignatureFile() error = %v", err)
 	}
@@ -806,7 +825,9 @@ func TestPoller_saveUnreviewedChunkForReviewStoresCampaignOwnership(t *testing.T
 
 func TestPoller_doTriggerVoiceNote_ReportsOnlySuccessAfterSend(t *testing.T) {
 	audiosDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(audiosDir, "test.ogg"), []byte("fake"), 0o644); err != nil {
+	personDir := filepath.Join(audiosDir, "test-sender")
+	_ = os.MkdirAll(personDir, 0o755)
+	if err := os.WriteFile(filepath.Join(personDir, "test.ogg"), []byte("fake"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
@@ -823,7 +844,7 @@ func TestPoller_doTriggerVoiceNote_ReportsOnlySuccessAfterSend(t *testing.T) {
 		},
 	}
 
-	poller.doTriggerVoiceNote(triggerSourceFingerprint, "BTS", "BTS", "Dynamite", bucharestTime(2026, time.June, 17, 12, 0, 0), 1, 0)
+	poller.doTriggerVoiceNote(triggerSourceFingerprint, "BTS", bucharestTime(2026, time.June, 17, 12, 0, 0), 1, 0)
 
 	if sendCalls != 1 {
 		t.Fatalf("SendVoiceNote() calls = %d, want 1", sendCalls)
@@ -844,7 +865,9 @@ func TestPoller_doTriggerVoiceNote_ReportsOnlySuccessAfterSend(t *testing.T) {
 
 func TestPoller_doTriggerVoiceNote_ReportsOnlyFailureAfterSendError(t *testing.T) {
 	audiosDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(audiosDir, "test.ogg"), []byte("fake"), 0o644); err != nil {
+	personDir := filepath.Join(audiosDir, "test-sender")
+	_ = os.MkdirAll(personDir, 0o755)
+	if err := os.WriteFile(filepath.Join(personDir, "test.ogg"), []byte("fake"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
@@ -861,7 +884,7 @@ func TestPoller_doTriggerVoiceNote_ReportsOnlyFailureAfterSendError(t *testing.T
 		},
 	}
 
-	poller.doTriggerVoiceNote(triggerSourceMetadata, "BTS", "BTS", "Dynamite", bucharestTime(2026, time.June, 17, 12, 0, 0), 1, 0)
+	poller.doTriggerVoiceNote(triggerSourceMetadata, "BTS", bucharestTime(2026, time.June, 17, 12, 0, 0), 1, 0)
 
 	if sendCalls != 1 {
 		t.Fatalf("SendVoiceNote() calls = %d, want 1", sendCalls)
@@ -976,18 +999,36 @@ func TestNormalizeTriggerValueDiacritics(t *testing.T) {
 		}
 	}
 
-	if !TriggerValuesMatch("Ascultă hitul către Londra", "asculta hitul catre londra") {
+	triggerValuesMatch := func(left, right string) bool {
+		left = normalizeTriggerValue(left)
+		right = normalizeTriggerValue(right)
+		if left == "" || right == "" {
+			return false
+		}
+		return strings.Contains(left, right) || strings.Contains(right, left)
+	}
+
+	if !triggerValuesMatch("Ascultă hitul către Londra", "asculta hitul catre londra") {
 		t.Error("TriggerValuesMatch should match regardless of diacritics")
 	}
-	if !TriggerValuesMatch("Muzică bună și concursuri", "muzica buna si concursuri") {
+	if !triggerValuesMatch("Muzică bună și concursuri", "muzica buna si concursuri") {
 		t.Error("TriggerValuesMatch should match regardless of diacritics and special characters")
 	}
 }
 
 func createMockStateMgr() *StateManager {
 	sm := NewStateManager()
+	personID := int64(1)
 	sm.Update(func(s *AppState) {
-		s.Connections = []WAConnectionState{{Phone: "+40734788254", WhatsAppConnected: true, Status: StatusConnected}}
+		s.Persons = []Person{{ID: personID, Name: "Test Sender", Slug: "test-sender"}}
+		s.Connections = []WAConnectionState{{
+			Phone:             "+40700000001",
+			WhatsAppConnected: true,
+			Status:            StatusConnected,
+			PersonID:          &personID,
+			PersonName:        "Test Sender",
+			PersonSlug:        "test-sender",
+		}}
 	})
 	return sm
 }

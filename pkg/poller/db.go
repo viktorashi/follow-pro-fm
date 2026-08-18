@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -16,11 +17,42 @@ import (
 type DBManager struct {
 	db                *sql.DB
 	trustedEmailsPath string
+	phraseMu          sync.RWMutex
+	phraseCache       map[string][]string
+}
+
+type Person struct {
+	ID        int64     `json:"id"`
+	Name      string    `json:"name"`
+	Slug      string    `json:"slug"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type SenderSession struct {
-	Phone      string
-	DBFilename string
+	Phone      string `json:"phone"`
+	DBFilename string `json:"db_filename"`
+	PersonID   *int64 `json:"person_id,omitempty"`
+	PersonName string `json:"person_name,omitempty"`
+	PersonSlug string `json:"person_slug,omitempty"`
+}
+
+func Slugify(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else if r == ' ' || r == '-' || r == '_' {
+			if b.Len() > 0 && !strings.HasSuffix(b.String(), "-") {
+				b.WriteRune('-')
+			}
+		}
+	}
+	res := strings.Trim(b.String(), "-")
+	if res == "" {
+		res = "person"
+	}
+	return res
 }
 
 func NewDBManager(dbPath string) (*DBManager, error) {
@@ -106,9 +138,16 @@ func initSchema(db *sql.DB) error {
 			phrase TEXT NOT NULL,
 			PRIMARY KEY(campaign_artist, phrase)
 		);`,
+		`CREATE TABLE IF NOT EXISTS persons (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			slug TEXT NOT NULL UNIQUE,
+			created_at DATETIME NOT NULL
+		);`,
 		`CREATE TABLE IF NOT EXISTS sender_sessions (
 			phone TEXT PRIMARY KEY,
-			db_filename TEXT NOT NULL
+			db_filename TEXT NOT NULL,
+			person_id INTEGER REFERENCES persons(id) ON DELETE SET NULL
 		);`,
 		`CREATE TABLE IF NOT EXISTS alerts (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -127,16 +166,135 @@ func initSchema(db *sql.DB) error {
 
 	// Migrations
 	_, _ = db.Exec(`ALTER TABLE signature_files ADD COLUMN transcript TEXT DEFAULT '';`)
+	_, _ = db.Exec(`ALTER TABLE signature_files ADD COLUMN tags TEXT DEFAULT '';`)
 	_, _ = db.Exec(`ALTER TABLE played_songs RENAME COLUMN played_date TO played_datetime;`)
+	_, _ = db.Exec(`ALTER TABLE sender_sessions ADD COLUMN person_id INTEGER REFERENCES persons(id) ON DELETE SET NULL;`)
 
 	return nil
 }
 
+func (m *DBManager) CreatePerson(ctx context.Context, name string) (*Person, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fmt.Errorf("person name cannot be empty")
+	}
+	slug := Slugify(name)
+	baseSlug := slug
+	counter := 1
+	for {
+		var exists bool
+		err := m.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM persons WHERE slug = ?)", slug).Scan(&exists)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			break
+		}
+		counter++
+		slug = fmt.Sprintf("%s-%d", baseSlug, counter)
+	}
+
+	now := time.Now().UTC()
+	res, err := m.db.ExecContext(ctx, "INSERT INTO persons (name, slug, created_at) VALUES (?, ?, ?)", name, slug, now)
+	if err != nil {
+		return nil, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	return &Person{ID: id, Name: name, Slug: slug, CreatedAt: now}, nil
+}
+
+func (m *DBManager) ListPersons(ctx context.Context) ([]Person, error) {
+	rows, err := m.db.QueryContext(ctx, "SELECT id, name, slug, created_at FROM persons ORDER BY name ASC")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var persons []Person
+	for rows.Next() {
+		var p Person
+		var createdAtRaw interface{}
+		if err := rows.Scan(&p.ID, &p.Name, &p.Slug, &createdAtRaw); err != nil {
+			return nil, err
+		}
+		switch v := createdAtRaw.(type) {
+		case time.Time:
+			p.CreatedAt = v
+		case string:
+			p.CreatedAt, _ = time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", v)
+			if p.CreatedAt.IsZero() {
+				p.CreatedAt, _ = time.Parse(time.RFC3339, v)
+			}
+		}
+		persons = append(persons, p)
+	}
+	return persons, rows.Err()
+}
+
+func (m *DBManager) GetPerson(ctx context.Context, id int64) (*Person, error) {
+	var p Person
+	var createdAtRaw interface{}
+	err := m.db.QueryRowContext(ctx, "SELECT id, name, slug, created_at FROM persons WHERE id = ?", id).Scan(&p.ID, &p.Name, &p.Slug, &createdAtRaw)
+	if err != nil {
+		return nil, err
+	}
+	switch v := createdAtRaw.(type) {
+	case time.Time:
+		p.CreatedAt = v
+	case string:
+		p.CreatedAt, _ = time.Parse(time.RFC3339, v)
+	}
+	return &p, nil
+}
+
+func (m *DBManager) GetPersonBySlug(ctx context.Context, slug string) (*Person, error) {
+	var p Person
+	var createdAtRaw interface{}
+	err := m.db.QueryRowContext(ctx, "SELECT id, name, slug, created_at FROM persons WHERE slug = ?", slug).Scan(&p.ID, &p.Name, &p.Slug, &createdAtRaw)
+	if err != nil {
+		return nil, err
+	}
+	switch v := createdAtRaw.(type) {
+	case time.Time:
+		p.CreatedAt = v
+	case string:
+		p.CreatedAt, _ = time.Parse(time.RFC3339, v)
+	}
+	return &p, nil
+}
+
+func (m *DBManager) UpdatePerson(ctx context.Context, id int64, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("person name cannot be empty")
+	}
+	_, err := m.db.ExecContext(ctx, "UPDATE persons SET name = ? WHERE id = ?", name, id)
+	return err
+}
+
+func (m *DBManager) DeletePerson(ctx context.Context, id int64) error {
+	_, err := m.db.ExecContext(ctx, "DELETE FROM persons WHERE id = ?", id)
+	return err
+}
+
+func (m *DBManager) AssignPhoneToPerson(ctx context.Context, phone string, personID *int64) error {
+	_, err := m.db.ExecContext(ctx, "UPDATE sender_sessions SET person_id = ? WHERE phone = ?", personID, phone)
+	return err
+}
+
 func (m *DBManager) SetSenderSession(ctx context.Context, phone, dbFilename string) error {
+	return m.SetSenderSessionWithPerson(ctx, phone, dbFilename, nil)
+}
+
+func (m *DBManager) SetSenderSessionWithPerson(ctx context.Context, phone, dbFilename string, personID *int64) error {
 	_, err := m.db.ExecContext(ctx,
-		`INSERT INTO sender_sessions (phone, db_filename) VALUES (?, ?)
-		 ON CONFLICT(phone) DO UPDATE SET db_filename = excluded.db_filename`,
-		phone, dbFilename,
+		`INSERT INTO sender_sessions (phone, db_filename, person_id) VALUES (?, ?, ?)
+		 ON CONFLICT(phone) DO UPDATE SET db_filename = excluded.db_filename,
+		 person_id = COALESCE(excluded.person_id, sender_sessions.person_id)`,
+		phone, dbFilename, personID,
 	)
 	return err
 }
@@ -147,7 +305,12 @@ func (m *DBManager) RemoveSenderSession(ctx context.Context, phone string) error
 }
 
 func (m *DBManager) SenderSessions(ctx context.Context) ([]SenderSession, error) {
-	rows, err := m.db.QueryContext(ctx, "SELECT phone, db_filename FROM sender_sessions ORDER BY phone")
+	rows, err := m.db.QueryContext(ctx, `
+		SELECT s.phone, s.db_filename, s.person_id, COALESCE(p.name, ''), COALESCE(p.slug, '')
+		FROM sender_sessions s
+		LEFT JOIN persons p ON s.person_id = p.id
+		ORDER BY s.phone
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -156,8 +319,13 @@ func (m *DBManager) SenderSessions(ctx context.Context) ([]SenderSession, error)
 	var sessions []SenderSession
 	for rows.Next() {
 		var session SenderSession
-		if err := rows.Scan(&session.Phone, &session.DBFilename); err != nil {
+		var pID sql.NullInt64
+		if err := rows.Scan(&session.Phone, &session.DBFilename, &pID, &session.PersonName, &session.PersonSlug); err != nil {
 			return nil, err
+		}
+		if pID.Valid {
+			idVal := pID.Int64
+			session.PersonID = &idVal
 		}
 		sessions = append(sessions, session)
 	}
@@ -496,22 +664,25 @@ type SignatureFile struct {
 	RecordedAt     time.Time
 	CampaignArtist string
 	Transcript     string
+	Tags           string
 }
 
-func (m *DBManager) UpsertSignatureFile(ctx context.Context, bucket, filename string, recordedAt time.Time, campaignArtist, transcript string) error {
+func (m *DBManager) UpsertSignatureFile(ctx context.Context, bucket, filename string, recordedAt time.Time, campaignArtist, transcript, tags string) error {
 	_, err := m.db.ExecContext(
 		ctx,
-		`INSERT INTO signature_files (bucket, filename, recorded_at, campaign_artist, transcript)
-		 VALUES (?, ?, ?, ?, ?)
+		`INSERT INTO signature_files (bucket, filename, recorded_at, campaign_artist, transcript, tags)
+		 VALUES (?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(bucket, filename) DO UPDATE SET
 		   recorded_at = excluded.recorded_at,
 		   campaign_artist = excluded.campaign_artist,
-		   transcript = excluded.transcript`,
+		   transcript = excluded.transcript,
+		   tags = excluded.tags`,
 		bucket,
 		filename,
 		recordedAt.Format(time.RFC3339),
 		campaignArtist,
 		transcript,
+		tags,
 	)
 	return err
 }
@@ -532,12 +703,12 @@ func (m *DBManager) GetSignatureFile(ctx context.Context, bucket, filename strin
 	var recordedAt string
 	err := m.db.QueryRowContext(
 		ctx,
-		`SELECT bucket, filename, recorded_at, campaign_artist, transcript
+		`SELECT bucket, filename, recorded_at, campaign_artist, transcript, tags
 		 FROM signature_files
 		 WHERE bucket = ? AND filename = ?`,
 		bucket,
 		filename,
-	).Scan(&meta.Bucket, &meta.Filename, &recordedAt, &meta.CampaignArtist, &meta.Transcript)
+	).Scan(&meta.Bucket, &meta.Filename, &recordedAt, &meta.CampaignArtist, &meta.Transcript, &meta.Tags)
 	if err != nil {
 		return SignatureFile{}, err
 	}
@@ -554,16 +725,33 @@ func (m *DBManager) CopySignatureFile(ctx context.Context, fromBucket, toBucket,
 	if err != nil {
 		return err
 	}
-	return m.UpsertSignatureFile(ctx, toBucket, filename, meta.RecordedAt, meta.CampaignArtist, meta.Transcript)
+	return m.UpsertSignatureFile(ctx, toBucket, filename, meta.RecordedAt, meta.CampaignArtist, meta.Transcript, meta.Tags)
 }
 
 func (m *DBManager) AddCampaignPhrase(ctx context.Context, campaignArtist, phrase string) error {
-	_, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO campaign_phrases (campaign_artist, phrase) VALUES (?, ?)", normalizeCampaignArtistKey(campaignArtist), strings.ToLower(strings.TrimSpace(phrase)))
+	artist := normalizeCampaignArtistKey(campaignArtist)
+	_, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO campaign_phrases (campaign_artist, phrase) VALUES (?, ?)", artist, strings.ToLower(strings.TrimSpace(phrase)))
+	if err == nil {
+		m.invalidateCampaignPhraseCache(artist)
+	}
 	return err
 }
 
 func (m *DBManager) GetCampaignPhrases(ctx context.Context, campaignArtist string) ([]string, error) {
-	rows, err := m.db.QueryContext(ctx, "SELECT phrase FROM campaign_phrases WHERE campaign_artist = ?", normalizeCampaignArtistKey(campaignArtist))
+	artist := normalizeCampaignArtistKey(campaignArtist)
+	m.phraseMu.RLock()
+	cached, ok := m.phraseCache[artist]
+	m.phraseMu.RUnlock()
+	if ok {
+		return cached, nil
+	}
+
+	m.phraseMu.Lock()
+	defer m.phraseMu.Unlock()
+	if phrases, ok := m.phraseCache[artist]; ok {
+		return phrases, nil
+	}
+	rows, err := m.db.QueryContext(ctx, "SELECT phrase FROM campaign_phrases WHERE campaign_artist = ?", artist)
 	if err != nil {
 		return nil, err
 	}
@@ -577,5 +765,50 @@ func (m *DBManager) GetCampaignPhrases(ctx context.Context, campaignArtist strin
 		}
 		phrases = append(phrases, p)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if m.phraseCache == nil {
+		m.phraseCache = make(map[string][]string)
+	}
+	m.phraseCache[artist] = phrases
+	return phrases, nil
+}
+
+type CampaignPhrase struct {
+	CampaignArtist string `json:"campaign_artist"`
+	Phrase         string `json:"phrase"`
+}
+
+func (m *DBManager) ListAllCampaignPhrases(ctx context.Context) (map[string][]CampaignPhrase, error) {
+	rows, err := m.db.QueryContext(ctx, "SELECT campaign_artist, phrase FROM campaign_phrases ORDER BY campaign_artist, phrase")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	phrases := make(map[string][]CampaignPhrase)
+	for rows.Next() {
+		var p CampaignPhrase
+		if err := rows.Scan(&p.CampaignArtist, &p.Phrase); err != nil {
+			return nil, err
+		}
+		phrases[p.CampaignArtist] = append(phrases[p.CampaignArtist], p)
+	}
 	return phrases, rows.Err()
+}
+
+func (m *DBManager) DeleteCampaignPhrase(ctx context.Context, campaignArtist, phrase string) error {
+	artist := normalizeCampaignArtistKey(campaignArtist)
+	_, err := m.db.ExecContext(ctx, "DELETE FROM campaign_phrases WHERE campaign_artist = ? AND phrase = ?", artist, strings.ToLower(strings.TrimSpace(phrase)))
+	if err == nil {
+		m.invalidateCampaignPhraseCache(artist)
+	}
+	return err
+}
+
+func (m *DBManager) invalidateCampaignPhraseCache(artist string) {
+	m.phraseMu.Lock()
+	delete(m.phraseCache, artist)
+	m.phraseMu.Unlock()
 }

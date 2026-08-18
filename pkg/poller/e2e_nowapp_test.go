@@ -1,9 +1,11 @@
-//go:build e2e && nowapp
-// +build e2e,nowapp
+//go:build e2e
+// +build e2e
 
 package poller
 
 import (
+	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -11,50 +13,102 @@ import (
 
 func TestPoller_E2E_NoWhatsApp(t *testing.T) {
 	rootDir := E2EProjectRoot(t)
-	audiosDir := filepath.Join(rootDir, "data/audios")
 	LoadE2EEnv(rootDir)
+	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
+	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
+	if telegramToken == "" || telegramChatID == "" {
+		t.Fatal("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required for this E2E test")
+	}
+	telegram := &telegramE2EAlerter{delegate: NewTelegramAlerter(telegramToken, telegramChatID)}
 
-	t.Log("Skipping real WhatsApp client initialization (nowapp build tag)")
-
-	if err := InitAudioPool(audiosDir); err != nil {
+	audiosDir := filepath.Join(t.TempDir(), "audios")
+	dbMgr, err := NewDBManager(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to create in-memory DB: %v", err)
+	}
+	person, err := dbMgr.CreatePerson(context.Background(), "E2E Sender")
+	if err != nil {
+		t.Fatalf("Failed to create sender: %v", err)
+	}
+	const senderPhone = "+40700000000"
+	if err := dbMgr.SetSenderSessionWithPerson(context.Background(), senderPhone, "wapp_40700000000.sqlite", &person.ID); err != nil {
+		t.Fatalf("Failed to create sender session: %v", err)
+	}
+	audioDir := GetAudioDirForPerson(person.Slug, audiosDir)
+	if err := InitAudioPool(audioDir); err != nil {
 		t.Fatalf("Failed to initialize audio pool: %v", err)
 	}
-
-	multiAlerter := E2EMultiAlerter(rootDir)
-	targetPhone := E2ETargetPhoneFromEnv()
-
-	activeTime := time.Date(2026, time.June, 17, 12, 0, 0, 0, time.UTC)
+	audio, err := os.ReadFile("testdata/waveform_sample.ogg")
+	if err != nil {
+		t.Fatalf("Failed to read audio fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(audioDir, "voice.ogg"), audio, 0o644); err != nil {
+		t.Fatalf("Failed to seed audio pool: %v", err)
+	}
 
 	server := NewCampaignHitServer(t)
 	defer server.Close()
+	activeTime := time.Date(2026, time.June, 17, 12, 0, 0, 0, time.UTC)
+	stateMgr := NewStateManager()
+	stateMgr.Update(func(s *AppState) {
+		s.Connections = []WAConnectionState{{Phone: senderPhone, WhatsAppConnected: true, Status: StatusConnected}}
+	})
+	HydrateConnectionPersons(dbMgr, stateMgr, context.Background())
 
+	sent := 0
 	poller := &Poller{
 		APIURL:       server.URL,
 		PollInterval: 1 * time.Millisecond,
 		ActiveCampaigns: []Campaign{
 			{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
 		},
-		TargetPhone: targetPhone,
-		StateMgr:    NewStateManager(),
-		Alerter:     multiAlerter,
+		TargetPhone: "+40700000001",
+		StateMgr:    stateMgr,
+		Alerter:     telegram,
 		AudiosDir:   audiosDir,
+		DBMgr:       dbMgr,
 		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
-			t.Logf("🚀 Simulating voice note send from %s to %s (audio: %s)", senderPhone, targetPhone, audioPath)
+			sent++
 			return nil
 		},
 	}
-	poller.StateMgr.Update(func(s *AppState) {
-		s.Connections = []WAConnectionState{{Phone: "+40734788254", WhatsAppConnected: true, Status: StatusConnected}}
-	})
 
 	currentSong := &SongInfo{}
 
 	t.Log("Triggering song check...")
-	poller.checkSong(currentSong, activeTime)
+	(&metadataContestChecker{poller: poller, coordinator: poller.contestCheckCoordinator(), currentSong: currentSong}).Check(activeTime)
 
-	if poller.matchesToday != 1 {
-		t.Fatalf("Expected 1 match to trigger message, got %d", poller.matchesToday)
+	if poller.matchesToday != 1 || sent != 1 {
+		t.Fatalf("matches = %d, sends = %d; want one of each", poller.matchesToday, sent)
 	}
+	if telegram.calls < 2 || len(telegram.errs) != 0 {
+		t.Fatalf("Telegram deliveries = %d, errors = %v; want at least two successful alerts", telegram.calls, telegram.errs)
+	}
+}
 
-	t.Log("E2E test complete! Check your phone for the voice note.")
+type telegramE2EAlerter struct {
+	delegate *TelegramAlerter
+	calls    int
+	errs     []error
+}
+
+func (a *telegramE2EAlerter) send(fn func(AlertEvent) error, event AlertEvent) error {
+	a.calls++
+	err := fn(event)
+	if err != nil {
+		a.errs = append(a.errs, err)
+	}
+	return err
+}
+
+func (a *telegramE2EAlerter) AlertCritical(event AlertEvent) error {
+	return a.send(a.delegate.AlertCritical, event)
+}
+
+func (a *telegramE2EAlerter) AlertInfo(event AlertEvent) error {
+	return a.send(a.delegate.AlertInfo, event)
+}
+
+func (a *telegramE2EAlerter) AlertSuccess(event AlertEvent) error {
+	return a.send(a.delegate.AlertSuccess, event)
 }

@@ -39,17 +39,20 @@ test-cover: build-ffmpeg generate
     go tool cover -html=coverage.out
 
 test-cover-e2e-nowapp: build-ffmpeg generate
-    PATH="./bin:$PATH" go test -v -coverprofile=coverage.out -tags="e2e,nowapp" ./pkg/...
-    go tool cover -func=coverage.out
-    go tool cover -html=coverage.out
-
-test-cover-e2e-all: build-ffmpeg generate
     PATH="./bin:$PATH" go test -v -coverprofile=coverage.out -tags=e2e ./pkg/...
     go tool cover -func=coverage.out
     go tool cover -html=coverage.out
 
+test-cover-e2e-all: build-ffmpeg generate
+    PATH="./bin:$PATH" go test -v -coverprofile=coverage.out -tags="e2e,wapp" ./pkg/...
+    go tool cover -func=coverage.out
+    go tool cover -html=coverage.out
+
 test-transcriptions:
-    go test -run TestWhisperContainerTranscription ./pkg/poller/...
+    ./scripts/ci.sh whisper
+
+ci:
+    ./scripts/ci.sh
 
 # ---- Docker ----
 
@@ -80,9 +83,7 @@ fly-ssh:
 # Usage:
 #   just push-audios                        (pushes local 'data/audios' to remote '/data/audios')
 #   just push-files                         (alias for push-audios)
-#   just push-audios ./my_audios            (pushes to canonical sender '/data/audios/')
-#   just push-audios ./my_audios 40771234567 (pushes to '/data/audios/40771234567/')
-#   just push-audios ./my_audios /           (pushes to canonical sender '/data/audios/')
+# just push-audios ./my_audios 40771234567 (pushes to '/data/audios/40771234567/')
 push-audios LOCAL_DIR="data/audios" PHONE="":
     #!/usr/bin/env bash
     set -e
@@ -99,18 +100,13 @@ push-audios LOCAL_DIR="data/audios" PHONE="":
         exit 1
     fi
 
-    if [ "$LOCAL" = "data/audios" ]; then
+    if [ -z "$PHONE" ] || [ "$PHONE" = "/" ]; then
         TARGET="/data/audios"
-        echo "Uploading local 'data/audios' folder to Fly persistent volume..."
+        echo "Uploading local '$LOCAL' folder to Fly persistent volume at $TARGET..."
     else
-        if [ -z "$PHONE" ] || [ "$PHONE" = "/" ]; then
-            TARGET="/data/audios"
-            echo "Pushing audios from $LOCAL to canonical sender at $TARGET..."
-        else
-            PHONE=$(echo "$PHONE" | sed 's/+//g' | sed 's/ //g')
-            TARGET="/data/audios/$PHONE"
-            echo "Pushing audios from $LOCAL to phone $PHONE at $TARGET..."
-        fi
+        PHONE=$(echo "$PHONE" | sed 's/+//g' | sed 's/ //g')
+        TARGET="/data/audios/$PHONE"
+        echo "Pushing audios from $LOCAL to phone $PHONE at $TARGET..."
     fi
 
     TMP_STAGING=$(mktemp -d)
@@ -150,17 +146,17 @@ fly-list-files:
 fly-cat filepath:
     flyctl ssh console -C 'cat /data/{{ filepath }}'
 
-# Pull all files from Fly.io persistent volume to local data directory (excluding wapp.sqlite)
+# Pull all files from Fly.io persistent volume to the local data directory.
 fly-pull-files:
     @echo "Downloading files from Fly persistent volume to local 'data' directory..."
-    flyctl ssh console -C 'tar -cf - --exclude="wapp.sqlite" -C /data .' | tar -xf - -C data
+    flyctl ssh console -C 'tar -cf - -C /data .' | tar -xf - -C data
     @echo "✅ Files downloaded."
 
-# Pull the wapp.sqlite database file from Fly.io persistent volume
+# Pull the app database and every persisted sender session database.
 fly-pull-db:
-    @echo "Downloading wapp.sqlite from Fly persistent volume..."
-    flyctl ssh console -C 'tar -cf - -C /data wapp.sqlite' | tar -xf - -C data
-    @echo "✅ Database downloaded."
+    @echo "Downloading app and sender-session databases from Fly persistent volume..."
+    flyctl ssh console -C "sh -c 'cd /data && tar -cf - app.sqlite wapp_*.sqlite'" | tar -xf - -C data
+    @echo "✅ Databases downloaded."
 
 # Pull the entire contents of the Fly.io persistent volume to a versioned sub-directory in downloaded-from-fly/
 fly-pull-all:

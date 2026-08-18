@@ -3,51 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 
 	"pro-fm-poller/pkg/poller"
 )
-
-func TestBootstrapSenderPhonesAlwaysIncludesCanonicalAndPersistedSecondaries(t *testing.T) {
-	tempDir := t.TempDir()
-	dbPath := filepath.Join(tempDir, "wapp.sqlite")
-
-	for _, name := range []string{
-		"wapp_40770661491.sqlite",
-		"wapp_40734788254.sqlite",
-		"wapp_40711122334.sqlite",
-	} {
-		if err := os.WriteFile(filepath.Join(tempDir, name), []byte("paired"), 0o644); err != nil {
-			t.Fatalf("WriteFile(%q) error = %v", name, err)
-		}
-	}
-
-	got := bootstrapSenderPhones(dbPath)
-	want := []string{
-		poller.CanonicalSenderPhone,
-		"+40711122334",
-		"+40770661491",
-	}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("bootstrapSenderPhones() = %v, want %v", got, want)
-	}
-}
-
-func TestBootstrapSenderPhonesFallsBackToCanonicalOnly(t *testing.T) {
-	tempDir := t.TempDir()
-	dbPath := filepath.Join(tempDir, "wapp.sqlite")
-
-	got := bootstrapSenderPhones(dbPath)
-	want := []string{poller.CanonicalSenderPhone}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("bootstrapSenderPhones() = %v, want %v", got, want)
-	}
-}
 
 func TestGatheringSettingLoadsFromDatabaseIntoStateManager(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "app.sqlite")
@@ -77,7 +37,7 @@ func TestInitSenderPhoneRollsBackStateOnInitFailure(t *testing.T) {
 	stateMgr := poller.NewStateManager()
 	phone := "+40111222333"
 
-	client, err := initSenderPhone(phone, filepath.Join(t.TempDir(), "wapp_40111222333.sqlite"), stateMgr, nil, "", func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error) {
+	client, err := initSenderPhone(phone, filepath.Join(t.TempDir(), "wapp_40111222333.sqlite"), stateMgr, nil, "", nil, "", "", func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error) {
 		return nil, fmt.Errorf("boom")
 	})
 	if err == nil {
@@ -98,7 +58,7 @@ func TestInitSenderPhoneKeepsStateOnSuccess(t *testing.T) {
 	phone := "+40111222333"
 	mockClient := &poller.MockWhatsAppClient{}
 
-	client, err := initSenderPhone(phone, filepath.Join(t.TempDir(), "wapp_40111222333.sqlite"), stateMgr, nil, "", func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error) {
+	client, err := initSenderPhone(phone, filepath.Join(t.TempDir(), "wapp_40111222333.sqlite"), stateMgr, nil, "", nil, "", "", func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error) {
 		return mockClient, nil
 	})
 	if err != nil {

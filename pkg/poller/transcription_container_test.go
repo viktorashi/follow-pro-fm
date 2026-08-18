@@ -1,13 +1,18 @@
+//go:build e2e
+// +build e2e
+
 package poller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -91,99 +96,54 @@ func loadTranscriptionCases(t *testing.T) []transcriptionTestCase {
 }
 
 func TestWhisperContainerTranscription(t *testing.T) {
-	// Check if docker daemon is available
+	t.Setenv("BYPASS_CAMPAIGN_TIME_CHECKS", "true")
 	if err := exec.Command("docker", "info").Run(); err != nil {
 		t.Skip("Docker daemon not available, skipping Whisper container transcription E2E test")
 	}
 
 	containerName := "profm-whisper-test"
+	imageName := "profm-whisper-test:local"
 	testPort := 18000
 	healthURL := fmt.Sprintf("http://127.0.0.1:%d/health", testPort)
 	transcriptionURL := fmt.Sprintf("http://127.0.0.1:%d/v1/audio/transcriptions", testPort)
 
-	// Probe existing container if running to see if it is fully functional
-	alreadyHealthy := false
-	resp, err := http.Get(healthURL)
-	if err == nil && resp.StatusCode == http.StatusOK {
-		_ = resp.Body.Close()
-		// Test actual transcription endpoint to ensure worker thread is alive (not EOFing)
-		probeTranscriber := NewHTTPTranscriber(transcriptionURL)
-		probeCtx, probeCancel := context.WithTimeout(context.Background(), 3*time.Second)
-		_, probeErr := probeTranscriber(probeCtx, []byte("fake_audio"))
-		probeCancel()
-		if probeErr == nil || (!strings.Contains(probeErr.Error(), "EOF") && !strings.Contains(probeErr.Error(), "connection refused")) {
-			alreadyHealthy = true
+	if os.Getenv("WHISPER_TEST_IMAGE_READY") != "1" {
+		if out, err := exec.Command("docker", "build", "-q", "-t", imageName, "../../whisper-server").CombinedOutput(); err != nil {
+			t.Fatalf("docker build failed: %v, output: %s", err, out)
 		}
 	}
-
-	if alreadyHealthy {
-		t.Logf("Reusing existing healthy Whisper test container %s at %s", containerName, healthURL)
-	} else {
-		// Force-remove any stale/dead container before starting a fresh instance
+	imageID, err := exec.Command("docker", "image", "inspect", imageName, "--format", "{{.Id}}").Output()
+	if err != nil {
+		t.Fatalf("docker image inspect failed: %v", err)
+	}
+	containerImageID, _ := exec.Command("docker", "inspect", containerName, "--format", "{{.Image}}").Output()
+	alreadyHealthy := strings.TrimSpace(string(imageID)) == strings.TrimSpace(string(containerImageID)) && whisperHealthy(healthURL)
+	if !alreadyHealthy {
 		_ = exec.Command("docker", "rm", "-f", containerName).Run()
-
-		imageName := "fedirz/faster-whisper-server:latest-cpu"
-		t.Logf("Spinning up test Whisper container %s on port %d...", containerName, testPort)
-
-		// Use a local directory bind mount so GitHub Actions can cache it
-		cacheDir, err := filepath.Abs("../../.whisper_cache")
+		out, err := exec.Command("docker", "run", "-d", "-p", fmt.Sprintf("%d:8000", testPort), "--name", containerName, imageName).CombinedOutput()
 		if err != nil {
-			t.Fatalf("failed to resolve cache dir: %v", err)
+			t.Fatalf("docker run failed: %v, output: %s", err, out)
 		}
-		if err := os.MkdirAll(cacheDir, 0755); err != nil {
-			t.Fatalf("failed to create cache dir: %v", err)
-		}
-
-		runCmd := exec.Command("docker", "run", "-d",
-			"-p", fmt.Sprintf("%d:8000", testPort),
-			"-v", fmt.Sprintf("%s:/root/.cache/huggingface", cacheDir),
-			"-e", "UVICORN_HOST=0.0.0.0",
-			"-e", "ENABLE_UI=false",
-			"-e", "WHISPER_MODEL=base",
-			"-e", "WHISPER__MODEL=base",
-			"-e", "WHISPER__COMPUTE_TYPE=int8",
-			"-e", "DEFAULT_LANGUAGE=ro",
-			"-e", "OMP_NUM_THREADS=4",
-			"--name", containerName,
-			imageName,
-		)
-		if out, err := runCmd.CombinedOutput(); err != nil {
-			t.Fatalf("docker run failed: %v, output: %s", err, string(out))
-		}
-
-		// Wait for container readiness via /health endpoint
-		healthy := false
-		for i := 0; i < 240; i++ {
+		for deadline := time.Now().Add(2 * time.Minute); !whisperHealthy(healthURL); {
+			if time.Now().After(deadline) {
+				t.Fatalf("Whisper container failed to become healthy at %s", healthURL)
+			}
 			time.Sleep(500 * time.Millisecond)
-			resp, err := http.Get(healthURL)
-			if err == nil && resp.StatusCode == http.StatusOK {
-				_ = resp.Body.Close()
-				healthy = true
-				break
-			}
-			if resp != nil {
-				_ = resp.Body.Close()
-			}
-		}
-		if !healthy {
-			t.Fatalf("Whisper container failed to become healthy at %s", healthURL)
 		}
 	}
-	transcriber := NewHTTPTranscriber(transcriptionURL)
 
 	cases := loadTranscriptionCases(t)
 	if len(cases) == 0 {
 		t.Fatal("no transcription test cases found in testdata/transcription/cases")
 	}
-
 	for _, tc := range cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
 
-			liveTranscript, err := transcriber(ctx, tc.AudioBytes)
+			liveTranscript, err := runProductionWebSocketCheck(ctx, transcriptionURL, tc, filepath.Join(t.TempDir(), "phrases.sqlite"))
 			if err != nil {
-				t.Fatalf("Transcribe failed for %s: %v", tc.Name, err)
+				t.Fatalf("streaming transcription failed for %s: %v", tc.Name, err)
 			}
 			t.Logf("[%s] Live transcript: %q | Full text: %q", tc.Name, liveTranscript, tc.FullText)
 
@@ -191,38 +151,91 @@ func TestWhisperContainerTranscription(t *testing.T) {
 				t.Fatalf("[%s] Got empty transcription from Whisper", tc.Name)
 			}
 
-			matched := TriggerValuesMatch(liveTranscript, tc.FullText)
-			overlap := transcriptWordOverlap(liveTranscript, tc.FullText)
-			t.Logf("[%s] Reference overlap ratio: %.2f%%", tc.Name, overlap*100)
-
-			if !matched && overlap < 0.45 {
-				t.Fatalf("[%s] Live transcript %q did not match reference transcript %q (overlap: %.2f%%)", tc.Name, liveTranscript, tc.FullText, overlap*100)
-			}
 		})
 	}
 }
 
-func transcriptWordOverlap(s1, s2 string) float64 {
-	s1 = normalizeTriggerValue(s1)
-	s2 = normalizeTriggerValue(s2)
-	w1 := strings.Fields(s1)
-	w2 := strings.Fields(s2)
-	if len(w1) == 0 || len(w2) == 0 {
-		return 0
+func whisperHealthy(url string) bool {
+	resp, err := http.Get(url)
+	if err != nil {
+		return false
 	}
-	set1 := make(map[string]bool)
-	for _, w := range w1 {
-		set1[w] = true
+	_ = resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+type transcriptionTriggerAlerter struct {
+	once      sync.Once
+	triggered chan struct{}
+}
+
+func (a *transcriptionTriggerAlerter) AlertCritical(AlertEvent) error { return nil }
+func (a *transcriptionTriggerAlerter) AlertInfo(AlertEvent) error     { return nil }
+func (a *transcriptionTriggerAlerter) AlertSuccess(AlertEvent) error {
+	a.once.Do(func() { close(a.triggered) })
+	return nil
+}
+
+func runProductionWebSocketCheck(ctx context.Context, transcriptionURL string, tc transcriptionTestCase, dbPath string) (string, error) {
+	db, err := NewDBManager(dbPath)
+	if err != nil {
+		return "", err
 	}
-	intersection := 0
-	for _, w := range w2 {
-		if set1[w] {
-			intersection++
+	for _, phrase := range tc.TrustedPhrases {
+		if err := db.AddCampaignPhrase(context.Background(), "Test Campaign", phrase); err != nil {
+			return "", err
 		}
 	}
-	minLen := len(w1)
-	if len(w2) < minLen {
-		minLen = len(w2)
+
+	alerter := &transcriptionTriggerAlerter{triggered: make(chan struct{})}
+	poller := &Poller{
+		ActiveCampaigns:     []Campaign{{Artist: "Test Campaign"}},
+		TranscriptionBuffer: NewTimeSeriesBuffer[string](10 * time.Minute),
+		DBMgr:               db,
+		Alerter:             alerter,
+		StateMgr:            createMockStateMgr(),
 	}
-	return float64(intersection) / float64(minLen)
+	var transcriptMu sync.Mutex
+	var transcripts []string
+	mp3 := make(chan []byte)
+	transcriber := StartStreamingTranscription(ctx, mp3, transcriptionURL, func(transcript string) {
+		transcriptMu.Lock()
+		transcripts = append(transcripts, transcript)
+		transcriptMu.Unlock()
+		poller.HandleStreamingTranscript(transcript)
+	})
+	go func() {
+		defer close(mp3)
+		const streamChunkBytes = 8192
+		for start := 0; start < len(tc.AudioBytes); start += streamChunkBytes {
+			end := start + streamChunkBytes
+			if end > len(tc.AudioBytes) {
+				end = len(tc.AudioBytes)
+			}
+			select {
+			case mp3 <- tc.AudioBytes[start:end]:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	result := func() string {
+		transcriptMu.Lock()
+		defer transcriptMu.Unlock()
+		return strings.Join(transcripts, " | ")
+	}
+	select {
+	case <-alerter.triggered:
+		return result(), nil
+	case <-transcriber.Done():
+		select {
+		case <-alerter.triggered:
+			return result(), nil
+		default:
+			return result(), errors.New("audio finished before a trusted phrase matched")
+		}
+	case <-ctx.Done():
+		return result(), ctx.Err()
+	}
 }

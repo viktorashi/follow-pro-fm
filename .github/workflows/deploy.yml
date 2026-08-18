@@ -6,6 +6,10 @@ on:
     types: [completed]
     branches: [main]
 
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -14,16 +18,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           submodules: recursive
+
+      - name: Verify tested commit is still main
+        run: test "$(git ls-remote origin refs/heads/main | cut -f1)" = "${{ github.event.workflow_run.head_sha }}"
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - name: Deploy to Fly.io
-        run: flyctl deploy --remote-only
+      - name: Scale Whisper to one Machine
+        run: flyctl scale count 1 --yes --app pro-fm-whisper
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_API_TOKEN: ${{ secrets.FLY_WHISPER_API_TOKEN }}
 
       - name: Deploy Whisper to Fly.io
         run: cd whisper-server && flyctl deploy --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_WHISPER_API_TOKEN }}
+
+      - name: Confirm one Whisper Machine
+        run: flyctl scale count 1 --yes --app pro-fm-whisper
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_WHISPER_API_TOKEN }}
+
+      - name: Deploy to Fly.io
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

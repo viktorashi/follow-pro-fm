@@ -88,8 +88,107 @@ func TestGetRandomAvailableAudioSkipsGloballyUsedContentHashes(t *testing.T) {
 
 	_, _, err = GetRandomAvailableAudio(rootDir, func(hash string) (bool, error) {
 		return dbMgr.IsAudioHashUsed(context.Background(), hash)
-	})
+	}, nil)
 	if err == nil {
 		t.Fatalf("Expected audio pool to be exhausted when only globally used content remains")
+	}
+}
+
+func TestGetRandomAvailableAudioDoesNotMoveReservedCandidates(t *testing.T) {
+	dir := t.TempDir()
+	reservedPath := filepath.Join(dir, "reserved.ogg")
+	freshPath := filepath.Join(dir, "fresh.ogg")
+	if err := os.WriteFile(reservedPath, []byte("reserved"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(freshPath, []byte("fresh"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reservedHash, err := HashAudioFile(reservedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, _, err := GetRandomAvailableAudio(dir, nil, map[string]struct{}{reservedHash: {}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != freshPath {
+		t.Fatalf("selected %q, want %q", got, freshPath)
+	}
+	if _, err := os.Stat(reservedPath); err != nil {
+		t.Fatalf("reserved audio was moved before send: %v", err)
+	}
+}
+
+func TestMoveAudioFilesRejectsDestinationCollisions(t *testing.T) {
+	for _, used := range []bool{false, true} {
+		name := "active"
+		if used {
+			name = "used"
+		}
+		t.Run(name, func(t *testing.T) {
+			sourceDir := filepath.Join(t.TempDir(), "source")
+			targetDir := filepath.Join(t.TempDir(), "target")
+			if err := InitAudioPool(sourceDir); err != nil {
+				t.Fatal(err)
+			}
+			if err := InitAudioPool(targetDir); err != nil {
+				t.Fatal(err)
+			}
+			if used {
+				sourceDir = filepath.Join(sourceDir, "used")
+				targetDir = filepath.Join(targetDir, "used")
+			}
+			filename := "voice.ogg"
+			sourcePath := filepath.Join(sourceDir, filename)
+			targetPath := filepath.Join(targetDir, filename)
+			if err := os.WriteFile(sourcePath, []byte("source"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(targetPath, []byte("target"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			moveSource := sourceDir
+			moveTarget := targetDir
+			if used {
+				moveSource = filepath.Dir(sourceDir)
+				moveTarget = filepath.Dir(targetDir)
+			}
+			if err := MoveAudioFiles(moveSource, moveTarget, []string{filename}); err == nil {
+				t.Fatal("MoveAudioFiles() overwrote an existing destination")
+			}
+			if got, _ := os.ReadFile(sourcePath); string(got) != "source" {
+				t.Fatalf("source changed after collision: %q", got)
+			}
+			if got, _ := os.ReadFile(targetPath); string(got) != "target" {
+				t.Fatalf("destination was overwritten: %q", got)
+			}
+		})
+	}
+}
+
+func TestAudioInventoryPerPerson(t *testing.T) {
+	rootDir := t.TempDir()
+	person := Person{Name: "Alice", Slug: "alice"}
+	dir := GetAudioDirForPerson(person.Slug, rootDir)
+	if err := os.WriteFile(filepath.Join(dir, "active.OGG"), []byte("active"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ignored.mp3"), []byte("ignored"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "used", "sent.ogg"), []byte("used"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	active, used, err := ListAudioFilesForPerson(person.Slug, rootDir)
+	if err != nil || len(active) != 1 || active[0] != "active.OGG" || len(used) != 1 || used[0] != "sent.ogg" {
+		t.Fatalf("inventory = %v, %v, %v", active, used, err)
+	}
+	stats := GetAudioStatsPerPerson([]Person{person}, rootDir)[person.Slug]
+	if stats.Unused != 1 || stats.Used != 1 {
+		t.Fatalf("stats = %+v", stats)
 	}
 }

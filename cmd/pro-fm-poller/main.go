@@ -7,10 +7,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
-	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -22,33 +20,6 @@ import (
 
 type whatsAppInitFunc func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error)
 
-func bootstrapSenderPhones(dbPath string) []string {
-	phones := []string{poller.CanonicalSenderPhone}
-	seen := map[string]struct{}{
-		poller.CanonicalSenderPhone: {},
-	}
-
-	matches, _ := filepath.Glob(filepath.Join(filepath.Dir(dbPath), "wapp_*.sqlite"))
-	sort.Strings(matches)
-	for _, match := range matches {
-		name := filepath.Base(match)
-		phone := strings.TrimPrefix(name, "wapp_")
-		phone = strings.TrimSuffix(phone, ".sqlite")
-		if phone == "" || strings.HasPrefix(phone, "pairing_") {
-			continue
-		}
-
-		normalized := "+" + phone
-		if _, ok := seen[normalized]; ok {
-			continue
-		}
-		seen[normalized] = struct{}{}
-		phones = append(phones, normalized)
-	}
-
-	return phones
-}
-
 func newPendingSessionFilename() (string, error) {
 	b := make([]byte, 12)
 	if _, err := rand.Read(b); err != nil {
@@ -57,17 +28,25 @@ func newPendingSessionFilename() (string, error) {
 	return "wapp_pairing_" + hex.EncodeToString(b) + ".sqlite", nil
 }
 
-func ensureSenderConnectionState(stateMgr *poller.StateManager, phone string) bool {
+func ensureSenderConnectionState(stateMgr *poller.StateManager, phone string, personID *int64, personName, personSlug string) bool {
 	added := false
 	stateMgr.Update(func(s *poller.AppState) {
 		for i := range s.Connections {
 			if s.Connections[i].Phone == phone {
+				if personID != nil {
+					s.Connections[i].PersonID = personID
+					s.Connections[i].PersonName = personName
+					s.Connections[i].PersonSlug = personSlug
+				}
 				return
 			}
 		}
 		s.Connections = append(s.Connections, poller.WAConnectionState{
-			Phone:  phone,
-			Status: poller.StatusInitializing,
+			Phone:      phone,
+			Status:     poller.StatusInitializing,
+			PersonID:   personID,
+			PersonName: personName,
+			PersonSlug: personSlug,
 		})
 		added = true
 	})
@@ -86,8 +65,8 @@ func removeSenderConnectionState(stateMgr *poller.StateManager, phone string) {
 	})
 }
 
-func initSenderPhone(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string, initWhatsApp whatsAppInitFunc) (poller.WhatsAppClient, error) {
-	added := ensureSenderConnectionState(stateMgr, phone)
+func initSenderPhone(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string, personID *int64, personName, personSlug string, initWhatsApp whatsAppInitFunc) (poller.WhatsAppClient, error) {
+	added := ensureSenderConnectionState(stateMgr, phone, personID, personName, personSlug)
 
 	client, err := initWhatsApp(phone, dbPath, stateMgr, alerter, baseURL)
 	if err != nil {
@@ -114,14 +93,11 @@ func main() {
 	if targetPhone == "" {
 		targetPhone = "+40770661491"
 	}
-	dbPath := os.Getenv("WAPP_DB_PATH")
-	if dbPath == "" {
-		dbPath = "/data/wapp.sqlite"
-	}
 	appDBPath := os.Getenv("APP_DB_PATH")
 	if appDBPath == "" {
 		appDBPath = "/data/app.sqlite"
 	}
+	dataDir := filepath.Dir(appDBPath)
 	sendgridKey := os.Getenv("SENDGRID_API_KEY")
 	adminPass := os.Getenv("ADMIN_PASSWORD")
 	baseURL := os.Getenv("BASE_URL")
@@ -141,9 +117,9 @@ func main() {
 		audiosDir = "/data/audios"
 	}
 
-	// 2. Initialize Audio Pool
-	if err := poller.InitAudioPool(audiosDir); err != nil {
-		log.Fatalf("Failed to init audio pool: %v", err)
+	// 2. Initialize person audio storage
+	if err := os.MkdirAll(audiosDir, 0o755); err != nil {
+		log.Fatalf("Failed to init audio storage: %v", err)
 	}
 
 	// 3. Initialize SQLite DB for auth and app state
@@ -157,6 +133,12 @@ func main() {
 
 	// 4. Initialize State Manager and SSE Broadcaster
 	stateMgr := poller.NewStateManager()
+
+	if persons, err := dbMgr.ListPersons(context.Background()); err == nil {
+		stateMgr.Update(func(s *poller.AppState) {
+			s.Persons = persons
+		})
+	}
 
 	// Load Kill Switch state
 	isKilled, err := dbMgr.IsKillSwitchActive(context.Background())
@@ -267,11 +249,11 @@ func main() {
 	transcribe = poller.NewHTTPTranscriber(transcriptionURL)
 	streamingTranscriptionURL := os.Getenv("TRANSCRIPTION_WS_URL")
 	if streamingTranscriptionURL == "" {
-		streamingTranscriptionURL = websocketURL(transcriptionURL)
+		streamingTranscriptionURL = transcriptionURL
 	}
 
 	// 8. Start Web Dashboard (Telemetry Server)
-	telemetryServer := poller.NewTelemetryServer(authMgr, stateMgr, sseBroadcaster, logWriter, dbMgr, filepath.Dir(dbPath), audiosDir, activeCampaigns, transcribe)
+	telemetryServer := poller.NewTelemetryServer(authMgr, stateMgr, sseBroadcaster, logWriter, dbMgr, dataDir, audiosDir, activeCampaigns, transcribe)
 	go func() {
 		fmt.Println("🚀 Telemetry UI available at", baseURL)
 		if err := telemetryServer.Start("0.0.0.0:" + port); err != nil {
@@ -285,7 +267,7 @@ func main() {
 	wappClients := make(map[string]poller.WhatsAppClient)
 	var wappMutex sync.RWMutex
 
-	addSenderPhone := func(p string, dbForPhone string) error {
+	addSenderPhone := func(p string, dbForPhone string, personID *int64, personName, personSlug string) error {
 		p = strings.TrimSpace(p)
 		if p == "" {
 			return nil
@@ -297,19 +279,17 @@ func main() {
 		wappMutex.RLock()
 		if _, exists := wappClients[p]; exists {
 			wappMutex.RUnlock()
+			ensureSenderConnectionState(stateMgr, p, personID, personName, personSlug)
 			return nil // Already added
 		}
 		wappMutex.RUnlock()
 
 		if dbForPhone == "" {
 			normalized := poller.NormalizePhone(p)
-			dbForPhone = filepath.Join(filepath.Dir(dbPath), "wapp_"+normalized+".sqlite")
-			if normalized == poller.CanonicalSenderPhoneNormalized {
-				dbForPhone = dbPath
-			}
+			dbForPhone = filepath.Join(dataDir, "wapp_"+normalized+".sqlite")
 		}
 
-		c, err := initSenderPhone(p, dbForPhone, stateMgr, alerter, baseURL, func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error) {
+		c, err := initSenderPhone(p, dbForPhone, stateMgr, alerter, baseURL, personID, personName, personSlug, func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error) {
 			return poller.InitWhatsApp(phone, dbPath, stateMgr, alerter, baseURL)
 		})
 		if err != nil {
@@ -329,14 +309,23 @@ func main() {
 		return nil
 	}
 
-	startPairing := func() error {
+	startPairing := func(personID *int64) error {
 		filename, err := newPendingSessionFilename()
 		if err != nil {
 			return err
 		}
 		pendingPhone := "New phone (scan QR)"
-		dbForPairing := filepath.Join(filepath.Dir(dbPath), filename)
-		if !ensureSenderConnectionState(stateMgr, pendingPhone) {
+		dbForPairing := filepath.Join(dataDir, filename)
+
+		var personName, personSlug string
+		if personID != nil && dbMgr != nil {
+			if p, err := dbMgr.GetPerson(context.Background(), *personID); err == nil && p != nil {
+				personName = p.Name
+				personSlug = p.Slug
+			}
+		}
+
+		if !ensureSenderConnectionState(stateMgr, pendingPhone, personID, personName, personSlug) {
 			return fmt.Errorf("a phone pairing is already in progress")
 		}
 
@@ -347,7 +336,7 @@ func main() {
 				log.Printf("Paired WhatsApp account did not expose a phone number")
 				return
 			}
-			if err := dbMgr.SetSenderSession(context.Background(), phone, filename); err != nil {
+			if err := dbMgr.SetSenderSessionWithPerson(context.Background(), phone, filename, personID); err != nil {
 				log.Printf("Failed to persist paired sender %s: %v", phone, err)
 				return
 			}
@@ -385,7 +374,10 @@ func main() {
 		return nil
 	}
 
-	telemetryServer.SetOnAddPhone(startPairing)
+	telemetryServer.SetOnAddPhoneWithPerson(startPairing)
+	telemetryServer.SetOnAddPhone(func() error {
+		return startPairing(nil)
+	})
 	telemetryServer.SetOnDisconnectPhone(func(p string) error {
 		p = strings.TrimSpace(p)
 		if p == "" {
@@ -418,16 +410,11 @@ func main() {
 		return nil
 	})
 
-	for _, phone := range bootstrapSenderPhones(dbPath) {
-		if err := addSenderPhone(phone, ""); err != nil {
-			log.Printf("Error adding phone %s: %v", phone, err)
-		}
-	}
 	if sessions, err := dbMgr.SenderSessions(context.Background()); err != nil {
 		log.Printf("Error loading paired sender sessions: %v", err)
 	} else {
 		for _, session := range sessions {
-			if err := addSenderPhone(session.Phone, filepath.Join(filepath.Dir(dbPath), session.DBFilename)); err != nil {
+			if err := addSenderPhone(session.Phone, filepath.Join(dataDir, session.DBFilename), session.PersonID, session.PersonName, session.PersonSlug); err != nil {
 				log.Printf("Error restoring phone %s: %v", session.Phone, err)
 			}
 		}
@@ -447,7 +434,6 @@ func main() {
 	defer audioBuffer.Stop()
 	pcmInput, unsubscribePCM := audioBuffer.Subscribe(128)
 	defer unsubscribePCM()
-	var streamingTranscriber *poller.WebSocketTranscriber
 	contestCheckCooldown := poller.DefaultContestCheckCooldown
 	if configured := os.Getenv("CONTEST_CHECK_COOLDOWN"); configured != "" {
 		parsed, err := time.ParseDuration(configured)
@@ -467,15 +453,12 @@ func main() {
 		StateMgr:             stateMgr,
 		Alerter:              alerter,
 		AudiosDir:            audiosDir,
-		SignaturesDir:        filepath.Join(filepath.Dir(audiosDir), "signatures"),
+		SignaturesDir:        filepath.Join(filepath.Dir(audiosDir), poller.DirSignatures),
 		AudioBuffer:          audioBuffer,
+		TranscriptionBuffer:  poller.NewTimeSeriesBuffer[string](10 * time.Minute),
 		DBMgr:                dbMgr,
 		BaseURL:              baseURL,
 		ContestCheckCooldown: contestCheckCooldown,
-		Transcribe:           transcribe,
-		StreamingTranscriptionActive: func() bool {
-			return streamingTranscriber != nil && streamingTranscriber.IsConnected()
-		},
 		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
 			wappMutex.RLock()
 			c, ok := wappClients[senderPhone]
@@ -490,9 +473,6 @@ func main() {
 			return fmt.Errorf("sender phone %s is not connected or logged in", senderPhone)
 		},
 		DisconnectWhatsApp: func() {
-			if streamingTranscriber != nil {
-				streamingTranscriber.SetEnabled(false)
-			}
 			wappMutex.RLock()
 			defer wappMutex.RUnlock()
 			for _, c := range wappClients {
@@ -502,9 +482,6 @@ func main() {
 			}
 		},
 		ConnectWhatsApp: func() error {
-			if streamingTranscriber != nil {
-				streamingTranscriber.SetEnabled(true)
-			}
 			wappMutex.RLock()
 			defer wappMutex.RUnlock()
 			for _, c := range wappClients {
@@ -516,30 +493,8 @@ func main() {
 			return nil
 		},
 	}
-	streamingTranscriber = poller.NewWebSocketTranscriber(streamingTranscriptionURL, p.HandleStreamingTranscript)
-	pcmConverter := poller.NewPCMConverter(pcmInput, streamingTranscriber.Audio())
-	streamingTranscriber.Start(context.Background())
-	pcmConverter.Start(context.Background())
+	poller.StartStreamingTranscription(context.Background(), pcmInput, streamingTranscriptionURL, p.HandleStreamingTranscript)
 	p.Start()
-}
-
-func websocketURL(transcriptionURL string) string {
-	u, err := url.Parse(transcriptionURL)
-	if err != nil {
-		return transcriptionURL
-	}
-	switch u.Scheme {
-	case "http":
-		u.Scheme = "ws"
-	case "https":
-		u.Scheme = "wss"
-	}
-
-	q := u.Query()
-	q.Set("vad_filter", "true")
-	u.RawQuery = q.Encode()
-
-	return u.String()
 }
 
 /// coaie de ce naiba nu vad aasta in git tracking?

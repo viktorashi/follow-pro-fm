@@ -16,7 +16,7 @@
 | 2 | Multi-WhatsApp | Multi-session clients, QR pairing, runtime-connected phone list, per-phone directories and global sent-audio state. | M1 | COMPLETE |
 | 3 | Buffer & Fingerprinting | Dashcam buffer, signature gathering/review/cropping, matching and fixture-backed tests. | M2, M1 | COMPLETE |
 | 4 | RNG Selection | Persisted daily schedule, dashboard editing and all-campaign-day fill through the general schedule endpoint. | M3 | COMPLETE |
-| 5 | Dashboard Upload | Authenticated upload to the selected connected phone's audio pool, including canonical/root audio. | M3 | COMPLETE |
+| 5 | Dashboard Upload | Authenticated upload to the selected connected phone's audio pool. | M3 | COMPLETE |
 
 ## Interface Contracts
 ### whatsmeow.Client ↔ poller.Poller

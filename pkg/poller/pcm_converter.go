@@ -8,7 +8,7 @@ import (
 )
 
 // PCMConverter turns the MP3 radio stream into the PCM format accepted by the
-// Whisper WebSocket endpoint.
+// Speaches Realtime endpoint.
 type PCMConverter struct {
 	input  <-chan []byte
 	output chan<- []byte
@@ -23,12 +23,13 @@ func (c *PCMConverter) Start(ctx context.Context) {
 }
 
 func (c *PCMConverter) run(ctx context.Context) {
+	defer close(c.output)
 	ffmpegPath, err := ffmpegBinaryPath()
 	if err != nil {
 		log.Printf("   ⚠️ PCM converter ffmpeg: %v", err)
 		return
 	}
-	cmd := exec.CommandContext(ctx, ffmpegPath, "-nostdin", "-loglevel", "error", "-i", "pipe:0", "-ac", "1", "-ar", "16000", "-f", "s16le", "pipe:1")
+	cmd := exec.CommandContext(ctx, ffmpegPath, "-nostdin", "-loglevel", "error", "-i", "pipe:0", "-ac", "1", "-ar", "24000", "-f", "s16le", "pipe:1")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		log.Printf("   ⚠️ PCM converter stdin: %v", err)
@@ -62,7 +63,8 @@ func (c *PCMConverter) run(ctx context.Context) {
 			chunk := append([]byte(nil), buf[:n]...)
 			select {
 			case c.output <- chunk:
-			default:
+			case <-ctx.Done():
+				return
 			}
 		}
 		if err != nil {
