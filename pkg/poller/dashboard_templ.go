@@ -165,7 +165,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<script>\n\t\t\tfunction toggleGathering() {\n\t\t\t\tfetch('/api/settings/gathering', {method: 'POST'})\n\t\t\t\t\t.then(() => window.location.reload());\n\t\t\t}\n\t\t\tfunction createPerson(event, form) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\tconst data = new FormData(form);\n\t\t\t\tfetch('/api/persons', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\tbody: data\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Failed to create person');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => alert(err.message));\n\t\t\t\treturn false;\n\t\t\t}\n\t\t\tfunction editPerson(id, currentName) {\n\t\t\t\tconst newName = prompt(\"Edit Person Name:\", currentName);\n\t\t\t\tif (!newName || newName.trim() === \"\" || newName.trim() === currentName) return;\n\t\t\t\tconst data = new FormData();\n\t\t\t\tdata.append(\"name\", newName.trim());\n\t\t\t\tfetch(`/api/persons/${id}/edit`, {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\tbody: data\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Failed to update person');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => alert(err.message));\n\t\t\t}\n\t\t\tfunction deletePerson(id, name) {\n\t\t\t\tif (!confirm(`Are you sure you want to delete person \"${name}\"? Any assigned phones will become unassigned!`)) return;\n\t\t\t\tfetch(`/api/persons/${id}/delete`, {\n\t\t\t\t\tmethod: 'POST'\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Failed to delete person');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => alert(err.message));\n\t\t\t}\n\t\t\tfunction assignPhone(phone, personId) {\n\t\t\t\tconst data = new FormData();\n\t\t\t\tdata.append(\"phone\", phone);\n\t\t\t\tdata.append(\"person_id\", personId);\n\t\t\t\tfetch('/api/phones/assign', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\tbody: data\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Failed to assign phone');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => alert(err.message));\n\t\t\t}\n\t\t\tfunction toggleSelectAllAudios(personSlug, checked) {\n\t\t\t\tdocument.querySelectorAll(`.audio-checkbox-${personSlug}`).forEach(cb => {\n\t\t\t\t\tcb.checked = checked;\n\t\t\t\t});\n\t\t\t}\n\t\t\tfunction batchMoveAudios(fromSlug) {\n\t\t\t\tconst targetSelect = document.getElementById(`target-person-${fromSlug}`);\n\t\t\t\tif (!targetSelect) return;\n\t\t\t\tconst toSlug = targetSelect.value;\n\t\t\t\tif (!toSlug) {\n\t\t\t\t\talert(\"Please select a target person to move files to.\");\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tif (toSlug === fromSlug) {\n\t\t\t\t\talert(\"Cannot move files to the same person.\");\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tconst selectedFiles = [];\n\t\t\t\tdocument.querySelectorAll(`.audio-checkbox-${fromSlug}:checked`).forEach(cb => {\n\t\t\t\t\tselectedFiles.push(cb.value);\n\t\t\t\t});\n\t\t\t\tif (selectedFiles.length === 0) {\n\t\t\t\t\talert(\"Please select at least one audio file to move.\");\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tif (!confirm(`Move ${selectedFiles.length} file(s) from ${fromSlug} to ${toSlug}?`)) return;\n\t\t\t\tfetch('/api/audios/batch-move', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\tbody: JSON.stringify({\n\t\t\t\t\t\tfrom_slug: fromSlug,\n\t\t\t\t\t\tto_slug: toSlug,\n\t\t\t\t\t\tfiles: selectedFiles\n\t\t\t\t\t})\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\tif (!res.ok) throw new Error(payload.error || 'Move failed');\n\t\t\t\t\talert(`Successfully moved ${payload.moved} voice note(s)!`);\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => alert(err.message));\n\t\t\t}\n\t\t\tfunction cropUnreviewed(event, form) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\tconst data = new FormData(form);\n\t\t\t\tfetch('/unreviewed/crop', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\tbody: data\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Crop failed');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => {\n\t\t\t\t\talert(err.message);\n\t\t\t\t});\n\t\t\t\treturn false;\n\t\t\t}\n\n\n\t\t\tfunction deleteUnreviewed(filename) {\n\t\t\t\tif (!confirm('Are you sure you want to delete this unreviewed signature?')) return;\n\t\t\t\tconst data = new FormData();\n\t\t\t\tdata.append('filename', filename);\n\t\t\t\tfetch('/unreviewed/delete', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\tbody: data\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Delete failed');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => {\n\t\t\t\t\talert(err.message);\n\t\t\t\t});\n\t\t\t}\n\t\t\tfunction remuxAllUnreviewed() {\n\t\t\t\tfetch('/api/unreviewed/remux-all', { method: 'POST' })\n\t\t\t\t\t.then(async res => {\n\t\t\t\t\t\tconst data = await res.json().catch(() => ({}));\n\t\t\t\t\t\tif (!res.ok) throw new Error(data.error || 'Remux failed');\n\t\t\t\t\t\talert(`Successfully remuxed ${data.count} chunks!`);\n\t\t\t\t\t\twindow.location.reload();\n\t\t\t\t\t})\n\t\t\t\t\t.catch(err => alert(err.message));\n\t\t\t}\n\t\t\tfunction addCampaignPhrase(event, form) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\tconst data = new FormData(form);\n\t\t\t\tfetch('/api/campaigns/phrases', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\tbody: JSON.stringify({\n\t\t\t\t\t\tcampaign_artist: data.get('campaign_artist'),\n\t\t\t\t\t\tphrase: data.get('phrase')\n\t\t\t\t\t})\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Add phrase failed');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => alert(err.message));\n\t\t\t\treturn false;\n\t\t\t}\n\t\t\tfunction deleteCampaignPhrase(artist, phrase) {\n\t\t\t\tif (!confirm(`Are you sure you want to delete the phrase \"${phrase}\" for ${artist}?`)) return;\n\t\t\t\tfetch('/api/campaigns/phrases', {\n\t\t\t\t\tmethod: 'DELETE',\n\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\tbody: JSON.stringify({\n\t\t\t\t\t\tcampaign_artist: artist,\n\t\t\t\t\t\tphrase: phrase\n\t\t\t\t\t})\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Delete phrase failed');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => alert(err.message));\n\t\t\t}\n\t\t\tfunction snapSubtitles(chunkName, word, timestampUnix, audioStartUnix, duration) {\n\t\t\t\tconst editor = window.waveSurfers[chunkName];\n\t\t\t\tif (!editor || !editor.ws) return;\n\t\t\t\t\n\t\t\t\t// Add the word to the phrase input\n\t\t\t\tconst phraseInput = document.getElementById('phrase-input-' + chunkName);\n\t\t\t\tif (phraseInput) {\n\t\t\t\t\tphraseInput.value = (phraseInput.value + ' ' + word).trim();\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\t// Calculate relative time\n\t\t\t\tlet relativeTime = timestampUnix - audioStartUnix;\n\t\t\t\tif (relativeTime < 0) relativeTime = 0;\n\t\t\t\tif (relativeTime > duration) relativeTime = duration;\n\t\t\t\t\n\t\t\t\t// Snap region boundaries (create a 2-second region around the word)\n\t\t\t\tconst wsRegions = editor.ws.getActivePlugins().find(p => p.addRegion);\n\t\t\t\tif (wsRegions) {\n\t\t\t\t\tconst regions = wsRegions.getRegions();\n\t\t\t\t\tif (regions.length > 0) {\n\t\t\t\t\t\tconst region = regions[0];\n\t\t\t\t\t\tlet start = relativeTime - 1.0;\n\t\t\t\t\t\tlet end = relativeTime + 1.0;\n\t\t\t\t\t\tif (start < 0) start = 0;\n\t\t\t\t\t\tif (end > duration) end = duration;\n\t\t\t\t\t\t\n\t\t\t\t\t\tregion.onResize(start - region.start, 'start');\n\t\t\t\t\t\tregion.onResize(end - region.end, 'end');\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\tfunction transcribeChunk(name, bucket, clickedButton) {\n\t\t\t\tconst btn = clickedButton;\n\t\t\t\tconst origText = btn.textContent;\n\t\t\t\tbtn.textContent = 'Transcribing...';\n\t\t\t\tbtn.disabled = true;\n\t\t\t\t\n\t\t\t\tfetch('/api/signatures/transcribe', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\tbody: JSON.stringify({ filename: name, bucket: bucket })\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Transcription failed');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => {\n\t\t\t\t\talert(err.message);\n\t\t\t\t\tbtn.textContent = origText;\n\t\t\t\t\tbtn.disabled = false;\n\t\t\t\t});\n\t\t\t}\n\n\t\t\twindow.waveSurfers = window.waveSurfers || {};\n\t\t\twindow.initWaveformEditor = function(chunkName, url, duration) {\n\t\t\t\tconst container = document.getElementById('editor-container-' + chunkName);\n\t\t\t\tdocument.getElementById('loader-btn-' + chunkName).style.display = 'none';\n\t\t\t\tcontainer.classList.remove('hidden');\n\t\t\t\t\n\t\t\t\tconst wsContainer = document.getElementById('waveform-' + chunkName);\n\t\t\t\tconst ws = WaveSurfer.create({\n\t\t\t\t\tcontainer: wsContainer,\n\t\t\t\t\twaveColor: 'rgba(255, 255, 255, 0.4)',\n\t\t\t\t\tprogressColor: '#3b82f6',\n\t\t\t\t\turl: url,\n\t\t\t\t\theight: 120,\n\t\t\t\t\tautoScroll: true,\n\t\t\t\t\tautoCenter: true\n\t\t\t\t});\n\t\t\t\t\n\t\t\t\tconst wsRegions = ws.registerPlugin(WaveSurfer.Regions.create());\n\t\t\t\tlet currentRegion = null;\n\t\t\t\t\n\t\t\t\tws.on('ready', () => {\n\t\t\t\t\tcurrentRegion = wsRegions.addRegion({\n\t\t\t\t\t\tstart: 0,\n\t\t\t\t\t\tend: duration,\n\t\t\t\t\t\tcolor: 'rgba(59, 130, 246, 0.3)',\n\t\t\t\t\t\tresize: true,\n\t\t\t\t\t\tdrag: true\n\t\t\t\t\t});\n\t\t\t\t\t\n\t\t\t\t\tcurrentRegion.on('update', () => {\n\t\t\t\t\t\tdocument.getElementById('start-input-' + chunkName).value = currentRegion.start;\n\t\t\t\t\t\tdocument.getElementById('start-val-' + chunkName).textContent = currentRegion.start.toFixed(2);\n\t\t\t\t\t\tdocument.getElementById('end-input-' + chunkName).value = currentRegion.end;\n\t\t\t\t\t\tdocument.getElementById('end-val-' + chunkName).textContent = currentRegion.end.toFixed(2);\n\t\t\t\t\t});\n\t\t\t\t});\n\n\t\t\t\tcontainer.tabIndex = 0; // Make focusable for keyboard events\n\t\t\t\tcontainer.addEventListener('keydown', (e) => {\n\t\t\t\t\tif (!currentRegion) return;\n\t\t\t\t\tif (e.code === 'Space') {\n\t\t\t\t\t\te.preventDefault();\n\t\t\t\t\t\tws.playPause();\n\t\t\t\t\t} else if (e.code === 'ArrowLeft') {\n\t\t\t\t\t\te.preventDefault();\n\t\t\t\t\t\tif (e.shiftKey) currentRegion.onResize(-0.1, 'start');\n\t\t\t\t\t\telse currentRegion.onResize(-0.1, 'end');\n\t\t\t\t\t} else if (e.code === 'ArrowRight') {\n\t\t\t\t\t\te.preventDefault();\n\t\t\t\t\t\tif (e.shiftKey) currentRegion.onResize(0.1, 'start');\n\t\t\t\t\t\telse currentRegion.onResize(0.1, 'end');\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t\t\n\t\t\t\twindow.waveSurfers[chunkName] = { ws, container };\n\t\t\t};\n\n\t\t\twindow.toggleFullscreenEditor = function(chunkName) {\n\t\t\t\tconst editor = window.waveSurfers[chunkName];\n\t\t\t\tif (!editor) return;\n\t\t\t\tconst isFullscreen = editor.container.classList.contains('fixed');\n\t\t\t\tif (isFullscreen) {\n\t\t\t\t\teditor.container.classList.remove('fixed', 'inset-0', 'z-50', 'bg-black/95', 'p-8', 'flex', 'flex-col', 'justify-center');\n\t\t\t\t\teditor.container.classList.add('bg-black/30', 'p-2', 'mb-3');\n\t\t\t\t} else {\n\t\t\t\t\teditor.container.classList.remove('bg-black/30', 'p-2', 'mb-3');\n\t\t\t\t\teditor.container.classList.add('fixed', 'inset-0', 'z-50', 'bg-black/95', 'p-8', 'flex', 'flex-col', 'justify-center');\n\t\t\t\t\teditor.container.focus(); // Focus for keyboard shortcuts\n\t\t\t\t}\n\t\t\t\t// Force resize on WaveSurfer\n\t\t\t\tsetTimeout(() => { editor.ws.drawBuffer(); }, 50);\n\t\t\t};\n\n\t\t\twindow.playPauseWaveform = function(chunkName) {\n\t\t\t\tconst editor = window.waveSurfers[chunkName];\n\t\t\t\tif (editor && editor.ws) editor.ws.playPause();\n\t\t\t};\n\n\t\t\tfunction showTab(tabName) {\n\t\t\t\tdocument.querySelectorAll('.matcher-tab-btn').forEach(btn => {\n\t\t\t\t\tif (btn.dataset.target === tabName) {\n\t\t\t\t\t\tbtn.classList.add('text-primary');\n\t\t\t\t\t\tbtn.classList.remove('text-muted');\n\t\t\t\t\t} else {\n\t\t\t\t\t\tbtn.classList.add('text-muted');\n\t\t\t\t\t\tbtn.classList.remove('text-primary');\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t\tdocument.querySelectorAll('.matcher-tab-content').forEach(content => {\n\t\t\t\t\tcontent.style.display = content.id === 'tab-' + tabName ? 'block' : 'none';\n\t\t\t\t});\n\t\t\t}\n\t\t\tlet stagedAudioFiles = [];\n\t\t\tlet currentUploadMode = 'files';\n\n\t\t\tfunction setUploadMode(mode) {\n\t\t\t\tcurrentUploadMode = mode;\n\t\t\t\tconst filesBtn = document.getElementById('upload-mode-files');\n\t\t\t\tconst folderBtn = document.getElementById('upload-mode-folder');\n\t\t\t\tconst label = document.getElementById('dropzone-label');\n\t\t\t\tconst sublabel = document.getElementById('dropzone-sublabel');\n\n\t\t\t\tif (mode === 'files') {\n\t\t\t\t\tif (filesBtn) filesBtn.className = 'btn btn-sm btn-primary flex-1';\n\t\t\t\t\tif (folderBtn) folderBtn.className = 'btn btn-sm btn-secondary flex-1';\n\t\t\t\t\tif (label) label.textContent = 'Click to choose .ogg files (or drag & drop)';\n\t\t\t\t\tif (sublabel) sublabel.textContent = 'Multi-file selection active (files are selectable)';\n\t\t\t\t} else {\n\t\t\t\t\tif (folderBtn) folderBtn.className = 'btn btn-sm btn-primary flex-1';\n\t\t\t\t\tif (filesBtn) filesBtn.className = 'btn btn-sm btn-secondary flex-1';\n\t\t\t\t\tif (label) label.textContent = 'Click to choose a Folder (or drag & drop)';\n\t\t\t\t\tif (sublabel) sublabel.textContent = 'Folder mode active (all .ogg files inside folder extracted)';\n\t\t\t\t}\n\t\t\t}\n\n\t\t\tfunction triggerFilePicker() {\n\t\t\t\tif (currentUploadMode === 'files') {\n\t\t\t\t\tdocument.getElementById('audio-input-files').click();\n\t\t\t\t} else {\n\t\t\t\t\tdocument.getElementById('audio-input-folder').click();\n\t\t\t\t}\n\t\t\t}\n\n\t\t\tfunction handleFileSelection(event) {\n\t\t\t\tconst files = Array.from(event.target.files || []);\n\t\t\t\tconst oggs = files.filter(f => f.name.toLowerCase().endsWith('.ogg'));\n\t\t\t\tstagedAudioFiles = stagedAudioFiles.concat(oggs);\n\t\t\t\tupdateSelectedUI();\n\t\t\t}\n\n\t\t\tfunction updateSelectedUI() {\n\t\t\t\tconst selectedDiv = document.getElementById('dropzone-selected');\n\t\t\t\tconst promptDiv = document.getElementById('dropzone-prompt');\n\t\t\t\tif (stagedAudioFiles.length > 0) {\n\t\t\t\t\tif (promptDiv) promptDiv.classList.add('hidden');\n\t\t\t\t\tif (selectedDiv) {\n\t\t\t\t\t\tselectedDiv.classList.remove('hidden');\n\t\t\t\t\t\tselectedDiv.textContent = `✓ ${stagedAudioFiles.length} .ogg voice note(s) staged for upload`;\n\t\t\t\t\t}\n\t\t\t\t} else {\n\t\t\t\t\tif (promptDiv) promptDiv.classList.remove('hidden');\n\t\t\t\t\tif (selectedDiv) selectedDiv.classList.add('hidden');\n\t\t\t\t}\n\t\t\t}\n\n\t\t\tfunction handleDragOver(event) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\tevent.stopPropagation();\n\t\t\t\tconst dz = document.getElementById('dropzone-area');\n\t\t\t\tif (dz) dz.style.borderColor = 'var(--primary)';\n\t\t\t}\n\n\t\t\tfunction handleDragLeave(event) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\tevent.stopPropagation();\n\t\t\t\tconst dz = document.getElementById('dropzone-area');\n\t\t\t\tif (dz) dz.style.borderColor = '';\n\t\t\t}\n\n\t\t\tasync function handleDrop(event) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\tevent.stopPropagation();\n\t\t\t\tconst dz = document.getElementById('dropzone-area');\n\t\t\t\tif (dz) dz.style.borderColor = '';\n\n\t\t\t\tconst items = event.dataTransfer.items;\n\t\t\t\tconst newFiles = [];\n\n\t\t\t\tif (items && items.length > 0) {\n\t\t\t\t\tconst entryPromises = [];\n\t\t\t\t\tfor (let i = 0; i < items.length; i++) {\n\t\t\t\t\t\tconst item = items[i];\n\t\t\t\t\t\tif (item.webkitGetAsEntry) {\n\t\t\t\t\t\t\tconst entry = item.webkitGetAsEntry();\n\t\t\t\t\t\t\tif (entry) {\n\t\t\t\t\t\t\t\tentryPromises.push(traverseFileTree(entry, newFiles));\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t} else if (item.kind === 'file') {\n\t\t\t\t\t\t\tconst file = item.getAsFile();\n\t\t\t\t\t\t\tif (file && file.name.toLowerCase().endsWith('.ogg')) {\n\t\t\t\t\t\t\t\tnewFiles.push(file);\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\tawait Promise.all(entryPromises);\n\t\t\t\t} else if (event.dataTransfer.files) {\n\t\t\t\t\tconst files = Array.from(event.dataTransfer.files);\n\t\t\t\t\tnewFiles.push(...files.filter(f => f.name.toLowerCase().endsWith('.ogg')));\n\t\t\t\t}\n\n\t\t\t\tif (newFiles.length > 0) {\n\t\t\t\t\tstagedAudioFiles = stagedAudioFiles.concat(newFiles);\n\t\t\t\t}\n\t\t\t\tupdateSelectedUI();\n\t\t\t}\n\n\t\t\tasync function traverseFileTree(entry, fileList) {\n\t\t\t\tif (entry.isFile) {\n\t\t\t\t\tif (entry.name.toLowerCase().endsWith('.ogg')) {\n\t\t\t\t\t\tawait new Promise(resolve => {\n\t\t\t\t\t\t\tentry.file(f => {\n\t\t\t\t\t\t\t\tfileList.push(f);\n\t\t\t\t\t\t\t\tresolve();\n\t\t\t\t\t\t\t});\n\t\t\t\t\t\t});\n\t\t\t\t\t}\n\t\t\t\t} else if (entry.isDirectory) {\n\t\t\t\t\tconst dirReader = entry.createReader();\n\t\t\t\t\tconst entries = await readAllEntries(dirReader);\n\t\t\t\t\tfor (const child of entries) {\n\t\t\t\t\t\tawait traverseFileTree(child, fileList);\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\n\t\t\tfunction readAllEntries(dirReader) {\n\t\t\t\treturn new Promise(resolve => {\n\t\t\t\t\tlet entries = [];\n\t\t\t\t\tfunction read() {\n\t\t\t\t\t\tdirReader.readEntries(results => {\n\t\t\t\t\t\t\tif (!results || !results.length) {\n\t\t\t\t\t\t\t\tresolve(entries);\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\tentries = entries.concat(Array.from(results));\n\t\t\t\t\t\t\t\tread();\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}, () => resolve(entries));\n\t\t\t\t\t}\n\t\t\t\t\tread();\n\t\t\t\t});\n\t\t\t}\n\n\t\t\tfunction uploadAudio(event, form) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\tconst result = document.getElementById('upload-audio-result');\n\n\t\t\t\tif (stagedAudioFiles.length === 0) {\n\t\t\t\t\tconst filesInput = document.getElementById('audio-input-files');\n\t\t\t\t\tconst folderInput = document.getElementById('audio-input-folder');\n\t\t\t\t\tconst rawFiles = [];\n\t\t\t\t\tif (filesInput && filesInput.files) rawFiles.push(...Array.from(filesInput.files));\n\t\t\t\t\tif (folderInput && folderInput.files) rawFiles.push(...Array.from(folderInput.files));\n\t\t\t\t\tstagedAudioFiles = rawFiles.filter(f => f.name.toLowerCase().endsWith('.ogg'));\n\t\t\t\t}\n\n\t\t\t\tif (stagedAudioFiles.length === 0) {\n\t\t\t\t\tresult.textContent = 'Please select or drag & drop at least one .ogg voice note file or folder.';\n\t\t\t\t\tresult.className = 'mt-4 text-sm text-warning';\n\t\t\t\t\treturn false;\n\t\t\t\t}\n\n\t\t\t\tconst data = new FormData();\n\t\t\t\tdata.append('person_slug', form.person_slug.value);\n\t\t\t\tfor (const file of stagedAudioFiles) {\n\t\t\t\t\tdata.append('audio', file, file.name);\n\t\t\t\t}\n\n\t\t\t\tresult.textContent = `Uploading ${stagedAudioFiles.length} file(s)...`;\n\t\t\t\tresult.className = 'mt-4 text-sm text-muted';\n\n\t\t\t\tfetch('/api/audio/upload', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\tbody: data\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tconst text = await res.text();\n\t\t\t\t\tresult.textContent = text;\n\t\t\t\t\tresult.className = res.ok ? 'mt-4 text-sm text-success' : 'mt-4 text-sm text-warning';\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tthrow new Error(text || 'Upload failed');\n\t\t\t\t\t}\n\t\t\t\t\tstagedAudioFiles = [];\n\t\t\t\t\tform.reset();\n\t\t\t\t\tconst filesInput = document.getElementById('audio-input-files');\n\t\t\t\t\tconst folderInput = document.getElementById('audio-input-folder');\n\t\t\t\t\tif (filesInput) filesInput.value = '';\n\t\t\t\t\tif (folderInput) folderInput.value = '';\n\t\t\t\t\tupdateSelectedUI();\n\t\t\t\t}).catch(err => {\n\t\t\t\t\tresult.textContent = err.message || 'Upload failed';\n\t\t\t\t\tresult.className = 'mt-4 text-sm text-warning';\n\t\t\t\t});\n\t\t\t\treturn false;\n\t\t\t}\n\t\t\tfunction saveSchedule(event, form) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\tconst raw = form.target_matches.value.trim();\n\t\t\t\tconst result = document.getElementById('schedule-result');\n\t\t\t\tconst values = raw === '' ? [] : raw.split(',').map(part => part.trim()).filter(Boolean);\n\t\t\t\tconst matches = [];\n\t\t\t\tfor (const value of values) {\n\t\t\t\t\tconst parsed = Number.parseInt(value, 10);\n\t\t\t\t\tif (!Number.isInteger(parsed)) {\n\t\t\t\t\t\tresult.textContent = 'Target matches must be a comma-separated list of integers.';\n\t\t\t\t\t\tresult.className = 'mt-4 text-sm text-warning';\n\t\t\t\t\t\treturn false;\n\t\t\t\t\t}\n\t\t\t\t\tmatches.push(parsed);\n\t\t\t\t}\n\n\t\t\t\tresult.textContent = 'Saving...';\n\t\t\t\tresult.className = 'mt-4 text-sm text-muted';\n\t\t\t\tfetch('/api/schedule', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\tbody: JSON.stringify({\n\t\t\t\t\t\tdate: form.date.value,\n\t\t\t\t\t\ttarget_matches: matches\n\t\t\t\t\t})\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tthrow new Error(payload.error || 'Save failed');\n\t\t\t\t\t}\n\t\t\t\t\tresult.textContent = 'Schedule saved.';\n\t\t\t\t\tresult.className = 'mt-4 text-sm text-success';\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => {\n\t\t\t\t\tresult.textContent = err.message;\n\t\t\t\t\tresult.className = 'mt-4 text-sm text-warning';\n\t\t\t\t});\n\t\t\t\treturn false;\n\t\t\t}\n\t\t\tfunction fillAllSchedules() {\n\t\t\t\tconst result = document.getElementById('schedule-result');\n\t\t\t\tresult.textContent = 'Filling all campaign days with 1,2,3,4,5,6...';\n\t\t\t\tresult.className = 'mt-4 text-sm text-muted';\n\t\t\t\tfetch('/api/schedule', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\tbody: JSON.stringify({\n\t\t\t\t\t\tdate: '*',\n\t\t\t\t\t\ttarget_matches: [1, 2, 3, 4, 5, 6]\n\t\t\t\t\t})\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tthrow new Error(payload.error || 'Fill failed');\n\t\t\t\t\t}\n\t\t\t\t\tresult.textContent = `Updated ${payload.updated_days} campaign days to 1, 2, 3, 4, 5, 6.`;\n\t\t\t\t\tresult.className = 'mt-4 text-sm text-success';\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => {\n\t\t\t\t\tresult.textContent = err.message;\n\t\t\t\t\tresult.className = 'mt-4 text-sm text-warning';\n\t\t\t\t});\n\t\t\t}\n\t\t\tfunction toggleKillSwitch(active) {\n\t\t\t\tconst pw = prompt(active ? \"⚠️ DANGER! Enter Admin Password to permanently disable the bot:\" : \"Enter Admin Password to re-enable the bot:\");\n\t\t\t\tif (!pw) return;\n\t\t\t\tfetch('/api/kill-switch', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\tbody: JSON.stringify({ password: pw, active: active })\n\t\t\t\t}).then(res => {\n\t\t\t\t\tif (!res.ok) alert(\"Invalid password or server error\");\n\t\t\t\t});\n\t\t\t}\n\n\t\t\tdocument.addEventListener(\"DOMContentLoaded\", function() {\n\t\t\t\t// Initialize the ticking clock using the server's time\n\t\t\t\tconst timeEl = document.getElementById('server-time');\n\t\t\t\tlet currentServerMs = parseInt(timeEl.getAttribute('data-server-time'), 10);\n\t\t\t\tsetInterval(() => {\n\t\t\t\t\tcurrentServerMs += 1000;\n\t\t\t\t\tconst d = new Date(currentServerMs);\n\t\t\t\t\ttimeEl.innerText = d.toLocaleTimeString('ro-RO');\n\t\t\t\t}, 1000);\n\t\t\t});\n\t\t</script> <div class=\"container\" hx-ext=\"sse\" sse-connect=\"/events/dashboard\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<script>\n\t\t\tfunction toggleGathering() {\n\t\t\t\tfetch('/api/settings/gathering', {method: 'POST'})\n\t\t\t\t\t.then(() => window.location.reload());\n\t\t\t}\n\t\t\tfunction createPerson(event, form) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\tconst data = new FormData(form);\n\t\t\t\tfetch('/api/persons', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\tbody: data\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Failed to create person');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => alert(err.message));\n\t\t\t\treturn false;\n\t\t\t}\n\t\t\tfunction editPerson(id, currentName) {\n\t\t\t\tconst newName = prompt(\"Edit Person Name:\", currentName);\n\t\t\t\tif (!newName || newName.trim() === \"\" || newName.trim() === currentName) return;\n\t\t\t\tconst data = new FormData();\n\t\t\t\tdata.append(\"name\", newName.trim());\n\t\t\t\tfetch(`/api/persons/${id}/edit`, {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\tbody: data\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Failed to update person');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => alert(err.message));\n\t\t\t}\n\t\t\tfunction deletePerson(id, name) {\n\t\t\t\tif (!confirm(`Are you sure you want to delete person \"${name}\"? Any assigned phones will become unassigned!`)) return;\n\t\t\t\tfetch(`/api/persons/${id}/delete`, {\n\t\t\t\t\tmethod: 'POST'\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Failed to delete person');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => alert(err.message));\n\t\t\t}\n\t\t\tfunction assignPhone(phone, personId) {\n\t\t\t\tconst data = new FormData();\n\t\t\t\tdata.append(\"phone\", phone);\n\t\t\t\tdata.append(\"person_id\", personId);\n\t\t\t\tfetch('/api/phones/assign', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\tbody: data\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Failed to assign phone');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => alert(err.message));\n\t\t\t}\n\t\t\tfunction toggleSelectAllAudios(personSlug, checked) {\n\t\t\t\tdocument.querySelectorAll(`.audio-checkbox-${personSlug}`).forEach(cb => {\n\t\t\t\t\tcb.checked = checked;\n\t\t\t\t});\n\t\t\t}\n\t\t\tfunction batchMoveAudios(fromSlug) {\n\t\t\t\tconst targetSelect = document.getElementById(`target-person-${fromSlug}`);\n\t\t\t\tif (!targetSelect) return;\n\t\t\t\tconst toSlug = targetSelect.value;\n\t\t\t\tif (!toSlug) {\n\t\t\t\t\talert(\"Please select a target person to move files to.\");\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tif (toSlug === fromSlug) {\n\t\t\t\t\talert(\"Cannot move files to the same person.\");\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tconst selectedFiles = [];\n\t\t\t\tdocument.querySelectorAll(`.audio-checkbox-${fromSlug}:checked`).forEach(cb => {\n\t\t\t\t\tselectedFiles.push(cb.value);\n\t\t\t\t});\n\t\t\t\tif (selectedFiles.length === 0) {\n\t\t\t\t\talert(\"Please select at least one audio file to move.\");\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tif (!confirm(`Move ${selectedFiles.length} file(s) from ${fromSlug} to ${toSlug}?`)) return;\n\t\t\t\tfetch('/api/audios/batch-move', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\tbody: JSON.stringify({\n\t\t\t\t\t\tfrom_slug: fromSlug,\n\t\t\t\t\t\tto_slug: toSlug,\n\t\t\t\t\t\tfiles: selectedFiles\n\t\t\t\t\t})\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\tif (!res.ok) throw new Error(payload.error || 'Move failed');\n\t\t\t\t\talert(`Successfully moved ${payload.moved} voice note(s)!`);\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => alert(err.message));\n\t\t\t}\n\t\t\tfunction cropUnreviewed(event, form) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\tconst data = new FormData(form);\n\t\t\t\tfetch('/unreviewed/crop', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\tbody: data\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Crop failed');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => {\n\t\t\t\t\talert(err.message);\n\t\t\t\t});\n\t\t\t\treturn false;\n\t\t\t}\n\n\n\t\t\tfunction deleteUnreviewed(filename) {\n\t\t\t\tif (!confirm('Are you sure you want to delete this unreviewed signature?')) return;\n\t\t\t\tconst data = new FormData();\n\t\t\t\tdata.append('filename', filename);\n\t\t\t\tfetch('/unreviewed/delete', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\tbody: data\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Delete failed');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => {\n\t\t\t\t\talert(err.message);\n\t\t\t\t});\n\t\t\t}\n\t\t\tfunction remuxAllUnreviewed() {\n\t\t\t\tfetch('/api/unreviewed/remux-all', { method: 'POST' })\n\t\t\t\t\t.then(async res => {\n\t\t\t\t\t\tconst data = await res.json().catch(() => ({}));\n\t\t\t\t\t\tif (!res.ok) throw new Error(data.error || 'Remux failed');\n\t\t\t\t\t\talert(`Successfully remuxed ${data.count} chunks!`);\n\t\t\t\t\t\twindow.location.reload();\n\t\t\t\t\t})\n\t\t\t\t\t.catch(err => alert(err.message));\n\t\t\t}\n\t\t\tfunction addCampaignPhrase(event, form) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\tconst data = new FormData(form);\n\t\t\t\tfetch('/api/campaigns/phrases', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\tbody: JSON.stringify({\n\t\t\t\t\t\tcampaign_artist: data.get('campaign_artist'),\n\t\t\t\t\t\tphrase: data.get('phrase')\n\t\t\t\t\t})\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Add phrase failed');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => alert(err.message));\n\t\t\t\treturn false;\n\t\t\t}\n\t\t\tfunction deleteCampaignPhrase(artist, phrase) {\n\t\t\t\tif (!confirm(`Are you sure you want to delete the phrase \"${phrase}\" for ${artist}?`)) return;\n\t\t\t\tfetch('/api/campaigns/phrases', {\n\t\t\t\t\tmethod: 'DELETE',\n\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\tbody: JSON.stringify({\n\t\t\t\t\t\tcampaign_artist: artist,\n\t\t\t\t\t\tphrase: phrase\n\t\t\t\t\t})\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Delete phrase failed');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => alert(err.message));\n\t\t\t}\n\t\t\tfunction snapSubtitles(chunkName, word, timestampUnix, audioStartUnix, duration) {\n\t\t\t\tconst editor = window.waveSurfers[chunkName];\n\t\t\t\tif (!editor || !editor.ws) return;\n\t\t\t\t\n\t\t\t\t// Add the word to the phrase input\n\t\t\t\tconst phraseInput = document.getElementById('phrase-input-' + chunkName);\n\t\t\t\tif (phraseInput) {\n\t\t\t\t\tphraseInput.value = (phraseInput.value + ' ' + word).trim();\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\t// Calculate relative time\n\t\t\t\tlet relativeTime = timestampUnix - audioStartUnix;\n\t\t\t\tif (relativeTime < 0) relativeTime = 0;\n\t\t\t\tif (relativeTime > duration) relativeTime = duration;\n\t\t\t\t\n\t\t\t\t// Snap region boundaries (create a 2-second region around the word)\n\t\t\t\tconst wsRegions = editor.ws.getActivePlugins().find(p => p.addRegion);\n\t\t\t\tif (wsRegions) {\n\t\t\t\t\tconst regions = wsRegions.getRegions();\n\t\t\t\t\tif (regions.length > 0) {\n\t\t\t\t\t\tconst region = regions[0];\n\t\t\t\t\t\tlet start = relativeTime - 1.0;\n\t\t\t\t\t\tlet end = relativeTime + 1.0;\n\t\t\t\t\t\tif (start < 0) start = 0;\n\t\t\t\t\t\tif (end > duration) end = duration;\n\t\t\t\t\t\t\n\t\t\t\t\t\tregion.onResize(start - region.start, 'start');\n\t\t\t\t\t\tregion.onResize(end - region.end, 'end');\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\tfunction transcribeChunk(name, bucket, clickedButton) {\n\t\t\t\tconst btn = clickedButton;\n\t\t\t\tconst origText = btn.textContent;\n\t\t\t\tbtn.textContent = 'Transcribing...';\n\t\t\t\tbtn.disabled = true;\n\t\t\t\t\n\t\t\t\tfetch('/api/signatures/transcribe', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\tbody: JSON.stringify({ filename: name, bucket: bucket })\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\t\tthrow new Error(payload.error || 'Transcription failed');\n\t\t\t\t\t}\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => {\n\t\t\t\t\talert(err.message);\n\t\t\t\t\tbtn.textContent = origText;\n\t\t\t\t\tbtn.disabled = false;\n\t\t\t\t});\n\t\t\t}\n\n\t\t\twindow.waveSurfers = window.waveSurfers || {};\n\t\t\twindow.initWaveformEditor = function(chunkName, url, duration) {\n\t\t\t\tconst container = document.getElementById('editor-container-' + chunkName);\n\t\t\t\tdocument.getElementById('loader-btn-' + chunkName).style.display = 'none';\n\t\t\t\tcontainer.classList.remove('hidden');\n\t\t\t\t\n\t\t\t\tconst wsContainer = document.getElementById('waveform-' + chunkName);\n\t\t\t\tconst ws = WaveSurfer.create({\n\t\t\t\t\tcontainer: wsContainer,\n\t\t\t\t\twaveColor: 'rgba(255, 255, 255, 0.4)',\n\t\t\t\t\tprogressColor: '#3b82f6',\n\t\t\t\t\turl: url,\n\t\t\t\t\theight: 120,\n\t\t\t\t\tautoScroll: true,\n\t\t\t\t\tautoCenter: true\n\t\t\t\t});\n\t\t\t\t\n\t\t\t\tconst wsRegions = ws.registerPlugin(WaveSurfer.Regions.create());\n\t\t\t\tlet currentRegion = null;\n\t\t\t\t\n\t\t\t\tws.on('ready', () => {\n\t\t\t\t\tcurrentRegion = wsRegions.addRegion({\n\t\t\t\t\t\tstart: 0,\n\t\t\t\t\t\tend: duration,\n\t\t\t\t\t\tcolor: 'rgba(59, 130, 246, 0.3)',\n\t\t\t\t\t\tresize: true,\n\t\t\t\t\t\tdrag: true\n\t\t\t\t\t});\n\t\t\t\t\t\n\t\t\t\t\tcurrentRegion.on('update', () => {\n\t\t\t\t\t\tdocument.getElementById('start-input-' + chunkName).value = currentRegion.start;\n\t\t\t\t\t\tdocument.getElementById('start-val-' + chunkName).textContent = currentRegion.start.toFixed(2);\n\t\t\t\t\t\tdocument.getElementById('end-input-' + chunkName).value = currentRegion.end;\n\t\t\t\t\t\tdocument.getElementById('end-val-' + chunkName).textContent = currentRegion.end.toFixed(2);\n\t\t\t\t\t});\n\t\t\t\t});\n\n\t\t\t\tcontainer.tabIndex = 0; // Make focusable for keyboard events\n\t\t\t\tcontainer.addEventListener('keydown', (e) => {\n\t\t\t\t\tif (!currentRegion) return;\n\t\t\t\t\tif (e.code === 'Space') {\n\t\t\t\t\t\te.preventDefault();\n\t\t\t\t\t\tws.playPause();\n\t\t\t\t\t} else if (e.code === 'ArrowLeft') {\n\t\t\t\t\t\te.preventDefault();\n\t\t\t\t\t\tif (e.shiftKey) currentRegion.onResize(-0.1, 'start');\n\t\t\t\t\t\telse currentRegion.onResize(-0.1, 'end');\n\t\t\t\t\t} else if (e.code === 'ArrowRight') {\n\t\t\t\t\t\te.preventDefault();\n\t\t\t\t\t\tif (e.shiftKey) currentRegion.onResize(0.1, 'start');\n\t\t\t\t\t\telse currentRegion.onResize(0.1, 'end');\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t\t\n\t\t\t\twindow.waveSurfers[chunkName] = { ws, container };\n\t\t\t};\n\n\t\t\twindow.toggleFullscreenEditor = function(chunkName) {\n\t\t\t\tconst editor = window.waveSurfers[chunkName];\n\t\t\t\tif (!editor) return;\n\t\t\t\tconst isFullscreen = editor.container.classList.contains('fixed');\n\t\t\t\tif (isFullscreen) {\n\t\t\t\t\teditor.container.classList.remove('fixed', 'inset-0', 'z-50', 'bg-black/95', 'p-8', 'flex', 'flex-col', 'justify-center');\n\t\t\t\t\teditor.container.classList.add('bg-black/30', 'p-2', 'mb-3');\n\t\t\t\t} else {\n\t\t\t\t\teditor.container.classList.remove('bg-black/30', 'p-2', 'mb-3');\n\t\t\t\t\teditor.container.classList.add('fixed', 'inset-0', 'z-50', 'bg-black/95', 'p-8', 'flex', 'flex-col', 'justify-center');\n\t\t\t\t\teditor.container.focus(); // Focus for keyboard shortcuts\n\t\t\t\t}\n\t\t\t\t// Force resize on WaveSurfer\n\t\t\t\tsetTimeout(() => { editor.ws.drawBuffer(); }, 50);\n\t\t\t};\n\n\t\t\twindow.playPauseWaveform = function(chunkName) {\n\t\t\t\tconst editor = window.waveSurfers[chunkName];\n\t\t\t\tif (editor && editor.ws) editor.ws.playPause();\n\t\t\t};\n\n\t\t\tfunction showTab(tabName) {\n\t\t\t\tdocument.querySelectorAll('.matcher-tab-btn').forEach(btn => {\n\t\t\t\t\tif (btn.dataset.target === tabName) {\n\t\t\t\t\t\tbtn.classList.add('text-primary');\n\t\t\t\t\t\tbtn.classList.remove('text-muted');\n\t\t\t\t\t} else {\n\t\t\t\t\t\tbtn.classList.add('text-muted');\n\t\t\t\t\t\tbtn.classList.remove('text-primary');\n\t\t\t\t\t}\n\t\t\t\t});\n\t\t\t\tdocument.querySelectorAll('.matcher-tab-content').forEach(content => {\n\t\t\t\t\tcontent.style.display = content.id === 'tab-' + tabName ? 'block' : 'none';\n\t\t\t\t});\n\t\t\t}\n\t\t\tlet stagedAudioFiles = [];\n\t\t\tlet currentUploadMode = 'files';\n\n\t\t\tfunction setUploadMode(mode) {\n\t\t\t\tcurrentUploadMode = mode;\n\t\t\t\tconst filesBtn = document.getElementById('upload-mode-files');\n\t\t\t\tconst folderBtn = document.getElementById('upload-mode-folder');\n\t\t\t\tconst filesInput = document.getElementById('audio-input-files');\n\t\t\t\tconst folderInput = document.getElementById('audio-input-folder');\n\t\t\t\tconst label = document.getElementById('dropzone-label');\n\t\t\t\tconst sublabel = document.getElementById('dropzone-sublabel');\n\n\t\t\t\tif (mode === 'files') {\n\t\t\t\t\tif (filesInput) filesInput.disabled = false;\n\t\t\t\t\tif (folderInput) folderInput.disabled = true;\n\t\t\t\t\tif (filesBtn) filesBtn.className = 'btn btn-sm btn-primary flex-1';\n\t\t\t\t\tif (folderBtn) folderBtn.className = 'btn btn-sm btn-secondary flex-1';\n\t\t\t\t\tif (label) label.textContent = 'Click to choose .ogg files (or drag & drop)';\n\t\t\t\t\tif (sublabel) sublabel.textContent = 'Multi-file selection active (files are selectable)';\n\t\t\t\t} else {\n\t\t\t\t\tif (folderInput) folderInput.disabled = false;\n\t\t\t\t\tif (filesInput) filesInput.disabled = true;\n\t\t\t\t\tif (folderBtn) folderBtn.className = 'btn btn-sm btn-primary flex-1';\n\t\t\t\t\tif (filesBtn) filesBtn.className = 'btn btn-sm btn-secondary flex-1';\n\t\t\t\t\tif (label) label.textContent = 'Click to choose a Folder (or drag & drop)';\n\t\t\t\t\tif (sublabel) sublabel.textContent = 'Folder mode active (all .ogg files inside folder extracted)';\n\t\t\t\t}\n\t\t\t}\n\n\t\t\tfunction triggerFilePicker() {\n\t\t\t\tif (currentUploadMode === 'files') {\n\t\t\t\t\tdocument.getElementById('audio-input-files').click();\n\t\t\t\t} else {\n\t\t\t\t\tdocument.getElementById('audio-input-folder').click();\n\t\t\t\t}\n\t\t\t}\n\n\t\t\tfunction handleFileSelection(event) {\n\t\t\t\tconst files = Array.from(event.target.files || []);\n\t\t\t\tconst oggs = files.filter(f => f.name.toLowerCase().endsWith('.ogg'));\n\t\t\t\tstagedAudioFiles = stagedAudioFiles.concat(oggs);\n\t\t\t\tupdateSelectedUI();\n\t\t\t}\n\n\t\t\tfunction updateSelectedUI() {\n\t\t\t\tconst selectedDiv = document.getElementById('dropzone-selected');\n\t\t\t\tconst promptDiv = document.getElementById('dropzone-prompt');\n\t\t\t\tif (stagedAudioFiles.length > 0) {\n\t\t\t\t\tif (promptDiv) promptDiv.classList.add('hidden');\n\t\t\t\t\tif (selectedDiv) {\n\t\t\t\t\t\tselectedDiv.classList.remove('hidden');\n\t\t\t\t\t\tselectedDiv.textContent = `✓ ${stagedAudioFiles.length} .ogg voice note(s) staged for upload`;\n\t\t\t\t\t}\n\t\t\t\t} else {\n\t\t\t\t\tif (promptDiv) promptDiv.classList.remove('hidden');\n\t\t\t\t\tif (selectedDiv) selectedDiv.classList.add('hidden');\n\t\t\t\t}\n\t\t\t}\n\n\t\t\tfunction handleDragOver(event) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\tevent.stopPropagation();\n\t\t\t\tconst dz = document.getElementById('dropzone-area');\n\t\t\t\tif (dz) dz.style.borderColor = 'var(--primary)';\n\t\t\t}\n\n\t\t\tfunction handleDragLeave(event) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\tevent.stopPropagation();\n\t\t\t\tconst dz = document.getElementById('dropzone-area');\n\t\t\t\tif (dz) dz.style.borderColor = '';\n\t\t\t}\n\n\t\t\tasync function handleDrop(event) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\tevent.stopPropagation();\n\t\t\t\tconst dz = document.getElementById('dropzone-area');\n\t\t\t\tif (dz) dz.style.borderColor = '';\n\n\t\t\t\tconst items = event.dataTransfer.items;\n\t\t\t\tconst newFiles = [];\n\n\t\t\t\tif (items && items.length > 0) {\n\t\t\t\t\tconst entryPromises = [];\n\t\t\t\t\tfor (let i = 0; i < items.length; i++) {\n\t\t\t\t\t\tconst item = items[i];\n\t\t\t\t\t\tif (item.webkitGetAsEntry) {\n\t\t\t\t\t\t\tconst entry = item.webkitGetAsEntry();\n\t\t\t\t\t\t\tif (entry) {\n\t\t\t\t\t\t\t\tentryPromises.push(traverseFileTree(entry, newFiles));\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t} else if (item.kind === 'file') {\n\t\t\t\t\t\t\tconst file = item.getAsFile();\n\t\t\t\t\t\t\tif (file && file.name.toLowerCase().endsWith('.ogg')) {\n\t\t\t\t\t\t\t\tnewFiles.push(file);\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\tawait Promise.all(entryPromises);\n\t\t\t\t} else if (event.dataTransfer.files) {\n\t\t\t\t\tconst files = Array.from(event.dataTransfer.files);\n\t\t\t\t\tnewFiles.push(...files.filter(f => f.name.toLowerCase().endsWith('.ogg')));\n\t\t\t\t}\n\n\t\t\t\tif (newFiles.length > 0) {\n\t\t\t\t\tstagedAudioFiles = stagedAudioFiles.concat(newFiles);\n\t\t\t\t}\n\t\t\t\tupdateSelectedUI();\n\t\t\t}\n\n\t\t\tasync function traverseFileTree(entry, fileList) {\n\t\t\t\tif (entry.isFile) {\n\t\t\t\t\tif (entry.name.toLowerCase().endsWith('.ogg')) {\n\t\t\t\t\t\tawait new Promise(resolve => {\n\t\t\t\t\t\t\tentry.file(f => {\n\t\t\t\t\t\t\t\tfileList.push(f);\n\t\t\t\t\t\t\t\tresolve();\n\t\t\t\t\t\t\t});\n\t\t\t\t\t\t});\n\t\t\t\t\t}\n\t\t\t\t} else if (entry.isDirectory) {\n\t\t\t\t\tconst dirReader = entry.createReader();\n\t\t\t\t\tconst entries = await readAllEntries(dirReader);\n\t\t\t\t\tfor (const child of entries) {\n\t\t\t\t\t\tawait traverseFileTree(child, fileList);\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\n\t\t\tfunction readAllEntries(dirReader) {\n\t\t\t\treturn new Promise(resolve => {\n\t\t\t\t\tlet entries = [];\n\t\t\t\t\tfunction read() {\n\t\t\t\t\t\tdirReader.readEntries(results => {\n\t\t\t\t\t\t\tif (!results || !results.length) {\n\t\t\t\t\t\t\t\tresolve(entries);\n\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\tentries = entries.concat(Array.from(results));\n\t\t\t\t\t\t\t\tread();\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}, () => resolve(entries));\n\t\t\t\t\t}\n\t\t\t\t\tread();\n\t\t\t\t});\n\t\t\t}\n\n\t\t\tfunction uploadAudio(event, form) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\tconst result = document.getElementById('upload-audio-result');\n\n\t\t\t\tif (stagedAudioFiles.length === 0) {\n\t\t\t\t\tconst filesInput = document.getElementById('audio-input-files');\n\t\t\t\t\tconst folderInput = document.getElementById('audio-input-folder');\n\t\t\t\t\tconst rawFiles = [];\n\t\t\t\t\tif (filesInput && filesInput.files) rawFiles.push(...Array.from(filesInput.files));\n\t\t\t\t\tif (folderInput && folderInput.files) rawFiles.push(...Array.from(folderInput.files));\n\t\t\t\t\tstagedAudioFiles = rawFiles.filter(f => f.name.toLowerCase().endsWith('.ogg'));\n\t\t\t\t}\n\n\t\t\t\tif (stagedAudioFiles.length === 0) {\n\t\t\t\t\tresult.textContent = 'Please select or drag & drop at least one .ogg voice note file or folder.';\n\t\t\t\t\tresult.className = 'mt-4 text-sm text-warning';\n\t\t\t\t\treturn false;\n\t\t\t\t}\n\n\t\t\t\tconst data = new FormData();\n\t\t\t\tdata.append('person_slug', form.person_slug.value);\n\t\t\t\tfor (const file of stagedAudioFiles) {\n\t\t\t\t\tdata.append('audio', file, file.name);\n\t\t\t\t}\n\n\t\t\t\tresult.textContent = `Uploading ${stagedAudioFiles.length} file(s)...`;\n\t\t\t\tresult.className = 'mt-4 text-sm text-muted';\n\n\t\t\t\tfetch('/api/audio/upload', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\tbody: data\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tconst text = await res.text();\n\t\t\t\t\tresult.textContent = text;\n\t\t\t\t\tresult.className = res.ok ? 'mt-4 text-sm text-success' : 'mt-4 text-sm text-warning';\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tthrow new Error(text || 'Upload failed');\n\t\t\t\t\t}\n\t\t\t\t\tstagedAudioFiles = [];\n\t\t\t\t\tform.reset();\n\t\t\t\t\tconst filesInput = document.getElementById('audio-input-files');\n\t\t\t\t\tconst folderInput = document.getElementById('audio-input-folder');\n\t\t\t\t\tif (filesInput) filesInput.value = '';\n\t\t\t\t\tif (folderInput) folderInput.value = '';\n\t\t\t\t\tupdateSelectedUI();\n\t\t\t\t}).catch(err => {\n\t\t\t\t\tresult.textContent = err.message || 'Upload failed';\n\t\t\t\t\tresult.className = 'mt-4 text-sm text-warning';\n\t\t\t\t});\n\t\t\t\treturn false;\n\t\t\t}\n\t\t\tfunction saveSchedule(event, form) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\tconst raw = form.target_matches.value.trim();\n\t\t\t\tconst result = document.getElementById('schedule-result');\n\t\t\t\tconst values = raw === '' ? [] : raw.split(',').map(part => part.trim()).filter(Boolean);\n\t\t\t\tconst matches = [];\n\t\t\t\tfor (const value of values) {\n\t\t\t\t\tconst parsed = Number.parseInt(value, 10);\n\t\t\t\t\tif (!Number.isInteger(parsed)) {\n\t\t\t\t\t\tresult.textContent = 'Target matches must be a comma-separated list of integers.';\n\t\t\t\t\t\tresult.className = 'mt-4 text-sm text-warning';\n\t\t\t\t\t\treturn false;\n\t\t\t\t\t}\n\t\t\t\t\tmatches.push(parsed);\n\t\t\t\t}\n\n\t\t\t\tresult.textContent = 'Saving...';\n\t\t\t\tresult.className = 'mt-4 text-sm text-muted';\n\t\t\t\tfetch('/api/schedule', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\tbody: JSON.stringify({\n\t\t\t\t\t\tdate: form.date.value,\n\t\t\t\t\t\ttarget_matches: matches\n\t\t\t\t\t})\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tthrow new Error(payload.error || 'Save failed');\n\t\t\t\t\t}\n\t\t\t\t\tresult.textContent = 'Schedule saved.';\n\t\t\t\t\tresult.className = 'mt-4 text-sm text-success';\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => {\n\t\t\t\t\tresult.textContent = err.message;\n\t\t\t\t\tresult.className = 'mt-4 text-sm text-warning';\n\t\t\t\t});\n\t\t\t\treturn false;\n\t\t\t}\n\t\t\tfunction fillAllSchedules() {\n\t\t\t\tconst result = document.getElementById('schedule-result');\n\t\t\t\tresult.textContent = 'Filling all campaign days with 1,2,3,4,5,6...';\n\t\t\t\tresult.className = 'mt-4 text-sm text-muted';\n\t\t\t\tfetch('/api/schedule', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\tbody: JSON.stringify({\n\t\t\t\t\t\tdate: '*',\n\t\t\t\t\t\ttarget_matches: [1, 2, 3, 4, 5, 6]\n\t\t\t\t\t})\n\t\t\t\t}).then(async res => {\n\t\t\t\t\tconst payload = await res.json().catch(() => ({}));\n\t\t\t\t\tif (!res.ok) {\n\t\t\t\t\t\tthrow new Error(payload.error || 'Fill failed');\n\t\t\t\t\t}\n\t\t\t\t\tresult.textContent = `Updated ${payload.updated_days} campaign days to 1, 2, 3, 4, 5, 6.`;\n\t\t\t\t\tresult.className = 'mt-4 text-sm text-success';\n\t\t\t\t\twindow.location.reload();\n\t\t\t\t}).catch(err => {\n\t\t\t\t\tresult.textContent = err.message;\n\t\t\t\t\tresult.className = 'mt-4 text-sm text-warning';\n\t\t\t\t});\n\t\t\t}\n\t\t\tfunction toggleKillSwitch(active) {\n\t\t\t\tconst pw = prompt(active ? \"⚠️ DANGER! Enter Admin Password to permanently disable the bot:\" : \"Enter Admin Password to re-enable the bot:\");\n\t\t\t\tif (!pw) return;\n\t\t\t\tfetch('/api/kill-switch', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\theaders: { 'Content-Type': 'application/json' },\n\t\t\t\t\tbody: JSON.stringify({ password: pw, active: active })\n\t\t\t\t}).then(res => {\n\t\t\t\t\tif (!res.ok) alert(\"Invalid password or server error\");\n\t\t\t\t});\n\t\t\t}\n\n\t\t\tdocument.addEventListener(\"DOMContentLoaded\", function() {\n\t\t\t\t// Initialize the ticking clock using the server's time\n\t\t\t\tconst timeEl = document.getElementById('server-time');\n\t\t\t\tlet currentServerMs = parseInt(timeEl.getAttribute('data-server-time'), 10);\n\t\t\t\tsetInterval(() => {\n\t\t\t\t\tcurrentServerMs += 1000;\n\t\t\t\t\tconst d = new Date(currentServerMs);\n\t\t\t\t\ttimeEl.innerText = d.toLocaleTimeString('ro-RO');\n\t\t\t\t}, 1000);\n\t\t\t});\n\t\t</script> <div class=\"container\" hx-ext=\"sse\" sse-connect=\"/events/dashboard\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -182,7 +182,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 				var templ_7745c5c3_Var7 string
 				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", state.UnassignedPhonesCount))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 714, Col: 76}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 720, Col: 76}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 				if templ_7745c5c3_Err != nil {
@@ -200,7 +200,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("%d", time.Now().UnixMilli()))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 724, Col: 166}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 730, Col: 166}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 			if templ_7745c5c3_Err != nil {
@@ -213,7 +213,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(time.Now().Format("15:04:05"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 725, Col: 37}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 731, Col: 37}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
@@ -265,7 +265,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var10 string
 					templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(p.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 800, Col: 77}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 806, Col: 77}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 					if templ_7745c5c3_Err != nil {
@@ -278,7 +278,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var11 string
 					templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(p.Slug)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 801, Col: 132}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 807, Col: 132}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 					if templ_7745c5c3_Err != nil {
@@ -291,7 +291,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var12 string
 					templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(p.CreatedAt.Format("02 Jan 2006 15:04"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 804, Col: 69}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 810, Col: 69}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 					if templ_7745c5c3_Err != nil {
@@ -364,7 +364,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							var templ_7745c5c3_Var15 string
 							templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(conn.Phone)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 829, Col: 77}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 835, Col: 77}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 							if templ_7745c5c3_Err != nil {
@@ -394,7 +394,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							var templ_7745c5c3_Var17 string
 							templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("%d", p.ID))
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 831, Col: 55}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 837, Col: 55}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 							if templ_7745c5c3_Err != nil {
@@ -407,7 +407,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							var templ_7745c5c3_Var18 string
 							templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(p.Name)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 831, Col: 75}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 837, Col: 75}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 							if templ_7745c5c3_Err != nil {
@@ -426,7 +426,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 									var templ_7745c5c3_Var19 string
 									templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("%d", other.ID))
 									if templ_7745c5c3_Err != nil {
-										return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 834, Col: 61}
+										return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 840, Col: 61}
 									}
 									_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 									if templ_7745c5c3_Err != nil {
@@ -439,7 +439,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 									var templ_7745c5c3_Var20 string
 									templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(other.Name)
 									if templ_7745c5c3_Err != nil {
-										return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 834, Col: 76}
+										return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 840, Col: 76}
 									}
 									_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 									if templ_7745c5c3_Err != nil {
@@ -458,7 +458,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							var templ_7745c5c3_Var21 string
 							templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf(`{"phone": "%s"}`, conn.Phone))
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 839, Col: 122}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 845, Col: 122}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 							if templ_7745c5c3_Err != nil {
@@ -477,7 +477,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var22 string
 					templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d active", len(personAudios[p.Slug].Active)))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 851, Col: 178}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 857, Col: 178}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 					if templ_7745c5c3_Err != nil {
@@ -490,7 +490,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var23 string
 					templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d used", len(personAudios[p.Slug].Used)))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 852, Col: 131}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 858, Col: 131}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 					if templ_7745c5c3_Err != nil {
@@ -525,7 +525,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 						var templ_7745c5c3_Var25 string
 						templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue("target-person-" + p.Slug)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 860, Col: 52}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 866, Col: 52}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
 						if templ_7745c5c3_Err != nil {
@@ -544,7 +544,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 								var templ_7745c5c3_Var26 string
 								templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue(other.Slug)
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 864, Col: 43}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 870, Col: 43}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 								if templ_7745c5c3_Err != nil {
@@ -557,7 +557,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 								var templ_7745c5c3_Var27 string
 								templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(other.Name)
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 864, Col: 58}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 870, Col: 58}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 								if templ_7745c5c3_Err != nil {
@@ -630,7 +630,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							var templ_7745c5c3_Var31 string
 							templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.ResolveAttributeValue(f)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 878, Col: 140}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 884, Col: 140}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
 							if templ_7745c5c3_Err != nil {
@@ -643,7 +643,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							var templ_7745c5c3_Var32 string
 							templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue(f)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 879, Col: 80}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 885, Col: 80}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 							if templ_7745c5c3_Err != nil {
@@ -656,7 +656,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							var templ_7745c5c3_Var33 string
 							templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(f)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 879, Col: 86}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 885, Col: 86}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 							if templ_7745c5c3_Err != nil {
@@ -669,7 +669,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							var templ_7745c5c3_Var34 string
 							templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("/api/audio/play?slug=%s&file=%s", p.Slug, url.QueryEscape(f)))
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 882, Col: 192}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 888, Col: 192}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var34)
 							if templ_7745c5c3_Err != nil {
@@ -692,7 +692,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 						var templ_7745c5c3_Var35 string
 						templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(p.Name)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 888, Col: 170}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 894, Col: 170}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 						if templ_7745c5c3_Err != nil {
@@ -750,7 +750,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var36 string
 					templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(chunk.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 928, Col: 62}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 934, Col: 62}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 					if templ_7745c5c3_Err != nil {
@@ -763,7 +763,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var37 string
 					templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%.2f MB", float64(chunk.Size)/(1024*1024)))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 929, Col: 107}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 935, Col: 107}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 					if templ_7745c5c3_Err != nil {
@@ -776,7 +776,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var38 string
 					templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%.0fs", chunk.DurationSeconds))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 929, Col: 156}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 935, Col: 156}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 					if templ_7745c5c3_Err != nil {
@@ -789,7 +789,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var39 string
 					templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(chunk.ModTime.Format("2006-01-02 15:04:05"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 929, Col: 208}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 935, Col: 208}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 					if templ_7745c5c3_Err != nil {
@@ -817,7 +817,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 								var templ_7745c5c3_Var40 string
 								templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(tag.Source)
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 936, Col: 55}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 942, Col: 55}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 								if templ_7745c5c3_Err != nil {
@@ -835,7 +835,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 									var templ_7745c5c3_Var41 string
 									templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(tag.Phrase)
 									if templ_7745c5c3_Err != nil {
-										return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 938, Col: 33}
+										return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 944, Col: 33}
 									}
 									_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 									if templ_7745c5c3_Err != nil {
@@ -853,7 +853,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 									var templ_7745c5c3_Var42 string
 									templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinStringErrs(tag.SignatureName)
 									if templ_7745c5c3_Err != nil {
-										return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 940, Col: 40}
+										return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 946, Col: 40}
 									}
 									_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 									if templ_7745c5c3_Err != nil {
@@ -871,7 +871,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 									var templ_7745c5c3_Var43 string
 									templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinStringErrs(tag.CampaignArtist)
 									if templ_7745c5c3_Err != nil {
-										return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 942, Col: 41}
+										return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 948, Col: 41}
 									}
 									_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
 									if templ_7745c5c3_Err != nil {
@@ -890,7 +890,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 								var templ_7745c5c3_Var44 string
 								templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(tag.Source)
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 945, Col: 61}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 951, Col: 61}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 								if templ_7745c5c3_Err != nil {
@@ -908,7 +908,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 									var templ_7745c5c3_Var45 string
 									templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinStringErrs(tag.Phrase)
 									if templ_7745c5c3_Err != nil {
-										return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 947, Col: 33}
+										return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 953, Col: 33}
 									}
 									_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
 									if templ_7745c5c3_Err != nil {
@@ -926,7 +926,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 									var templ_7745c5c3_Var46 string
 									templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.JoinStringErrs(tag.SignatureName)
 									if templ_7745c5c3_Err != nil {
-										return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 949, Col: 40}
+										return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 955, Col: 40}
 									}
 									_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var46))
 									if templ_7745c5c3_Err != nil {
@@ -955,7 +955,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var47 templ.SafeURL
 					templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(chunk.PlayURL))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 958, Col: 47}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 964, Col: 47}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 					if templ_7745c5c3_Err != nil {
@@ -985,7 +985,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var49 string
 					templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.ResolveAttributeValue("editor-container-" + chunk.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 962, Col: 53}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 968, Col: 53}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var49)
 					if templ_7745c5c3_Err != nil {
@@ -998,7 +998,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var50 string
 					templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.ResolveAttributeValue("waveform-" + chunk.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 963, Col: 46}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 969, Col: 46}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var50)
 					if templ_7745c5c3_Err != nil {
@@ -1011,7 +1011,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var51 string
 					templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.ResolveAttributeValue("form-crop-" + chunk.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 965, Col: 48}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 971, Col: 48}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var51)
 					if templ_7745c5c3_Err != nil {
@@ -1024,7 +1024,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var52 string
 					templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.ResolveAttributeValue(chunk.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 966, Col: 68}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 972, Col: 68}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var52)
 					if templ_7745c5c3_Err != nil {
@@ -1037,7 +1037,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var53 string
 					templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.ResolveAttributeValue("start-input-" + chunk.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 967, Col: 87}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 973, Col: 87}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var53)
 					if templ_7745c5c3_Err != nil {
@@ -1050,7 +1050,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var54 string
 					templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.ResolveAttributeValue("end-input-" + chunk.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 968, Col: 83}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 974, Col: 83}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var54)
 					if templ_7745c5c3_Err != nil {
@@ -1063,7 +1063,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var55 string
 					templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("%.1f", chunk.DurationSeconds))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 968, Col: 136}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 974, Col: 136}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var55)
 					if templ_7745c5c3_Err != nil {
@@ -1076,7 +1076,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var56 string
 					templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.ResolveAttributeValue("start-val-" + chunk.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 971, Col: 62}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 977, Col: 62}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var56)
 					if templ_7745c5c3_Err != nil {
@@ -1089,7 +1089,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var57 string
 					templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.ResolveAttributeValue("end-val-" + chunk.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 972, Col: 58}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 978, Col: 58}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var57)
 					if templ_7745c5c3_Err != nil {
@@ -1102,7 +1102,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var58 string
 					templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%.2f", chunk.DurationSeconds))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 972, Col: 105}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 978, Col: 105}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var58))
 					if templ_7745c5c3_Err != nil {
@@ -1115,7 +1115,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var59 string
 					templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.ResolveAttributeValue("phrase-input-" + chunk.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 976, Col: 85}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 982, Col: 85}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var59)
 					if templ_7745c5c3_Err != nil {
@@ -1128,7 +1128,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var60 string
 					templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.ResolveAttributeValue(chunk.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 981, Col: 39}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 987, Col: 39}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var60)
 					if templ_7745c5c3_Err != nil {
@@ -1141,7 +1141,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var61 string
 					templ_7745c5c3_Var61, templ_7745c5c3_Err = templ.ResolveAttributeValue(chunk.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 984, Col: 39}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 990, Col: 39}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var61)
 					if templ_7745c5c3_Err != nil {
@@ -1154,7 +1154,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var62 string
 					templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.ResolveAttributeValue("loader-btn-" + chunk.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 995, Col: 47}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1001, Col: 47}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var62)
 					if templ_7745c5c3_Err != nil {
@@ -1167,7 +1167,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var63 string
 					templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.ResolveAttributeValue(chunk.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 997, Col: 35}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1003, Col: 35}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var63)
 					if templ_7745c5c3_Err != nil {
@@ -1180,7 +1180,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var64 string
 					templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.ResolveAttributeValue(chunk.PlayURL)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 998, Col: 37}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1004, Col: 37}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var64)
 					if templ_7745c5c3_Err != nil {
@@ -1193,7 +1193,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var65 string
 					templ_7745c5c3_Var65, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("%f", chunk.DurationSeconds))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 999, Col: 69}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1005, Col: 69}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var65)
 					if templ_7745c5c3_Err != nil {
@@ -1240,7 +1240,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							var templ_7745c5c3_Var68 string
 							templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("Snap to %s", t.Timestamp.Format("15:04:05")))
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1014, Col: 80}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1020, Col: 80}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var68)
 							if templ_7745c5c3_Err != nil {
@@ -1262,7 +1262,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							var templ_7745c5c3_Var70 string
 							templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(t.Value)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1015, Col: 249}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1021, Col: 249}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var70))
 							if templ_7745c5c3_Err != nil {
@@ -1285,7 +1285,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 						var templ_7745c5c3_Var71 string
 						templ_7745c5c3_Var71, templ_7745c5c3_Err = templ.ResolveAttributeValue(chunk.Name)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1023, Col: 36}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1029, Col: 36}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var71)
 						if templ_7745c5c3_Err != nil {
@@ -1318,7 +1318,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 				var templ_7745c5c3_Var72 string
 				templ_7745c5c3_Var72, templ_7745c5c3_Err = templ.ResolveAttributeValue(artist)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1042, Col: 34}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1048, Col: 34}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var72)
 				if templ_7745c5c3_Err != nil {
@@ -1331,7 +1331,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 				var templ_7745c5c3_Var73 string
 				templ_7745c5c3_Var73, templ_7745c5c3_Err = templ.JoinStringErrs(artist)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1042, Col: 45}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1048, Col: 45}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var73))
 				if templ_7745c5c3_Err != nil {
@@ -1364,7 +1364,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var74 string
 					templ_7745c5c3_Var74, templ_7745c5c3_Err = templ.JoinStringErrs(artist)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1059, Col: 81}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1065, Col: 81}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var74))
 					if templ_7745c5c3_Err != nil {
@@ -1382,7 +1382,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 						var templ_7745c5c3_Var75 string
 						templ_7745c5c3_Var75, templ_7745c5c3_Err = templ.JoinStringErrs(phrase)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1063, Col: 29}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1069, Col: 29}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var75))
 						if templ_7745c5c3_Err != nil {
@@ -1443,7 +1443,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 						var templ_7745c5c3_Var77 string
 						templ_7745c5c3_Var77, templ_7745c5c3_Err = templ.JoinStringErrs(chunk.Name)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1082, Col: 71}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1088, Col: 71}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var77))
 						if templ_7745c5c3_Err != nil {
@@ -1461,7 +1461,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							var templ_7745c5c3_Var78 string
 							templ_7745c5c3_Var78, templ_7745c5c3_Err = templ.JoinStringErrs(t.Value)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1086, Col: 51}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1092, Col: 51}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var78))
 							if templ_7745c5c3_Err != nil {
@@ -1490,7 +1490,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							var templ_7745c5c3_Var79 string
 							templ_7745c5c3_Var79, templ_7745c5c3_Err = templ.ResolveAttributeValue(artist)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1096, Col: 37}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1102, Col: 37}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var79)
 							if templ_7745c5c3_Err != nil {
@@ -1513,7 +1513,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							var templ_7745c5c3_Var80 string
 							templ_7745c5c3_Var80, templ_7745c5c3_Err = templ.JoinStringErrs(artist)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1096, Col: 110}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1102, Col: 110}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var80))
 							if templ_7745c5c3_Err != nil {
@@ -1557,7 +1557,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var81 string
 					templ_7745c5c3_Var81, templ_7745c5c3_Err = templ.JoinStringErrs(chunk.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1118, Col: 62}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1124, Col: 62}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var81))
 					if templ_7745c5c3_Err != nil {
@@ -1570,7 +1570,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var82 string
 					templ_7745c5c3_Var82, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%.2f MB", float64(chunk.Size)/(1024*1024)))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1119, Col: 102}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1125, Col: 102}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var82))
 					if templ_7745c5c3_Err != nil {
@@ -1583,7 +1583,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var83 string
 					templ_7745c5c3_Var83, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%.0fs", chunk.DurationSeconds))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1119, Col: 151}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1125, Col: 151}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var83))
 					if templ_7745c5c3_Err != nil {
@@ -1596,7 +1596,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var84 string
 					templ_7745c5c3_Var84, templ_7745c5c3_Err = templ.JoinStringErrs(chunk.ModTime.Format("2006-01-02 15:04:05"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1119, Col: 203}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1125, Col: 203}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var84))
 					if templ_7745c5c3_Err != nil {
@@ -1609,7 +1609,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var85 templ.SafeURL
 					templ_7745c5c3_Var85, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(chunk.PlayURL))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1122, Col: 47}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1128, Col: 47}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var85))
 					if templ_7745c5c3_Err != nil {
@@ -1632,7 +1632,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							var templ_7745c5c3_Var86 string
 							templ_7745c5c3_Var86, templ_7745c5c3_Err = templ.JoinStringErrs(t.Value)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1130, Col: 51}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1136, Col: 51}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var86))
 							if templ_7745c5c3_Err != nil {
@@ -1655,7 +1655,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 						var templ_7745c5c3_Var87 string
 						templ_7745c5c3_Var87, templ_7745c5c3_Err = templ.ResolveAttributeValue(chunk.Name)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1138, Col: 36}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1144, Col: 36}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var87)
 						if templ_7745c5c3_Err != nil {
@@ -1706,7 +1706,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var88 string
 					templ_7745c5c3_Var88, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("%d", p.ID))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1169, Col: 50}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1175, Col: 50}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var88)
 					if templ_7745c5c3_Err != nil {
@@ -1719,7 +1719,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var89 string
 					templ_7745c5c3_Var89, templ_7745c5c3_Err = templ.JoinStringErrs(p.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1169, Col: 61}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1175, Col: 61}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var89))
 					if templ_7745c5c3_Err != nil {
@@ -1759,7 +1759,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var90 string
 					templ_7745c5c3_Var90, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.Slug)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1189, Col: 33}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1195, Col: 33}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var90)
 					if templ_7745c5c3_Err != nil {
@@ -1772,7 +1772,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var91 string
 					templ_7745c5c3_Var91, templ_7745c5c3_Err = templ.JoinStringErrs(p.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1189, Col: 44}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1195, Col: 44}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var91))
 					if templ_7745c5c3_Err != nil {
@@ -1785,7 +1785,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var92 string
 					templ_7745c5c3_Var92, templ_7745c5c3_Err = templ.JoinStringErrs(p.Slug)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1189, Col: 56}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1195, Col: 56}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var92))
 					if templ_7745c5c3_Err != nil {
@@ -1797,7 +1797,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					}
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 191, "</select></div><div><label class=\"text-xs text-muted mb-1\">.ogg voice note (files or folders)</label><div class=\"flex gap-2 mb-2\"><button type=\"button\" id=\"upload-mode-files\" class=\"btn btn-sm btn-primary flex-1\" onclick=\"setUploadMode('files')\">Files Mode</button> <button type=\"button\" id=\"upload-mode-folder\" class=\"btn btn-sm btn-secondary flex-1\" onclick=\"setUploadMode('folder')\">Folder Mode</button></div><div id=\"dropzone-area\" class=\"border-2 border-dashed border-white/20 rounded-xl p-4 text-center cursor-pointer transition-colors\" onclick=\"triggerFilePicker()\" ondragover=\"handleDragOver(event)\" ondragleave=\"handleDragLeave(event)\" ondrop=\"handleDrop(event)\"><input type=\"file\" id=\"audio-input-files\" accept=\".ogg,audio/ogg\" class=\"hidden\" multiple onchange=\"handleFileSelection(event)\"> <input type=\"file\" id=\"audio-input-folder\" class=\"hidden\" webkitdirectory directory onchange=\"handleFileSelection(event)\"><div id=\"dropzone-prompt\" class=\"space-y-1\"><div class=\"text-sm font-medium\" id=\"dropzone-label\">Click to choose .ogg files (or drag & drop)</div><div class=\"text-xs text-muted\" id=\"dropzone-sublabel\">Multi-file selection active (files are selectable)</div></div><div id=\"dropzone-selected\" class=\"hidden text-sm text-success font-medium\"></div></div></div><button type=\"submit\" class=\"btn btn-primary\">Upload</button></form><div id=\"upload-audio-result\" class=\"mt-4 text-sm text-muted\">Uploads land in the active pool, never in <code>used/</code>.</div></div><div class=\"glass p-6\"><div class=\"flex justify-between items-center mb-4\"><div><h2 class=\"text-sm uppercase text-muted mb-1\">Daily RNG Schedule</h2><div class=\"text-xs text-muted\">Edit the stored daily match indices used by the RNG gate.</div></div><a href=\"/api/schedule\" class=\"btn btn-secondary btn-sm\" target=\"_blank\">JSON</a></div><form onsubmit=\"return saveSchedule(event, this)\" class=\"space-y-4\"><div><label class=\"text-xs text-muted mb-1\">Date</label> <input type=\"date\" name=\"date\" class=\"input\" required></div><div><label class=\"text-xs text-muted mb-1\">Target matches</label> <input type=\"text\" name=\"target_matches\" placeholder=\"1,3,5\" class=\"input\" required></div><div class=\"flex gap-2\"><button type=\"submit\" class=\"btn btn-primary\">Save Schedule</button> <button type=\"button\" class=\"btn btn-secondary\" onclick=\"fillAllSchedules()\">All 6/6</button></div></form><div id=\"schedule-result\" class=\"mt-4 text-sm text-muted\">Use comma-separated match indices such as <code>1, 3, 5</code>.</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 191, "</select></div><div><label class=\"text-xs text-muted mb-1\">.ogg voice note (files or folders)</label><div class=\"flex gap-2 mb-2\"><button type=\"button\" id=\"upload-mode-files\" class=\"btn btn-sm btn-primary flex-1\" onclick=\"setUploadMode('files')\">Files Mode</button> <button type=\"button\" id=\"upload-mode-folder\" class=\"btn btn-sm btn-secondary flex-1\" onclick=\"setUploadMode('folder')\">Folder Mode</button></div><div id=\"dropzone-area\" class=\"border-2 border-dashed border-white/20 rounded-xl p-4 text-center cursor-pointer transition-colors\" style=\"position: relative\"><input type=\"file\" id=\"audio-input-files\" accept=\".ogg,audio/ogg\" multiple onchange=\"handleFileSelection(event)\" style=\"position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; z-index:1\"> <input type=\"file\" id=\"audio-input-folder\" webkitdirectory directory disabled onchange=\"handleFileSelection(event)\" style=\"position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; z-index:1\"><div id=\"dropzone-prompt\" class=\"space-y-1\"><div class=\"text-sm font-medium\" id=\"dropzone-label\">Click to choose .ogg files (or drag & drop)</div><div class=\"text-xs text-muted\" id=\"dropzone-sublabel\">Multi-file selection active (files are selectable)</div></div><div id=\"dropzone-selected\" class=\"hidden text-sm text-success font-medium\"></div></div></div><button type=\"submit\" class=\"btn btn-primary\">Upload</button></form><div id=\"upload-audio-result\" class=\"mt-4 text-sm text-muted\">Uploads land in the active pool, never in <code>used/</code>.</div></div><div class=\"glass p-6\"><div class=\"flex justify-between items-center mb-4\"><div><h2 class=\"text-sm uppercase text-muted mb-1\">Daily RNG Schedule</h2><div class=\"text-xs text-muted\">Edit the stored daily match indices used by the RNG gate.</div></div><a href=\"/api/schedule\" class=\"btn btn-secondary btn-sm\" target=\"_blank\">JSON</a></div><form onsubmit=\"return saveSchedule(event, this)\" class=\"space-y-4\"><div><label class=\"text-xs text-muted mb-1\">Date</label> <input type=\"date\" name=\"date\" class=\"input\" required></div><div><label class=\"text-xs text-muted mb-1\">Target matches</label> <input type=\"text\" name=\"target_matches\" placeholder=\"1,3,5\" class=\"input\" required></div><div class=\"flex gap-2\"><button type=\"submit\" class=\"btn btn-primary\">Save Schedule</button> <button type=\"button\" class=\"btn btn-secondary\" onclick=\"fillAllSchedules()\">All 6/6</button></div></form><div id=\"schedule-result\" class=\"mt-4 text-sm text-muted\">Use comma-separated match indices such as <code>1, 3, 5</code>.</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1819,7 +1819,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var93 string
 					templ_7745c5c3_Var93, templ_7745c5c3_Err = templ.JoinStringErrs(schedule.Date)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1254, Col: 60}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1256, Col: 60}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var93))
 					if templ_7745c5c3_Err != nil {
@@ -1832,7 +1832,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 					var templ_7745c5c3_Var94 string
 					templ_7745c5c3_Var94, templ_7745c5c3_Err = templ.JoinStringErrs(formatScheduleTargets(schedule.TargetMatches))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1255, Col: 105}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1257, Col: 105}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var94))
 					if templ_7745c5c3_Err != nil {
@@ -1895,7 +1895,7 @@ func StatusComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var96 string
 			templ_7745c5c3_Var96, templ_7745c5c3_Err = templ.JoinStringErrs(string(state.Status))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1275, Col: 75}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1277, Col: 75}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var96))
 			if templ_7745c5c3_Err != nil {
@@ -1913,7 +1913,7 @@ func StatusComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var97 string
 			templ_7745c5c3_Var97, templ_7745c5c3_Err = templ.JoinStringErrs(string(state.Status))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1281, Col: 75}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1283, Col: 75}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var97))
 			if templ_7745c5c3_Err != nil {
@@ -1936,7 +1936,7 @@ func StatusComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var98 string
 			templ_7745c5c3_Var98, templ_7745c5c3_Err = templ.JoinStringErrs(string(state.Status))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1291, Col: 74}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1293, Col: 74}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var98))
 			if templ_7745c5c3_Err != nil {
@@ -1954,7 +1954,7 @@ func StatusComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var99 string
 			templ_7745c5c3_Var99, templ_7745c5c3_Err = templ.JoinStringErrs(string(state.Status))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1296, Col: 73}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1298, Col: 73}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var99))
 			if templ_7745c5c3_Err != nil {
@@ -1972,7 +1972,7 @@ func StatusComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var100 string
 			templ_7745c5c3_Var100, templ_7745c5c3_Err = templ.JoinStringErrs(string(state.Status))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1301, Col: 73}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1303, Col: 73}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var100))
 			if templ_7745c5c3_Err != nil {
@@ -1995,7 +1995,7 @@ func StatusComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var101 string
 			templ_7745c5c3_Var101, templ_7745c5c3_Err = templ.JoinStringErrs(state.LastError)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1306, Col: 20}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1308, Col: 20}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var101))
 			if templ_7745c5c3_Err != nil {
@@ -2048,7 +2048,7 @@ func SongComponent(song string) templ.Component {
 			var templ_7745c5c3_Var103 string
 			templ_7745c5c3_Var103, templ_7745c5c3_Err = templ.JoinStringErrs(song)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1316, Col: 40}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1318, Col: 40}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var103))
 			if templ_7745c5c3_Err != nil {
@@ -2091,7 +2091,7 @@ func AudioStatsComponent(state AppState) templ.Component {
 		var templ_7745c5c3_Var105 string
 		templ_7745c5c3_Var105, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", state.UnusedAudios))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1325, Col: 88}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1327, Col: 88}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var105))
 		if templ_7745c5c3_Err != nil {
@@ -2104,7 +2104,7 @@ func AudioStatsComponent(state AppState) templ.Component {
 		var templ_7745c5c3_Var106 string
 		templ_7745c5c3_Var106, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", state.UsedAudios))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1329, Col: 86}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1331, Col: 86}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var106))
 		if templ_7745c5c3_Err != nil {
@@ -2122,7 +2122,7 @@ func AudioStatsComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var107 string
 			templ_7745c5c3_Var107, templ_7745c5c3_Err = templ.JoinStringErrs(conn.Phone)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1335, Col: 64}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1337, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var107))
 			if templ_7745c5c3_Err != nil {
@@ -2135,7 +2135,7 @@ func AudioStatsComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var108 string
 			templ_7745c5c3_Var108, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", conn.UnusedAudios))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1339, Col: 82}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1341, Col: 82}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var108))
 			if templ_7745c5c3_Err != nil {
@@ -2148,7 +2148,7 @@ func AudioStatsComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var109 string
 			templ_7745c5c3_Var109, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", conn.UsedAudios))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1343, Col: 80}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1345, Col: 80}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var109))
 			if templ_7745c5c3_Err != nil {
@@ -2202,7 +2202,7 @@ func QRComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var111 string
 			templ_7745c5c3_Var111, templ_7745c5c3_Err = templ.JoinStringErrs(conn.Phone)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1362, Col: 79}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1364, Col: 79}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var111))
 			if templ_7745c5c3_Err != nil {
@@ -2215,7 +2215,7 @@ func QRComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var112 string
 			templ_7745c5c3_Var112, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf(`{"phone": %q}`, conn.Phone))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1368, Col: 55}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1370, Col: 55}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var112)
 			if templ_7745c5c3_Err != nil {
@@ -2228,7 +2228,7 @@ func QRComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var113 string
 			templ_7745c5c3_Var113, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("Are you sure you want to disconnect and remove %s?", conn.Phone))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1369, Col: 95}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1371, Col: 95}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var113)
 			if templ_7745c5c3_Err != nil {
@@ -2261,7 +2261,7 @@ func QRComponent(state AppState) templ.Component {
 				var templ_7745c5c3_Var114 string
 				templ_7745c5c3_Var114, templ_7745c5c3_Err = templ.JoinStringErrs(string(conn.Status))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1384, Col: 51}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1386, Col: 51}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var114))
 				if templ_7745c5c3_Err != nil {
@@ -2296,7 +2296,7 @@ func QRComponent(state AppState) templ.Component {
 			var templ_7745c5c3_Var116 string
 			templ_7745c5c3_Var116, templ_7745c5c3_Err = templ.ResolveAttributeValue(conn.PersonID == nil || *conn.PersonID == 0)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1390, Col: 77}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1392, Col: 77}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var116)
 			if templ_7745c5c3_Err != nil {
@@ -2314,7 +2314,7 @@ func QRComponent(state AppState) templ.Component {
 				var templ_7745c5c3_Var117 string
 				templ_7745c5c3_Var117, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("%d", person.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1392, Col: 50}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1394, Col: 50}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var117)
 				if templ_7745c5c3_Err != nil {
@@ -2327,7 +2327,7 @@ func QRComponent(state AppState) templ.Component {
 				var templ_7745c5c3_Var118 string
 				templ_7745c5c3_Var118, templ_7745c5c3_Err = templ.ResolveAttributeValue(conn.PersonID != nil && *conn.PersonID == person.ID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1392, Col: 115}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1394, Col: 115}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var118)
 				if templ_7745c5c3_Err != nil {
@@ -2340,7 +2340,7 @@ func QRComponent(state AppState) templ.Component {
 				var templ_7745c5c3_Var119 string
 				templ_7745c5c3_Var119, templ_7745c5c3_Err = templ.JoinStringErrs(person.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1392, Col: 131}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1394, Col: 131}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var119))
 				if templ_7745c5c3_Err != nil {
@@ -2353,7 +2353,7 @@ func QRComponent(state AppState) templ.Component {
 				var templ_7745c5c3_Var120 string
 				templ_7745c5c3_Var120, templ_7745c5c3_Err = templ.JoinStringErrs(person.Slug)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1392, Col: 148}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1394, Col: 148}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var120))
 				if templ_7745c5c3_Err != nil {
@@ -2411,7 +2411,7 @@ func QRComponent(state AppState) templ.Component {
 				var templ_7745c5c3_Var121 string
 				templ_7745c5c3_Var121, templ_7745c5c3_Err = templ.ResolveAttributeValue(conn.QRCodeData)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1412, Col: 31}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1414, Col: 31}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var121)
 				if templ_7745c5c3_Err != nil {
@@ -2524,7 +2524,7 @@ func DataViewer(files []FileInfo) templ.Component {
 					var templ_7745c5c3_Var126 templ.SafeURL
 					templ_7745c5c3_Var126, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/raw-data/" + f.Path))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1474, Col: 52}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1476, Col: 52}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var126))
 					if templ_7745c5c3_Err != nil {
@@ -2537,7 +2537,7 @@ func DataViewer(files []FileInfo) templ.Component {
 					var templ_7745c5c3_Var127 string
 					templ_7745c5c3_Var127, templ_7745c5c3_Err = templ.JoinStringErrs(f.Path)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1475, Col: 19}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1477, Col: 19}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var127))
 					if templ_7745c5c3_Err != nil {
@@ -2550,7 +2550,7 @@ func DataViewer(files []FileInfo) templ.Component {
 					var templ_7745c5c3_Var128 string
 					templ_7745c5c3_Var128, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d bytes", f.Size))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1479, Col: 43}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1481, Col: 43}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var128))
 					if templ_7745c5c3_Err != nil {
@@ -2563,7 +2563,7 @@ func DataViewer(files []FileInfo) templ.Component {
 					var templ_7745c5c3_Var129 string
 					templ_7745c5c3_Var129, templ_7745c5c3_Err = templ.JoinStringErrs(f.ModTime)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1482, Col: 21}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1484, Col: 21}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var129))
 					if templ_7745c5c3_Err != nil {
@@ -2581,7 +2581,7 @@ func DataViewer(files []FileInfo) templ.Component {
 						var templ_7745c5c3_Var130 string
 						templ_7745c5c3_Var130, templ_7745c5c3_Err = templ.ResolveAttributeValue("/raw-data/" + f.Path)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1487, Col: 47}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1489, Col: 47}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var130)
 						if templ_7745c5c3_Err != nil {
@@ -2594,7 +2594,7 @@ func DataViewer(files []FileInfo) templ.Component {
 						var templ_7745c5c3_Var131 string
 						templ_7745c5c3_Var131, templ_7745c5c3_Err = templ.ResolveAttributeValue(audioMimeType(f.Name))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1487, Col: 78}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1489, Col: 78}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var131)
 						if templ_7745c5c3_Err != nil {
@@ -2676,7 +2676,7 @@ func RadioLogsPage(logs []RadioLog) templ.Component {
 				var templ_7745c5c3_Var134 string
 				templ_7745c5c3_Var134, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", l.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1528, Col: 67}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1530, Col: 67}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var134))
 				if templ_7745c5c3_Err != nil {
@@ -2689,7 +2689,7 @@ func RadioLogsPage(logs []RadioLog) templ.Component {
 				var templ_7745c5c3_Var135 string
 				templ_7745c5c3_Var135, templ_7745c5c3_Err = templ.JoinStringErrs(l.PlayedDatetime)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1529, Col: 64}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1531, Col: 64}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var135))
 				if templ_7745c5c3_Err != nil {
@@ -2702,7 +2702,7 @@ func RadioLogsPage(logs []RadioLog) templ.Component {
 				var templ_7745c5c3_Var136 string
 				templ_7745c5c3_Var136, templ_7745c5c3_Err = templ.JoinStringErrs(l.Artist)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1530, Col: 48}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1532, Col: 48}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var136))
 				if templ_7745c5c3_Err != nil {
@@ -2715,7 +2715,7 @@ func RadioLogsPage(logs []RadioLog) templ.Component {
 				var templ_7745c5c3_Var137 string
 				templ_7745c5c3_Var137, templ_7745c5c3_Err = templ.JoinStringErrs(l.Title)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1531, Col: 33}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1533, Col: 33}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var137))
 				if templ_7745c5c3_Err != nil {
@@ -2801,7 +2801,7 @@ func AlertsPage(alerts []AlertRecord) templ.Component {
 					var templ_7745c5c3_Var140 string
 					templ_7745c5c3_Var140, templ_7745c5c3_Err = templ.JoinStringErrs(a.CreatedAt)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1571, Col: 98}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1573, Col: 98}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var140))
 					if templ_7745c5c3_Err != nil {
@@ -2834,7 +2834,7 @@ func AlertsPage(alerts []AlertRecord) templ.Component {
 					var templ_7745c5c3_Var141 string
 					templ_7745c5c3_Var141, templ_7745c5c3_Err = templ.JoinStringErrs(a.Title)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1581, Col: 64}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1583, Col: 64}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var141))
 					if templ_7745c5c3_Err != nil {
@@ -2847,7 +2847,7 @@ func AlertsPage(alerts []AlertRecord) templ.Component {
 					var templ_7745c5c3_Var142 string
 					templ_7745c5c3_Var142, templ_7745c5c3_Err = templ.JoinStringErrs(a.Message)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1582, Col: 121}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `pkg/poller/dashboard.templ`, Line: 1584, Col: 121}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var142))
 					if templ_7745c5c3_Err != nil {

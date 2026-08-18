@@ -423,15 +423,21 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 				currentUploadMode = mode;
 				const filesBtn = document.getElementById('upload-mode-files');
 				const folderBtn = document.getElementById('upload-mode-folder');
+				const filesInput = document.getElementById('audio-input-files');
+				const folderInput = document.getElementById('audio-input-folder');
 				const label = document.getElementById('dropzone-label');
 				const sublabel = document.getElementById('dropzone-sublabel');
 
 				if (mode === 'files') {
+					if (filesInput) filesInput.disabled = false;
+					if (folderInput) folderInput.disabled = true;
 					if (filesBtn) filesBtn.className = 'btn btn-sm btn-primary flex-1';
 					if (folderBtn) folderBtn.className = 'btn btn-sm btn-secondary flex-1';
 					if (label) label.textContent = 'Click to choose .ogg files (or drag & drop)';
 					if (sublabel) sublabel.textContent = 'Multi-file selection active (files are selectable)';
 				} else {
+					if (folderInput) folderInput.disabled = false;
+					if (filesInput) filesInput.disabled = true;
 					if (folderBtn) folderBtn.className = 'btn btn-sm btn-primary flex-1';
 					if (filesBtn) filesBtn.className = 'btn btn-sm btn-secondary flex-1';
 					if (label) label.textContent = 'Click to choose a Folder (or drag & drop)';
@@ -1201,13 +1207,9 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 
 								<div id="dropzone-area" 
 									 class="border-2 border-dashed border-white/20 rounded-xl p-4 text-center cursor-pointer transition-colors"
-									 onclick="triggerFilePicker()"
-									 ondragover="handleDragOver(event)"
-									 ondragleave="handleDragLeave(event)"
-									 ondrop="handleDrop(event)">
-									
-									<input type="file" id="audio-input-files" accept=".ogg,audio/ogg" class="hidden" multiple onchange="handleFileSelection(event)" />
-									<input type="file" id="audio-input-folder" class="hidden" webkitdirectory directory onchange="handleFileSelection(event)" />
+									 style="position: relative">
+									<input type="file" id="audio-input-files" accept=".ogg,audio/ogg" multiple onchange="handleFileSelection(event)" style="position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; z-index:1" />
+									<input type="file" id="audio-input-folder" webkitdirectory directory disabled onchange="handleFileSelection(event)" style="position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; z-index:1" />
 
 									<div id="dropzone-prompt" class="space-y-1">
 										<div class="text-sm font-medium" id="dropzone-label">Click to choose .ogg files (or drag & drop)</div>
