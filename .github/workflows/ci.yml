@@ -27,6 +27,8 @@ jobs:
           go-version-file: "go.mod"
           cache-dependency-path: "go.sum"
 
+      - uses: docker/setup-buildx-action@v3
+
       - name: Restore ffmpeg cache
         uses: actions/cache@v4
         with:
@@ -34,11 +36,6 @@ jobs:
             bin/ffmpeg
             bin/ffprobe
           key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/build_ffmpeg.sh', 'third_party/ffmpeg/configure', 'third_party/ffmpeg/fftools/ffmpeg.c', 'third_party/ffmpeg/libavcodec/allcodecs.c') }}
-
-      - name: Build minimal ffmpeg
-        run: |
-          ./scripts/build_ffmpeg.sh
-          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
 
       - name: Restore golangci-lint binary cache
         id: golangci-lint-bin-cache
@@ -61,9 +58,6 @@ jobs:
           restore-keys: |
             golangci-lint-data-${{ runner.os }}-${{ env.GOLANGCI_LINT_VERSION }}-
 
-      - name: Lint
-        run: ./scripts/golangci-lint-shim.sh run
-
       - name: droast — Dockerfile linter
         uses: immanuwell/dockerfile-roast@1.4.7
 
@@ -80,14 +74,30 @@ jobs:
           version="${GOTESTSUM_VERSION#v}"
           curl -sSfL "https://github.com/gotestyourself/gotestsum/releases/download/${GOTESTSUM_VERSION}/gotestsum_${version}_linux_amd64.tar.gz" | tar -xz -C bin gotestsum
 
-      - name: Test & coverage
-        run: |
-          bin/gotestsum --junitfile junit.xml -- -coverprofile=coverage.out ./pkg/...
-          go tool cover -func=coverage.out
+      - name: Build production app image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: profm-app-ci:local
+          cache-from: type=gha,scope=app-image
+          cache-to: type=gha,mode=max,scope=app-image
 
-      - name: Test production Whisper WebSocket pipeline
+      - name: Build Whisper test image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./whisper-server
+          load: true
+          tags: profm-whisper-test:local
+          cache-from: type=gha,scope=whisper-image
+          cache-to: type=gha,mode=max,scope=whisper-image
+
+      - name: Run the same checks as local
         timeout-minutes: 15
-        run: go test -tags=e2e -v -run TestWhisperContainerTranscription ./pkg/poller
+        run: ./scripts/ci.sh
+        env:
+          PROFM_APP_IMAGE_READY: "1"
+          WHISPER_TEST_IMAGE_READY: "1"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
