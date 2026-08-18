@@ -358,7 +358,7 @@ func TestPoller_checkMetadataWithCoordinator(t *testing.T) {
 			dbMgr, _ := NewDBManager(":memory:")
 
 			audiosDir := t.TempDir()
-			personDir := filepath.Join(audiosDir, "main-sender")
+			personDir := filepath.Join(audiosDir, "test-sender")
 			_ = os.MkdirAll(personDir, 0o755)
 			_ = os.WriteFile(filepath.Join(personDir, "test.ogg"), []byte("fake"), 0o644)
 			poller := &Poller{
@@ -373,8 +373,8 @@ func TestPoller_checkMetadataWithCoordinator(t *testing.T) {
 				AudiosDir:   audiosDir,
 				DBMgr:       dbMgr,
 				SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
-					if senderPhone != "+40734788254" {
-						t.Fatalf("SendVoiceNote senderPhone = %q, want %q", senderPhone, "+40734788254")
+					if senderPhone != "+40700000001" {
+						t.Fatalf("SendVoiceNote senderPhone = %q, want %q", senderPhone, "+40700000001")
 					}
 					if targetPhone != "+40770661491" {
 						t.Fatalf("SendVoiceNote targetPhone = %q, want %q", targetPhone, "+40770661491")
@@ -406,7 +406,7 @@ func TestPoller_checkMetadataWithCoordinator_Deduplication(t *testing.T) {
 	activeTime := bucharestTime(2026, time.June, 17, 12, 0, 0)
 	dbMgr, _ := NewDBManager(":memory:")
 	audiosDir := t.TempDir()
-	personDir := filepath.Join(audiosDir, "main-sender")
+	personDir := filepath.Join(audiosDir, "test-sender")
 	_ = os.MkdirAll(personDir, 0o755)
 	_ = os.WriteFile(filepath.Join(personDir, "test1.ogg"), []byte("fake-1"), 0o644)
 	_ = os.WriteFile(filepath.Join(personDir, "test2.ogg"), []byte("fake-2"), 0o644)
@@ -425,8 +425,8 @@ func TestPoller_checkMetadataWithCoordinator_Deduplication(t *testing.T) {
 		AudiosDir:   audiosDir,
 		DBMgr:       dbMgr,
 		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
-			if senderPhone != "+40734788254" {
-				t.Fatalf("SendVoiceNote senderPhone = %q, want %q", senderPhone, "+40734788254")
+			if senderPhone != "+40700000001" {
+				t.Fatalf("SendVoiceNote senderPhone = %q, want %q", senderPhone, "+40700000001")
 			}
 			if targetPhone != "+40770661491" {
 				t.Fatalf("SendVoiceNote targetPhone = %q, want %q", targetPhone, "+40770661491")
@@ -515,8 +515,8 @@ func TestPoller_checkMetadataWithCoordinator_DailyLimit(t *testing.T) {
 		Alerter:      NewMultiAlerter(),
 		AudiosDir:    t.TempDir(),
 		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
-			if senderPhone != "+40734788254" {
-				t.Fatalf("SendVoiceNote senderPhone = %q, want %q", senderPhone, "+40734788254")
+			if senderPhone != "+40700000001" {
+				t.Fatalf("SendVoiceNote senderPhone = %q, want %q", senderPhone, "+40700000001")
 			}
 			if targetPhone != "+40770661491" {
 				t.Fatalf("SendVoiceNote targetPhone = %q, want %q", targetPhone, "+40770661491")
@@ -545,7 +545,7 @@ func TestPoller_checkMetadataWithCoordinator_RequiresDifferentArtistBetweenCampa
 	}
 
 	audiosDir := t.TempDir()
-	personDir := filepath.Join(audiosDir, "main-sender")
+	personDir := filepath.Join(audiosDir, "test-sender")
 	_ = os.MkdirAll(personDir, 0o755)
 	if err := os.WriteFile(filepath.Join(personDir, "test1.ogg"), []byte("first"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
@@ -825,7 +825,7 @@ func TestPoller_saveUnreviewedChunkForReviewStoresCampaignOwnership(t *testing.T
 
 func TestPoller_doTriggerVoiceNote_ReportsOnlySuccessAfterSend(t *testing.T) {
 	audiosDir := t.TempDir()
-	personDir := filepath.Join(audiosDir, "main-sender")
+	personDir := filepath.Join(audiosDir, "test-sender")
 	_ = os.MkdirAll(personDir, 0o755)
 	if err := os.WriteFile(filepath.Join(personDir, "test.ogg"), []byte("fake"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
@@ -865,7 +865,7 @@ func TestPoller_doTriggerVoiceNote_ReportsOnlySuccessAfterSend(t *testing.T) {
 
 func TestPoller_doTriggerVoiceNote_ReportsOnlyFailureAfterSendError(t *testing.T) {
 	audiosDir := t.TempDir()
-	personDir := filepath.Join(audiosDir, "main-sender")
+	personDir := filepath.Join(audiosDir, "test-sender")
 	_ = os.MkdirAll(personDir, 0o755)
 	if err := os.WriteFile(filepath.Join(personDir, "test.ogg"), []byte("fake"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
@@ -1020,14 +1020,14 @@ func createMockStateMgr() *StateManager {
 	sm := NewStateManager()
 	personID := int64(1)
 	sm.Update(func(s *AppState) {
-		s.Persons = []Person{{ID: personID, Name: "Main Sender", Slug: "main-sender"}}
+		s.Persons = []Person{{ID: personID, Name: "Test Sender", Slug: "test-sender"}}
 		s.Connections = []WAConnectionState{{
-			Phone:             "+40734788254",
+			Phone:             "+40700000001",
 			WhatsAppConnected: true,
 			Status:            StatusConnected,
 			PersonID:          &personID,
-			PersonName:        "Main Sender",
-			PersonSlug:        "main-sender",
+			PersonName:        "Test Sender",
+			PersonSlug:        "test-sender",
 		}}
 	})
 	return sm

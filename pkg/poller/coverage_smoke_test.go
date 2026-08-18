@@ -24,7 +24,7 @@ func TestRenderDashboardTemplates(t *testing.T) {
 	state.UnusedAudios = 3
 	state.UsedAudios = 7
 	state.Connections = []WAConnectionState{
-		{Phone: "+40734788254", Status: StatusPairingRequired, WhatsAppConnected: true, QRCodeData: "data:image/png;base64,Zm9v"},
+		{Phone: "+40700000001", Status: StatusPairingRequired, WhatsAppConnected: true, QRCodeData: "data:image/png;base64,Zm9v"},
 	}
 
 	chunks := []ReviewChunk{{
@@ -37,13 +37,13 @@ func TestRenderDashboardTemplates(t *testing.T) {
 	files := []FileInfo{{Name: "audio.ogg", Path: "audios/audio.ogg", Size: 42, ModTime: "2026-06-27 12:00:00"}}
 	logs := []RadioLog{{ID: 1, PlayedDatetime: "2026-06-27 12:00:00", Artist: "BTS", Title: "Dynamite"}}
 
-	persons := []Person{{ID: 1, Name: "Main Sender", Slug: "main-sender"}}
-	personAudios := map[string]PersonAudioFiles{"main-sender": {Active: []string{"audio.ogg"}}}
+	persons := []Person{{ID: 1, Name: "Test Sender", Slug: "test-sender"}}
+	personAudios := map[string]PersonAudioFiles{"test-sender": {Active: []string{"audio.ogg"}}}
 
 	components := map[string]templ.Component{
 		"Layout":          Layout("T"),
 		"Login":           Login(),
-		"Dashboard":       Dashboard(state, chunks, nil, []string{"+40734788254"}, schedules, []string{"BTS", "Ariana", "The Weeknd"}, map[string][]string{}, persons, personAudios),
+		"Dashboard":       Dashboard(state, chunks, nil, []string{"+40700000001"}, schedules, []string{"BTS", "Ariana", "The Weeknd"}, map[string][]string{}, persons, personAudios),
 		"StatusComponent": StatusComponent(state),
 		"SongComponent":   SongComponent(state.CurrentSong),
 		"AudioStats":      AudioStatsComponent(state),
@@ -69,9 +69,9 @@ func TestRenderDashboardTemplates(t *testing.T) {
 func TestRenderDashboardTemplatesBodies(t *testing.T) {
 	state := NewStateManager().Get()
 	state.CurrentSong = "BTS - Dynamite"
-	state.Connections = []WAConnectionState{{Phone: "+40734788254", Status: StatusConnected, WhatsAppConnected: true}}
-	persons := []Person{{ID: 1, Name: "Main Sender", Slug: "main-sender"}}
-	personAudios := map[string]PersonAudioFiles{"main-sender": {Active: []string{"audio.ogg"}}}
+	state.Connections = []WAConnectionState{{Phone: "+40700000001", Status: StatusConnected, WhatsAppConnected: true}}
+	persons := []Person{{ID: 1, Name: "Test Sender", Slug: "test-sender"}}
+	personAudios := map[string]PersonAudioFiles{"test-sender": {Active: []string{"audio.ogg"}}}
 
 	cases := []struct {
 		name   string
@@ -81,7 +81,7 @@ func TestRenderDashboardTemplatesBodies(t *testing.T) {
 		{
 			name: "Dashboard",
 			render: func(buf *bytes.Buffer) error {
-				return Dashboard(state, nil, nil, []string{"+40734788254"}, []ScheduleEntry{{Date: "2026-06-23", TargetMatches: []int{1, 3}}}, []string{"BTS", "Ariana", "The Weeknd"}, map[string][]string{}, persons, personAudios).Render(context.Background(), buf)
+				return Dashboard(state, nil, nil, []string{"+40700000001"}, []ScheduleEntry{{Date: "2026-06-23", TargetMatches: []int{1, 3}}}, []string{"BTS", "Ariana", "The Weeknd"}, map[string][]string{}, persons, personAudios).Render(context.Background(), buf)
 			},
 			want: "Daily RNG Schedule",
 		},
@@ -263,9 +263,9 @@ func TestListScheduleEntriesAndDashboardPhones(t *testing.T) {
 	phones := dashboardUploadPhones([]WAConnectionState{
 		{Phone: "+40111222333"},
 		{Phone: "40111222333"},
-		{Phone: "+40734788254"},
+		{Phone: "+40700000001"},
 	})
-	if len(phones) != 2 || phones[0] != "+40111222333" || phones[1] != "+40734788254" {
+	if len(phones) != 2 || phones[0] != "+40111222333" || phones[1] != "+40700000001" {
 		t.Fatalf("dashboardUploadPhones() = %+v", phones)
 	}
 }

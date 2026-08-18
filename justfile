@@ -143,17 +143,17 @@ fly-list-files:
 fly-cat filepath:
     flyctl ssh console -C 'cat /data/{{ filepath }}'
 
-# Pull all files from Fly.io persistent volume to local data directory (excluding wapp.sqlite)
+# Pull all files from Fly.io persistent volume to the local data directory.
 fly-pull-files:
     @echo "Downloading files from Fly persistent volume to local 'data' directory..."
-    flyctl ssh console -C 'tar -cf - --exclude="wapp.sqlite" -C /data .' | tar -xf - -C data
+    flyctl ssh console -C 'tar -cf - -C /data .' | tar -xf - -C data
     @echo "✅ Files downloaded."
 
-# Pull the wapp.sqlite database file from Fly.io persistent volume
+# Pull the app database and every persisted sender session database.
 fly-pull-db:
-    @echo "Downloading wapp.sqlite from Fly persistent volume..."
-    flyctl ssh console -C 'tar -cf - -C /data wapp.sqlite' | tar -xf - -C data
-    @echo "✅ Database downloaded."
+    @echo "Downloading app and sender-session databases from Fly persistent volume..."
+    flyctl ssh console -C "sh -c 'cd /data && tar -cf - app.sqlite wapp_*.sqlite'" | tar -xf - -C data
+    @echo "✅ Databases downloaded."
 
 # Pull the entire contents of the Fly.io persistent volume to a versioned sub-directory in downloaded-from-fly/
 fly-pull-all:

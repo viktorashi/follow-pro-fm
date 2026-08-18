@@ -9,7 +9,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -20,31 +19,6 @@ import (
 )
 
 type whatsAppInitFunc func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error)
-
-func bootstrapSenderPhones(dbPath string) []string {
-	var phones []string
-	seen := make(map[string]struct{})
-
-	matches, _ := filepath.Glob(filepath.Join(filepath.Dir(dbPath), "wapp_*.sqlite"))
-	sort.Strings(matches)
-	for _, match := range matches {
-		name := filepath.Base(match)
-		phone := strings.TrimPrefix(name, "wapp_")
-		phone = strings.TrimSuffix(phone, ".sqlite")
-		if phone == "" || strings.HasPrefix(phone, "pairing_") {
-			continue
-		}
-
-		normalized := "+" + phone
-		if _, ok := seen[normalized]; ok {
-			continue
-		}
-		seen[normalized] = struct{}{}
-		phones = append(phones, normalized)
-	}
-
-	return phones
-}
 
 func newPendingSessionFilename() (string, error) {
 	b := make([]byte, 12)
@@ -119,14 +93,11 @@ func main() {
 	if targetPhone == "" {
 		targetPhone = "+40770661491"
 	}
-	dbPath := os.Getenv("WAPP_DB_PATH")
-	if dbPath == "" {
-		dbPath = "/data/wapp.sqlite"
-	}
 	appDBPath := os.Getenv("APP_DB_PATH")
 	if appDBPath == "" {
 		appDBPath = "/data/app.sqlite"
 	}
+	dataDir := filepath.Dir(appDBPath)
 	sendgridKey := os.Getenv("SENDGRID_API_KEY")
 	adminPass := os.Getenv("ADMIN_PASSWORD")
 	baseURL := os.Getenv("BASE_URL")
@@ -146,18 +117,15 @@ func main() {
 		audiosDir = "/data/audios"
 	}
 
-	// 2. Initialize Audio Pool
-	if err := poller.InitAudioPool(audiosDir); err != nil {
-		log.Fatalf("Failed to init audio pool: %v", err)
+	// 2. Initialize person audio storage
+	if err := os.MkdirAll(audiosDir, 0o755); err != nil {
+		log.Fatalf("Failed to init audio storage: %v", err)
 	}
 
 	// 3. Initialize SQLite DB for auth and app state
 	dbMgr, err := poller.NewDBManager(appDBPath)
 	if err != nil {
 		log.Fatalf("Failed to init DB Manager: %v", err)
-	}
-	if err := dbMgr.AutoMigratePersons(context.Background(), audiosDir); err != nil {
-		log.Printf("AutoMigratePersons warning: %v", err)
 	}
 	if err := poller.ReconcileAudioUsage(audiosDir, dbMgr); err != nil {
 		log.Fatalf("Failed to reconcile historical audio usage: %v", err)
@@ -285,7 +253,7 @@ func main() {
 	}
 
 	// 8. Start Web Dashboard (Telemetry Server)
-	telemetryServer := poller.NewTelemetryServer(authMgr, stateMgr, sseBroadcaster, logWriter, dbMgr, filepath.Dir(dbPath), audiosDir, activeCampaigns, transcribe)
+	telemetryServer := poller.NewTelemetryServer(authMgr, stateMgr, sseBroadcaster, logWriter, dbMgr, dataDir, audiosDir, activeCampaigns, transcribe)
 	go func() {
 		fmt.Println("🚀 Telemetry UI available at", baseURL)
 		if err := telemetryServer.Start("0.0.0.0:" + port); err != nil {
@@ -318,7 +286,7 @@ func main() {
 
 		if dbForPhone == "" {
 			normalized := poller.NormalizePhone(p)
-			dbForPhone = filepath.Join(filepath.Dir(dbPath), "wapp_"+normalized+".sqlite")
+			dbForPhone = filepath.Join(dataDir, "wapp_"+normalized+".sqlite")
 		}
 
 		c, err := initSenderPhone(p, dbForPhone, stateMgr, alerter, baseURL, personID, personName, personSlug, func(phone string, dbPath string, stateMgr *poller.StateManager, alerter poller.Alerter, baseURL string) (poller.WhatsAppClient, error) {
@@ -347,7 +315,7 @@ func main() {
 			return err
 		}
 		pendingPhone := "New phone (scan QR)"
-		dbForPairing := filepath.Join(filepath.Dir(dbPath), filename)
+		dbForPairing := filepath.Join(dataDir, filename)
 
 		var personName, personSlug string
 		if personID != nil && dbMgr != nil {
@@ -442,16 +410,11 @@ func main() {
 		return nil
 	})
 
-	for _, phone := range bootstrapSenderPhones(dbPath) {
-		if err := addSenderPhone(phone, "", nil, "", ""); err != nil {
-			log.Printf("Error adding phone %s: %v", phone, err)
-		}
-	}
 	if sessions, err := dbMgr.SenderSessions(context.Background()); err != nil {
 		log.Printf("Error loading paired sender sessions: %v", err)
 	} else {
 		for _, session := range sessions {
-			if err := addSenderPhone(session.Phone, filepath.Join(filepath.Dir(dbPath), session.DBFilename), session.PersonID, session.PersonName, session.PersonSlug); err != nil {
+			if err := addSenderPhone(session.Phone, filepath.Join(dataDir, session.DBFilename), session.PersonID, session.PersonName, session.PersonSlug); err != nil {
 				log.Printf("Error restoring phone %s: %v", session.Phone, err)
 			}
 		}
