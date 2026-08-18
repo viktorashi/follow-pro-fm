@@ -12,7 +12,7 @@ import (
 	"github.com/coder/websocket"
 )
 
-const transcriptionSessionBytes = 15 * 16000 * 2
+const transcriptionSessionBytes = 10 * 16000 * 2
 
 // StartStreamingTranscription connects any MP3 chunk source to the production
 // ffmpeg and Whisper WebSocket pipeline.
