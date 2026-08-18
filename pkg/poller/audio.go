@@ -292,7 +292,7 @@ func MoveAudioFiles(sourceDir, targetDir string, filenames []string) error {
 		srcActive := filepath.Join(sourceDir, filename)
 		if _, err := os.Stat(srcActive); err == nil {
 			dstActive := filepath.Join(targetDir, filename)
-			if err := os.Rename(srcActive, dstActive); err != nil {
+			if err := moveAudioFile(srcActive, dstActive); err != nil {
 				return fmt.Errorf("failed to move active file %s: %w", filename, err)
 			}
 			continue
@@ -301,13 +301,22 @@ func MoveAudioFiles(sourceDir, targetDir string, filenames []string) error {
 		srcUsed := filepath.Join(sourceDir, "used", filename)
 		if _, err := os.Stat(srcUsed); err == nil {
 			dstUsed := filepath.Join(targetDir, "used", filename)
-			if err := os.Rename(srcUsed, dstUsed); err != nil {
+			if err := moveAudioFile(srcUsed, dstUsed); err != nil {
 				return fmt.Errorf("failed to move used file %s: %w", filename, err)
 			}
 			continue
 		}
 	}
 	return nil
+}
+
+func moveAudioFile(source, destination string) error {
+	if _, err := os.Stat(destination); err == nil {
+		return fmt.Errorf("destination already exists: %s", destination)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	return os.Rename(source, destination)
 }
 
 func ListAudioFilesForPerson(personSlug string, rootDir string) ([]string, []string, error) {

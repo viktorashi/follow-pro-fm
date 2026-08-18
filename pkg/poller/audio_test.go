@@ -93,3 +93,51 @@ func TestGetRandomAvailableAudioSkipsGloballyUsedContentHashes(t *testing.T) {
 		t.Fatalf("Expected audio pool to be exhausted when only globally used content remains")
 	}
 }
+
+func TestMoveAudioFilesRejectsDestinationCollisions(t *testing.T) {
+	for _, used := range []bool{false, true} {
+		name := "active"
+		if used {
+			name = "used"
+		}
+		t.Run(name, func(t *testing.T) {
+			sourceDir := filepath.Join(t.TempDir(), "source")
+			targetDir := filepath.Join(t.TempDir(), "target")
+			if err := InitAudioPool(sourceDir); err != nil {
+				t.Fatal(err)
+			}
+			if err := InitAudioPool(targetDir); err != nil {
+				t.Fatal(err)
+			}
+			if used {
+				sourceDir = filepath.Join(sourceDir, "used")
+				targetDir = filepath.Join(targetDir, "used")
+			}
+			filename := "voice.ogg"
+			sourcePath := filepath.Join(sourceDir, filename)
+			targetPath := filepath.Join(targetDir, filename)
+			if err := os.WriteFile(sourcePath, []byte("source"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(targetPath, []byte("target"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			moveSource := sourceDir
+			moveTarget := targetDir
+			if used {
+				moveSource = filepath.Dir(sourceDir)
+				moveTarget = filepath.Dir(targetDir)
+			}
+			if err := MoveAudioFiles(moveSource, moveTarget, []string{filename}); err == nil {
+				t.Fatal("MoveAudioFiles() overwrote an existing destination")
+			}
+			if got, _ := os.ReadFile(sourcePath); string(got) != "source" {
+				t.Fatalf("source changed after collision: %q", got)
+			}
+			if got, _ := os.ReadFile(targetPath); string(got) != "target" {
+				t.Fatalf("destination was overwritten: %q", got)
+			}
+		})
+	}
+}
