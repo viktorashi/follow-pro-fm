@@ -51,25 +51,31 @@ func transcriptionWebSocketURL(rawURL string) string {
 // WebSocketTranscriber keeps at most one unacknowledged audio buffer plus the
 // bounded input channel, and resends that buffer after a reconnect.
 type WebSocketTranscriber struct {
-	url          string
-	audio        chan []byte
-	onTranscript func(string)
-	retryDelay   time.Duration
+	url            string
+	audio          chan []byte
+	done           chan struct{}
+	onTranscript   func(string)
+	retryDelay     time.Duration
+	requestTimeout time.Duration
 }
 
 func NewWebSocketTranscriber(url string, onTranscript func(string)) *WebSocketTranscriber {
 	return &WebSocketTranscriber{
-		url:          url,
-		audio:        make(chan []byte, 64),
-		onTranscript: onTranscript,
-		retryDelay:   2 * time.Second,
+		url:            url,
+		audio:          make(chan []byte, 64),
+		done:           make(chan struct{}),
+		onTranscript:   onTranscript,
+		retryDelay:     2 * time.Second,
+		requestTimeout: 30 * time.Second,
 	}
 }
 
-func (t *WebSocketTranscriber) Audio() chan<- []byte { return t.audio }
+func (t *WebSocketTranscriber) Audio() chan<- []byte  { return t.audio }
+func (t *WebSocketTranscriber) Done() <-chan struct{} { return t.done }
 
 func (t *WebSocketTranscriber) Start(ctx context.Context) {
 	go func() {
+		defer close(t.done)
 		var buffered, pending []byte
 		audioClosed := false
 		for ctx.Err() == nil {
@@ -94,7 +100,10 @@ func (t *WebSocketTranscriber) Start(ctx context.Context) {
 				buffered = buffered[n:]
 			}
 
-			if err := t.transcribe(ctx, pending); err == nil {
+			requestCtx, cancel := context.WithTimeout(ctx, t.requestTimeout)
+			err := t.transcribe(requestCtx, pending)
+			cancel()
+			if err == nil {
 				pending = nil
 				continue
 			} else if ctx.Err() == nil {

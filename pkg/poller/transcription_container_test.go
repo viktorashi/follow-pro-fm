@@ -5,6 +5,7 @@ package poller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -135,7 +136,7 @@ func TestWhisperContainerTranscription(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
 
 			liveTranscript, err := runProductionWebSocketCheck(ctx, transcriptionURL, tc, filepath.Join(t.TempDir(), "phrases.sqlite"))
@@ -193,11 +194,11 @@ func runProductionWebSocketCheck(ctx context.Context, transcriptionURL string, t
 		StateMgr:            createMockStateMgr(),
 	}
 	var transcriptMu sync.Mutex
-	lastTranscript := ""
+	var transcripts []string
 	mp3 := make(chan []byte)
-	StartStreamingTranscription(ctx, mp3, transcriptionURL, func(transcript string) {
+	transcriber := StartStreamingTranscription(ctx, mp3, transcriptionURL, func(transcript string) {
 		transcriptMu.Lock()
-		lastTranscript = transcript
+		transcripts = append(transcripts, transcript)
 		transcriptMu.Unlock()
 		poller.HandleStreamingTranscript(transcript)
 	})
@@ -217,14 +218,22 @@ func runProductionWebSocketCheck(ctx context.Context, transcriptionURL string, t
 		}
 	}()
 
+	result := func() string {
+		transcriptMu.Lock()
+		defer transcriptMu.Unlock()
+		return strings.Join(transcripts, " | ")
+	}
 	select {
 	case <-alerter.triggered:
-		transcriptMu.Lock()
-		defer transcriptMu.Unlock()
-		return lastTranscript, nil
+		return result(), nil
+	case <-transcriber.Done():
+		select {
+		case <-alerter.triggered:
+			return result(), nil
+		default:
+			return result(), errors.New("audio finished before a trusted phrase matched")
+		}
 	case <-ctx.Done():
-		transcriptMu.Lock()
-		defer transcriptMu.Unlock()
-		return lastTranscript, ctx.Err()
+		return result(), ctx.Err()
 	}
 }
