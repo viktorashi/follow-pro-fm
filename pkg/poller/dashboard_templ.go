@@ -374,7 +374,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templ.RenderScriptItems(ctx, templ_7745c5c3_Buffer, templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', this.value)", conn.Phone)})
+							templ_7745c5c3_Err = templ.RenderScriptItems(ctx, templ_7745c5c3_Buffer, templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', event.target.value)", conn.Phone)})
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -382,7 +382,7 @@ func Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewChu
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							var templ_7745c5c3_Var16 templ.ComponentScript = templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', this.value)", conn.Phone)}
+							var templ_7745c5c3_Var16 templ.ComponentScript = templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', event.target.value)", conn.Phone)}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var16.Call)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
@@ -2319,7 +2319,7 @@ func QRComponent(state AppState) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templ.RenderScriptItems(ctx, templ_7745c5c3_Buffer, templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', this.value)", conn.Phone)})
+			templ_7745c5c3_Err = templ.RenderScriptItems(ctx, templ_7745c5c3_Buffer, templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', event.target.value)", conn.Phone)})
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2327,7 +2327,7 @@ func QRComponent(state AppState) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var118 templ.ComponentScript = templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', this.value)", conn.Phone)}
+			var templ_7745c5c3_Var118 templ.ComponentScript = templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', event.target.value)", conn.Phone)}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var118.Call)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
