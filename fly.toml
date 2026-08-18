@@ -8,6 +8,10 @@ primary_region = 'fra'  # Frankfurt (FRA) - closest available to Romania
 
 [env]
 TZ = 'Europe/Bucharest'
+ENVIRONMENT = 'production'
+TELEGRAM_CHAT_ID = 5943195496
+EMAIL_FROM = 'ioanvictorstan@gmail.com'
+TARGET_PHONE = '+40771001872'
 
 # Persistent volume for everything the app needs
 [mounts]
