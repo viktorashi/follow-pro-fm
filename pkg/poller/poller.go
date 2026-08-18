@@ -23,12 +23,13 @@ import (
 )
 
 const (
-	MaxDailyMatches        = 6
-	followProFMKeyword     = "follow profm"
-	dashcamAfterDuration   = 2 * time.Minute
-	fingerprintTailBytes   = 768 * 1024
-	contestCaptureWindow   = 2 * time.Second
-	transcriptionTailBytes = 5 * 16000 // 5s of the 128kbps MP3 stream.
+	MaxDailyMatches         = 6
+	followProFMKeyword      = "follow profm"
+	dashcamAfterDuration    = 2 * time.Minute
+	fingerprintTailBytes    = 768 * 1024
+	contestCaptureWindow    = 2 * time.Second
+	transcriptionTailBytes  = 5 * 16000 // 5s of the 128kbps MP3 stream.
+	transcriptionTextWindow = 15 * time.Second
 )
 
 var bucharestLocation = loadBucharestLocation()
@@ -1093,13 +1094,19 @@ func (c *transcriptionContestChecker) Check(now time.Time) {
 // coordinator and persistence safeguards as the batch fallback.
 func (p *Poller) HandleStreamingTranscript(transcript string) {
 	now := time.Now()
-	if p.TranscriptionBuffer != nil {
-		p.TranscriptionBuffer.Append(transcript, now)
-	}
 	p.handleTranscriptWithCoordinator(now, p.contestCheckCoordinator(), p.captureContestAudio(now, SongInfo{}), transcript)
 }
 
 func (p *Poller) handleTranscriptWithCoordinator(now time.Time, coordinator *ContestCheckCoordinator, capture *contestCapture, transcript string) {
+	if p.TranscriptionBuffer != nil {
+		p.TranscriptionBuffer.Append(transcript, now)
+		var recent []string
+		for _, item := range p.TranscriptionBuffer.GetWindow(now.Add(-transcriptionTextWindow), now) {
+			recent = append(recent, item.Value)
+		}
+		transcript = strings.Join(recent, " ")
+	}
+
 	campaignArtist, phrase, matched := p.matchingCampaignPhrase(now, transcript)
 	if !matched || !coordinator.CanCheck(now) || !coordinator.Claim(now, triggerSourceTranscription, phrase) {
 		return
@@ -1133,10 +1140,36 @@ func (p *Poller) matchingCampaignPhrase(now time.Time, transcript string) (strin
 			phrases = append(phrases, dbPhrases...)
 		}
 		for _, phrase := range phrases {
-			if normalized := normalizeTriggerValue(phrase); normalized != "" && strings.Contains(transcript, normalized) {
+			if transcriptionPhraseMatches(transcript, phrase) {
 				return campaign.Artist, phrase, true
 			}
 		}
 	}
 	return "", "", false
+}
+
+func transcriptionPhraseMatches(transcript, phrase string) bool {
+	phrase = normalizeTriggerValue(phrase)
+	if phrase == "" {
+		return false
+	}
+	if strings.Contains(transcript, phrase) {
+		return true
+	}
+
+	phraseWords := strings.Fields(phrase)
+	if len(phraseWords) < 4 {
+		return false
+	}
+	transcriptWords := map[string]struct{}{}
+	for _, word := range strings.Fields(transcript) {
+		transcriptWords[word] = struct{}{}
+	}
+	matches := 0
+	for _, word := range phraseWords {
+		if _, ok := transcriptWords[word]; ok {
+			matches++
+		}
+	}
+	return float64(matches)/float64(len(phraseWords)) >= 0.45
 }
