@@ -49,7 +49,7 @@ test-cover-e2e-all: build-ffmpeg generate
     go tool cover -html=coverage.out
 
 test-transcriptions:
-    go test -run TestWhisperContainerTranscription ./pkg/poller/...
+    go test -tags=e2e -run TestWhisperContainerTranscription ./pkg/poller/...
 
 # ---- Docker ----
 
