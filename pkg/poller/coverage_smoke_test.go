@@ -47,7 +47,7 @@ func TestRenderDashboardTemplates(t *testing.T) {
 		"StatusComponent": StatusComponent(state),
 		"SongComponent":   SongComponent(state.CurrentSong),
 		"AudioStats":      AudioStatsComponent(state),
-		"QRComponent":     QRComponent(state.Connections),
+		"QRComponent":     QRComponent(state),
 		"LogsPage":        LogsPage(),
 		"DataViewer":      DataViewer(files),
 		"RadioLogsPage":   RadioLogsPage(logs),

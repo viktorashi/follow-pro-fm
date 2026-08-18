@@ -225,7 +225,7 @@ func main() {
 			// Broadcast QR Code
 			if connsStr != lastConnsStr || state.Status != lastState.Status {
 				var qrBuf bytes.Buffer
-				_ = poller.QRComponent(state.Connections).Render(context.Background(), &qrBuf)
+				_ = poller.QRComponent(state).Render(context.Background(), &qrBuf)
 				sseBroadcaster.Broadcast("qrcode", qrBuf.Bytes())
 			}
 
@@ -254,6 +254,7 @@ func main() {
 
 	// 8. Start Web Dashboard (Telemetry Server)
 	telemetryServer := poller.NewTelemetryServer(authMgr, stateMgr, sseBroadcaster, logWriter, dbMgr, dataDir, audiosDir, activeCampaigns, transcribe)
+	telemetryServer.SetAlerter(alerter)
 	go func() {
 		fmt.Println("🚀 Telemetry UI available at", baseURL)
 		if err := telemetryServer.Start("0.0.0.0:" + port); err != nil {
@@ -419,6 +420,7 @@ func main() {
 			}
 		}
 	}
+	poller.AlertUnassignedSenderPhones(stateMgr.Get(), alerter)
 
 	if err := poller.InitRNGSchedule(dbMgr, activeCampaigns); err != nil {
 		log.Fatalf("Failed to initialize RNG schedule: %v", err)
