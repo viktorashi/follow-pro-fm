@@ -2,7 +2,7 @@
 # See https://fly.io/docs/reference/configuration/
 
 app = 'pro-fm-poller'
-primary_region = 'fra'  # Frankfurt (FRA) - closest available to Romania
+primary_region = 'fra' # Frankfurt (FRA) - closest available to Romania
 
 [build]
 
@@ -19,9 +19,9 @@ source = 'pro_fm_data'
 destination = '/data'
 
 [http_service]
-  internal_port = 8080
-  force_https = true
-  auto_stop_machines = false
-  auto_start_machines = true
-  max_machines_running = 1
-  min_machines_running = 1
+internal_port = 8080
+force_https = true
+auto_stop_machines = false
+auto_start_machines = true
+max_machines_running = 1
+min_machines_running = 1
