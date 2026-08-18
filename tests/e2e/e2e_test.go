@@ -37,6 +37,7 @@ const (
 type TestEnv struct {
 	TempDir               string
 	AudiosDir             string
+	AudioPoolDir          string
 	WappDBPath            string
 	AppDBPath             string
 	TrustedEmail          string
@@ -74,7 +75,8 @@ func setupTestEnv(t *testing.T) *TestEnv {
 	}
 
 	audiosDir := filepath.Join(tempDir, "audios")
-	err = os.MkdirAll(audiosDir, 0755)
+	audioPoolDir := filepath.Join(audiosDir, "main-sender")
+	err = os.MkdirAll(audioPoolDir, 0755)
 	if err != nil {
 		t.Fatalf("failed to create audios dir: %v", err)
 	}
@@ -83,7 +85,7 @@ func setupTestEnv(t *testing.T) *TestEnv {
 	if err != nil {
 		t.Fatalf("failed to read sample audio fixture: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(audiosDir, sampleAudioName), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(audioPoolDir, sampleAudioName), data, 0644); err != nil {
 		t.Fatalf("failed to seed sample audio fixture: %v", err)
 	}
 
@@ -98,13 +100,28 @@ func setupTestEnv(t *testing.T) *TestEnv {
 	env := &TestEnv{
 		TempDir:         tempDir,
 		AudiosDir:       audiosDir,
-		WappDBPath:      filepath.Join(tempDir, "wapp.sqlite"),
+		AudioPoolDir:    audioPoolDir,
+		WappDBPath:      filepath.Join(tempDir, "wapp_40770661491.sqlite"),
 		AppDBPath:       filepath.Join(tempDir, "app.sqlite"),
 		TrustedEmail:    "smoke@example.com",
 		MockSentMsgPath: filepath.Join(tempDir, "mock_sent_messages.json"),
 		Port:            port,
 		MockArtist:      "Unknown Artist",
 		MockTitle:       "Unknown Song",
+	}
+	if err := os.WriteFile(env.WappDBPath, nil, 0o644); err != nil {
+		t.Fatalf("failed to seed mock WhatsApp session: %v", err)
+	}
+	dbMgr, err := poller.NewDBManager(env.AppDBPath)
+	if err != nil {
+		t.Fatalf("failed to initialize app database: %v", err)
+	}
+	person, err := dbMgr.CreatePerson(context.Background(), "Main Sender")
+	if err != nil {
+		t.Fatalf("failed to seed sender person: %v", err)
+	}
+	if err := dbMgr.SetSenderSessionWithPerson(context.Background(), "+40770661491", filepath.Base(env.WappDBPath), &person.ID); err != nil {
+		t.Fatalf("failed to seed sender session: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(filepath.Dir(env.AppDBPath), "trusted-emails.txt"), []byte(env.TrustedEmail+"\n"), 0644); err != nil {
 		t.Fatalf("failed to seed trusted emails file: %v", err)
@@ -206,6 +223,8 @@ func (e *TestEnv) startManagedApp(t *testing.T) *exec.Cmd {
 
 func (e *TestEnv) startApp(ctx context.Context) (*exec.Cmd, error) {
 	cmd := exec.Command(binPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("PORT=%s", e.Port),
 		fmt.Sprintf("PROFM_API_URL=%s/api/v1/radios/article/2918", e.MockServer.URL),
@@ -389,13 +408,13 @@ func TestE2E(t *testing.T) {
 			time.Sleep(3 * time.Second)
 
 			// Original audio file should no longer exist in the root of audios
-			origPath := filepath.Join(env.AudiosDir, sampleAudioName)
+			origPath := filepath.Join(env.AudioPoolDir, sampleAudioName)
 			if _, err := os.Stat(origPath); !os.IsNotExist(err) {
 				t.Errorf("original voice note still exists in root audios directory")
 			}
 
 			// Audio should be in the /used subdirectory
-			usedPath := filepath.Join(env.AudiosDir, "used", sampleAudioName)
+			usedPath := filepath.Join(env.AudioPoolDir, "used", sampleAudioName)
 			if _, err := os.Stat(usedPath); err != nil {
 				t.Errorf("voice note was not moved to the used directory: %v", err)
 			}
@@ -459,7 +478,7 @@ func TestE2E(t *testing.T) {
 			env.markPaired(t)
 
 			// Create a corrupted .ogg file
-			corruptPath := filepath.Join(env.AudiosDir, sampleAudioName)
+			corruptPath := filepath.Join(env.AudioPoolDir, sampleAudioName)
 			_ = os.WriteFile(corruptPath, []byte("THIS IS NOT A VALID OGG PACKET OR OPUS AUDIO STREAM"), 0644)
 
 			env.setMockSong("BTS", "Butter")
@@ -544,7 +563,7 @@ func TestE2E(t *testing.T) {
 			env.markPaired(t)
 
 			// Create a short 0.5s audio clip using ffmpeg from the template audio
-			shortPath := filepath.Join(env.AudiosDir, sampleAudioName)
+			shortPath := filepath.Join(env.AudioPoolDir, sampleAudioName)
 			_ = os.Remove(shortPath) // remove copied full audio
 
 			cmdCrop := exec.Command(bundledFFmpegPath(t), "-y", "-i", sampleAudioPath, "-t", "0.5", "-c", "copy", shortPath)
@@ -622,8 +641,19 @@ func TestE2E(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(env.TempDir, "wapp_40111222333.sqlite"), []byte("paired"), 0o644); err != nil {
 			t.Fatalf("failed to seed secondary sender session: %v", err)
 		}
-		if err := os.Remove(filepath.Join(env.AudiosDir, sampleAudioName)); err != nil {
+		if err := os.Remove(filepath.Join(env.AudioPoolDir, sampleAudioName)); err != nil {
 			t.Fatalf("failed to clear audio pool: %v", err)
+		}
+		dbMgr, err := poller.NewDBManager(env.AppDBPath)
+		if err != nil {
+			t.Fatalf("failed to open app database: %v", err)
+		}
+		person, err := dbMgr.CreatePerson(context.Background(), "Secondary Sender")
+		if err != nil {
+			t.Fatalf("failed to create secondary person: %v", err)
+		}
+		if err := dbMgr.SetSenderSessionWithPerson(context.Background(), "+40111222333", "wapp_40111222333.sqlite", &person.ID); err != nil {
+			t.Fatalf("failed to seed secondary sender session: %v", err)
 		}
 
 		_ = env.startManagedApp(t)
@@ -635,8 +665,8 @@ func TestE2E(t *testing.T) {
 		}
 		var uploadBody bytes.Buffer
 		uploadWriter := multipart.NewWriter(&uploadBody)
-		if err := uploadWriter.WriteField("phone", "+40111222333"); err != nil {
-			t.Fatalf("failed to add upload phone: %v", err)
+		if err := uploadWriter.WriteField("person_slug", person.Slug); err != nil {
+			t.Fatalf("failed to add upload person: %v", err)
 		}
 		part, err := uploadWriter.CreateFormFile("audio", "fresh-upload.ogg")
 		if err != nil {
@@ -677,8 +707,8 @@ func TestE2E(t *testing.T) {
 			t.Fatal("expected a sent message after uploading only secondary sender audio")
 		}
 
-		activePath := filepath.Join(env.AudiosDir, "40111222333", "fresh-upload.ogg")
-		usedPath := filepath.Join(env.AudiosDir, "40111222333", "used", "fresh-upload.ogg")
+		activePath := filepath.Join(env.AudiosDir, person.Slug, "fresh-upload.ogg")
+		usedPath := filepath.Join(env.AudiosDir, person.Slug, "used", "fresh-upload.ogg")
 		if _, err := os.Stat(activePath); !os.IsNotExist(err) {
 			t.Fatalf("secondary uploaded audio should leave the active pool after send: %v", err)
 		}
