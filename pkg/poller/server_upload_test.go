@@ -15,7 +15,7 @@ import (
 
 func TestHandleAudioUploadRejectsNonOGG(t *testing.T) {
 	audiosDir := t.TempDir()
-	server := &TelemetryServer{audiosDir: audiosDir}
+	server := newAudioTestServer(t, audiosDir, "Victor Stan")
 
 	ctx, rec := newAudioUploadContext(t, "victor-stan", "note.mp3", []byte("fake-mp3"))
 
@@ -33,7 +33,7 @@ func TestHandleAudioUploadRejectsNonOGG(t *testing.T) {
 
 func TestHandleAudioUploadStoresInPersonPool(t *testing.T) {
 	audiosDir := t.TempDir()
-	server := &TelemetryServer{audiosDir: audiosDir}
+	server := newAudioTestServer(t, audiosDir, "Victor Stan")
 	slug := "victor-stan"
 
 	ctx, rec := newAudioUploadContext(t, slug, "fresh.ogg", []byte("ogg-data"))
@@ -72,7 +72,7 @@ func TestHandleAudioUploadRejectsUsedNameCollisions(t *testing.T) {
 		t.Fatalf("seed used file: %v", err)
 	}
 
-	server := &TelemetryServer{audiosDir: audiosDir}
+	server := newAudioTestServer(t, audiosDir, "Victor Stan")
 	ctx, rec := newAudioUploadContext(t, slug, "taken.ogg", []byte("new"))
 
 	if err := server.handleAudioUpload(ctx); err != nil {
@@ -86,10 +86,7 @@ func TestHandleAudioUploadRejectsUsedNameCollisions(t *testing.T) {
 
 func TestHandleAudioUploadWithPersonSlug(t *testing.T) {
 	audiosDir := t.TempDir()
-	server := &TelemetryServer{
-		audiosDir: audiosDir,
-		stateMgr:  NewStateManager(),
-	}
+	server := newAudioTestServer(t, audiosDir, "Bubu")
 
 	ctx, rec := newAudioUploadContext(t, "bubu", "fresh.ogg", []byte("ogg-data"))
 
@@ -115,10 +112,7 @@ func TestHandleBatchMoveAudios(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(fromDir, "note1.ogg"), []byte("n1"), 0644)
 	_ = os.WriteFile(filepath.Join(fromDir, "note2.ogg"), []byte("n2"), 0644)
 
-	server := &TelemetryServer{
-		audiosDir: audiosDir,
-		stateMgr:  NewStateManager(),
-	}
+	server := newAudioTestServer(t, audiosDir, "Person A", "Person B")
 
 	body := `{"from_slug":"person-a","to_slug":"person-b","files":["note1.ogg","note2.ogg"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/audios/batch-move", strings.NewReader(body))
@@ -148,10 +142,7 @@ func TestHandleAudioPlay(t *testing.T) {
 	_ = os.MkdirAll(personDir, 0755)
 	_ = os.WriteFile(filepath.Join(personDir, "sample.ogg"), []byte("sample-data"), 0644)
 
-	server := &TelemetryServer{
-		audiosDir: audiosDir,
-		stateMgr:  NewStateManager(),
-	}
+	server := newAudioTestServer(t, audiosDir, "Bubu")
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/api/audio/play?slug=bubu&file=sample.ogg", nil)
@@ -167,6 +158,34 @@ func TestHandleAudioPlay(t *testing.T) {
 	if rec.Header().Get("Content-Type") != "audio/ogg" {
 		t.Fatalf("content-type = %s, want audio/ogg", rec.Header().Get("Content-Type"))
 	}
+}
+
+func TestPersonAudioDirRejectsTraversalAndUnknownSlugs(t *testing.T) {
+	audiosDir := t.TempDir()
+	server := newAudioTestServer(t, audiosDir, "Victor Stan")
+
+	if got, err := server.personAudioDir(t.Context(), "victor-stan"); err != nil || got != filepath.Join(audiosDir, "victor-stan") {
+		t.Fatalf("personAudioDir(valid) = %q, %v", got, err)
+	}
+	for _, slug := range []string{"../../tmp", "missing-person"} {
+		if _, err := server.personAudioDir(t.Context(), slug); err == nil {
+			t.Fatalf("personAudioDir(%q) accepted an unsafe or unknown slug", slug)
+		}
+	}
+}
+
+func newAudioTestServer(t *testing.T, audiosDir string, names ...string) *TelemetryServer {
+	t.Helper()
+	dbMgr, err := NewDBManager(":memory:")
+	if err != nil {
+		t.Fatalf("NewDBManager() error = %v", err)
+	}
+	for _, name := range names {
+		if _, err := dbMgr.CreatePerson(t.Context(), name); err != nil {
+			t.Fatalf("CreatePerson(%q) error = %v", name, err)
+		}
+	}
+	return &TelemetryServer{audiosDir: audiosDir, dbMgr: dbMgr, stateMgr: NewStateManager()}
 }
 
 func newAudioUploadContext(t *testing.T, personSlug string, filename string, contents []byte) (*echo.Context, *httptest.ResponseRecorder) {
