@@ -139,6 +139,7 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.POST("/api/signatures/transcribe", s.handleTranscribeSignature)
 	protected.POST("/unreviewed/crop", s.handleUnreviewedCrop)
 	protected.POST("/unreviewed/delete", s.handleUnreviewedDelete)
+	protected.POST("/api/unreviewed/batch-delete", s.handleBatchDeleteUnreviewed)
 	protected.POST("/api/unreviewed/remux-all", s.handleRemuxAllUnreviewed)
 }
 
@@ -1247,6 +1248,37 @@ func (s *TelemetryServer) handleUnreviewedDelete(c *echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
+}
+
+func (s *TelemetryServer) handleBatchDeleteUnreviewed(c *echo.Context) error {
+	var req struct {
+		Files []string `json:"files"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+	}
+	if len(req.Files) == 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "At least one file must be selected"})
+	}
+
+	unreviewedDir := filepath.Join(s.dataDir, DirSignatures, BucketUnreviewed)
+	deletedCount := 0
+
+	for _, filename := range req.Files {
+		filename = strings.TrimSpace(filename)
+		if !isSafeFilename(filename) {
+			continue
+		}
+		targetPath := filepath.Join(unreviewedDir, filename)
+		if err := os.Remove(targetPath); err == nil {
+			deletedCount++
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"status":  "ok",
+		"deleted": deletedCount,
+	})
 }
 
 func (s *TelemetryServer) listChunks(bucket string) ([]ReviewChunk, error) {
