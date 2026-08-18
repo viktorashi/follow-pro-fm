@@ -108,7 +108,7 @@ func TestPoller_E2E(t *testing.T) {
 	server := NewCampaignHitServer(t)
 	defer server.Close()
 
-	var sentCount int
+	var attemptedCount, sentCount int
 	poller := &Poller{
 		APIURL:       server.URL,
 		PollInterval: 1 * time.Millisecond,
@@ -126,8 +126,12 @@ func TestPoller_E2E(t *testing.T) {
 				t.Fatalf("Sender phone %s not found in initialized clients", senderPhone)
 			}
 			t.Logf("🚀 Triggering real E2E voice note send from %s to %s...", senderPhone, targetPhone)
+			attemptedCount++
+			if err := SendVoiceNote(client, targetPhone, audioPath); err != nil {
+				return err
+			}
 			sentCount++
-			return SendVoiceNote(client, targetPhone, audioPath)
+			return nil
 		},
 	}
 
@@ -138,6 +142,9 @@ func TestPoller_E2E(t *testing.T) {
 
 	if poller.matchesToday != 1 {
 		t.Fatalf("Expected 1 match to trigger message, got %d", poller.matchesToday)
+	}
+	if attemptedCount != len(wappClients) || sentCount != attemptedCount {
+		t.Fatalf("voice note sends: %d successful / %d attempted across %d connected clients", sentCount, attemptedCount, len(wappClients))
 	}
 
 	t.Logf("✅ E2E Test finished successfully. Sent %d voice notes across %d connected clients.", sentCount, len(wappClients))

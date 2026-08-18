@@ -851,6 +851,7 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist string, now ti
 		PersonSlug string
 	}
 	var jobs []SendJob
+	allocatedHashes := make(map[string]struct{})
 
 	// Group connected phones by PersonSlug
 	phoneGroups := make(map[string][]WAConnectionState)
@@ -863,17 +864,13 @@ func (p *Poller) doTriggerVoiceNote(triggerSource, campaignArtist string, now ti
 
 	for personSlug, conns := range phoneGroups {
 		dir := filepath.Join(p.AudiosDir, personSlug)
-		allocatedHashes := make(map[string]struct{})
 		for _, conn := range conns {
 			f, hash, err := GetRandomAvailableAudio(dir, func(contentHash string) (bool, error) {
-				if _, ok := allocatedHashes[contentHash]; ok {
-					return true, nil
-				}
 				if p.DBMgr == nil {
 					return false, nil
 				}
 				return p.DBMgr.IsAudioHashUsed(context.Background(), contentHash)
-			})
+			}, allocatedHashes)
 			if err == nil {
 				allocatedHashes[hash] = struct{}{}
 				jobs = append(jobs, SendJob{Phone: conn.Phone, AudioFile: f, AudioHash: hash, PersonSlug: personSlug})
