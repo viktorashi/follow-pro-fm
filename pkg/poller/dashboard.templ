@@ -1009,7 +1009,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 																<span class="w-2.5 h-2.5 rounded-full bg-danger inline-block shadow-sm shadow-danger/50" title="Disconnected / Error"></span>
 															}
 															<span class="font-mono font-medium text-white/90">{ conn.Phone }</span>
-															<select onchange={ templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', this.value)", conn.Phone)} } class="bg-black/50 text-white rounded-lg px-2.5 py-1 text-xs border border-white/20 focus:outline-none focus:border-primary cursor-pointer">
+															<select onchange={ templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', event.target.value)", conn.Phone)} } class="bg-black/50 text-white rounded-lg px-2.5 py-1 text-xs border border-white/20 focus:outline-none focus:border-primary cursor-pointer">
 																<option value={ fmt.Sprintf("%d", p.ID) } selected>{ p.Name }</option>
 																for _, other := range persons {
 																	if other.ID != p.ID {
@@ -1599,7 +1599,7 @@ templ QRComponent(state AppState) {
 			</div>
 			<div class="mb-4">
 				<label class="text-xs text-muted mb-1">Assigned Person</label>
-				<select onchange={ templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', this.value)", conn.Phone)} } class="input">
+				<select onchange={ templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', event.target.value)", conn.Phone)} } class="input">
 					<option value="0" selected={ conn.PersonID == nil || *conn.PersonID == 0 }>⚠ Unassigned — cannot send</option>
 					for _, person := range state.Persons {
 						<option value={ fmt.Sprintf("%d", person.ID) } selected={ conn.PersonID != nil && *conn.PersonID == person.ID }>{ person.Name } ({ person.Slug })</option>
