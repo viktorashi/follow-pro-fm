@@ -919,8 +919,9 @@ func (s *TelemetryServer) personAudioDir(ctx context.Context, slug string) (stri
 }
 
 // HydrateConnectionPersons loads persons and sender_sessions from the DB
-// and enriches the in-memory connection state with PersonID/PersonName/PersonSlug.
-func HydrateConnectionPersons(dbMgr *DBManager, stateMgr *StateManager, ctx context.Context) {
+// and enriches the in-memory connection state with PersonID/PersonName/PersonSlug
+// as well as the audio stats (unused/used) for the assigned person.
+func HydrateConnectionPersons(dbMgr *DBManager, stateMgr *StateManager, audiosDir string, ctx context.Context) {
 	persons, err := dbMgr.ListPersons(ctx)
 	if err != nil {
 		return
@@ -934,6 +935,8 @@ func HydrateConnectionPersons(dbMgr *DBManager, stateMgr *StateManager, ctx cont
 		sessionMap[sess.Phone] = sess
 	}
 
+	personStats := GetAudioStatsPerPerson(persons, audiosDir)
+
 	stateMgr.Update(func(st *AppState) {
 		st.Persons = persons
 		for i, conn := range st.Connections {
@@ -941,6 +944,19 @@ func HydrateConnectionPersons(dbMgr *DBManager, stateMgr *StateManager, ctx cont
 				st.Connections[i].PersonID = sess.PersonID
 				st.Connections[i].PersonName = sess.PersonName
 				st.Connections[i].PersonSlug = sess.PersonSlug
+
+				if sess.PersonSlug != "" {
+					if stats, ok := personStats[sess.PersonSlug]; ok {
+						st.Connections[i].UnusedAudios = stats.Unused
+						st.Connections[i].UsedAudios = stats.Used
+					} else {
+						st.Connections[i].UnusedAudios = 0
+						st.Connections[i].UsedAudios = 0
+					}
+				} else {
+					st.Connections[i].UnusedAudios = 0
+					st.Connections[i].UsedAudios = 0
+				}
 			}
 		}
 	})
@@ -950,7 +966,7 @@ func (s *TelemetryServer) refreshStatePersons(ctx context.Context) {
 	if s.dbMgr == nil || s.stateMgr == nil {
 		return
 	}
-	HydrateConnectionPersons(s.dbMgr, s.stateMgr, ctx)
+	HydrateConnectionPersons(s.dbMgr, s.stateMgr, s.audiosDir, ctx)
 	AlertUnassignedSenderPhones(s.stateMgr.Get(), s.alerter)
 }
 
