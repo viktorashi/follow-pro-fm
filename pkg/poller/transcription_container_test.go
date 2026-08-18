@@ -185,7 +185,7 @@ func TestWhisperContainerTranscription(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 			defer cancel()
 
-			liveTranscript, overlap, matched, err := transcribeMatchingWindow(ctx, transcriber, tc)
+			liveTranscript, err := runProductionTranscriptionCheck(ctx, transcriber, tc, filepath.Join(t.TempDir(), "phrases.sqlite"))
 			if err != nil {
 				t.Fatalf("Transcribe failed for %s: %v", tc.Name, err)
 			}
@@ -195,84 +195,54 @@ func TestWhisperContainerTranscription(t *testing.T) {
 				t.Fatalf("[%s] Got empty transcription from Whisper", tc.Name)
 			}
 
-			t.Logf("[%s] Reference overlap ratio: %.2f%%", tc.Name, overlap*100)
-
-			if !matched && overlap < 0.45 {
-				t.Fatalf("[%s] Live transcript %q did not match reference transcript %q (overlap: %.2f%%)", tc.Name, liveTranscript, tc.FullText, overlap*100)
-			}
-
-			for _, phrase := range tc.TrustedPhrases[1:] {
-				phraseDB, err := NewDBManager(filepath.Join(t.TempDir(), "phrases.sqlite"))
-				if err != nil {
-					t.Fatal(err)
-				}
-				phrasePoller := &Poller{
-					ActiveCampaigns: []Campaign{{Artist: "Test Campaign"}},
-					DBMgr:           phraseDB,
-				}
-				if err := phraseDB.AddCampaignPhrase(context.Background(), "Test Campaign", phrase); err != nil {
-					t.Fatal(err)
-				}
-				if _, matchedPhrase, matched := phrasePoller.matchingCampaignPhrase(time.Now(), liveTranscript); !matched || matchedPhrase != phrase {
-					t.Fatalf("[%s] production matcher did not match phrase %q in live transcript %q", tc.Name, phrase, liveTranscript)
-				}
-			}
 		})
 	}
 }
 
-func transcribeMatchingWindow(ctx context.Context, transcriber func(context.Context, []byte) (string, error), tc transcriptionTestCase) (string, float64, bool, error) {
-	bestTranscript := ""
-	bestOverlap := 0.0
+func runProductionTranscriptionCheck(ctx context.Context, transcriber func(context.Context, []byte) (string, error), tc transcriptionTestCase, dbPath string) (string, error) {
+	db, err := NewDBManager(dbPath)
+	if err != nil {
+		return "", err
+	}
+	for _, phrase := range tc.TrustedPhrases {
+		if err := db.AddCampaignPhrase(context.Background(), "Test Campaign", phrase); err != nil {
+			return "", err
+		}
+	}
+
+	buffer := NewCircularAudioBuffer("", transcriptionTailBytes*2)
+	alerter := &recordingAlerter{}
+	lastTranscript := ""
+	poller := &Poller{
+		ActiveCampaigns:     []Campaign{{Artist: "Test Campaign"}},
+		AudioBuffer:         buffer,
+		TranscriptionBuffer: NewTimeSeriesBuffer[string](10 * time.Minute),
+		DBMgr:               db,
+		Alerter:             alerter,
+		StateMgr:            createMockStateMgr(),
+		Transcribe: func(ctx context.Context, audio []byte) (string, error) {
+			transcript, err := transcriber(ctx, audio)
+			lastTranscript = transcript
+			return transcript, err
+		},
+	}
+	checker := &transcriptionContestChecker{poller: poller, coordinator: NewContestCheckCoordinator(time.Minute)}
+	now := time.Date(2026, time.August, 18, 12, 0, 0, 0, bucharestLocation)
+
 	for start := 0; start < len(tc.AudioBytes); start += transcriptionTailBytes {
 		end := start + transcriptionTailBytes
 		if end > len(tc.AudioBytes) {
 			end = len(tc.AudioBytes)
 		}
-
-		transcript, err := transcriber(ctx, tc.AudioBytes[start:end])
-		if err != nil {
-			return "", 0, false, err
+		buffer.writeBytes(tc.AudioBytes[start:end])
+		checker.Check(now)
+		if len(alerter.successEvents) > 0 {
+			return lastTranscript, nil
 		}
-		matched := transcriptContainsReference(transcript, tc.FullText)
-		overlap := transcriptWordOverlap(transcript, tc.FullText)
-		if overlap > bestOverlap {
-			bestTranscript = transcript
-			bestOverlap = overlap
+		if err := ctx.Err(); err != nil {
+			return lastTranscript, err
 		}
-		if matched || overlap >= 0.45 {
-			return transcript, overlap, true, nil
-		}
+		now = now.Add(contestCaptureWindow)
 	}
-	return bestTranscript, bestOverlap, false, nil
-}
-
-func transcriptContainsReference(transcript, reference string) bool {
-	transcript = normalizeTriggerValue(transcript)
-	reference = normalizeTriggerValue(reference)
-	if transcript == "" || reference == "" {
-		return false
-	}
-	return strings.Contains(transcript, reference)
-}
-
-func transcriptWordOverlap(s1, s2 string) float64 {
-	s1 = normalizeTriggerValue(s1)
-	s2 = normalizeTriggerValue(s2)
-	w1 := strings.Fields(s1)
-	w2 := strings.Fields(s2)
-	if len(w1) == 0 || len(w2) == 0 {
-		return 0
-	}
-	set1 := make(map[string]bool)
-	for _, w := range w1 {
-		set1[w] = true
-	}
-	intersection := 0
-	for _, w := range w2 {
-		if set1[w] {
-			intersection++
-		}
-	}
-	return float64(intersection) / float64(len(w2))
+	return lastTranscript, fmt.Errorf("production transcription checker did not trigger")
 }

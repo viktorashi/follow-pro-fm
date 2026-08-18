@@ -691,6 +691,25 @@ func TestPoller_matchingCampaignPhraseRequiresAnActiveCampaignPhrase(t *testing.
 	}
 }
 
+func TestPoller_matchingCampaignPhraseAllowsWhisperWordDrift(t *testing.T) {
+	dbMgr, err := NewDBManager(":memory:")
+	if err != nil {
+		t.Fatalf("NewDBManager() error = %v", err)
+	}
+	phrase := "Urmează Ariana Grande pe ProFM! Ascultă melodia și poți câștiga super premii în direct."
+	_ = dbMgr.AddCampaignPhrase(context.Background(), "Ariana", phrase)
+
+	poller := &Poller{
+		ActiveCampaigns: []Campaign{{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana"}},
+		DBMgr:           dbMgr,
+	}
+	now := bucharestTime(2026, time.July, 21, 12, 0, 0)
+	artist, matchedPhrase, matched := poller.matchingCampaignPhrase(now, "Urmează ariana grandei pe profm, ascultă melodii ași poți că știga super premii indirect.")
+	if !matched || artist != "Ariana" || normalizeTriggerValue(matchedPhrase) != normalizeTriggerValue(phrase) {
+		t.Fatalf("matchingCampaignPhrase() = (%q, %q, %v), want fuzzy Ariana phrase match", artist, matchedPhrase, matched)
+	}
+}
+
 func TestPoller_matchingCampaignPhraseRefreshesAfterPhraseEdits(t *testing.T) {
 	dbMgr := mustNewTestDBManager(t)
 	ctx := context.Background()
@@ -714,6 +733,32 @@ func TestPoller_matchingCampaignPhraseRefreshesAfterPhraseEdits(t *testing.T) {
 	}
 	if _, phrase, matched := poller.matchingCampaignPhrase(now, "trimite mesaj acum"); !matched || phrase != "trimite mesaj" {
 		t.Fatalf("added phrase = (%q, %v), want trimite mesaj match", phrase, matched)
+	}
+}
+
+func TestPoller_transcriptionMatchesAcrossRecentTranscriptWindow(t *testing.T) {
+	t.Setenv("BYPASS_CAMPAIGN_TIME_CHECKS", "true")
+	dbMgr := mustNewTestDBManager(t)
+	if err := dbMgr.AddCampaignPhrase(context.Background(), "The Weeknd", "ascultă hitul către barcelona trimite acum un mesaj audio pe whatsapp"); err != nil {
+		t.Fatal(err)
+	}
+	alerter := &recordingAlerter{}
+	poller := &Poller{
+		ActiveCampaigns:     []Campaign{{Artist: "The Weeknd"}},
+		DBMgr:               dbMgr,
+		Alerter:             alerter,
+		TranscriptionBuffer: NewTimeSeriesBuffer[string](10 * time.Minute),
+	}
+	coordinator := NewContestCheckCoordinator(time.Minute)
+	now := time.Now()
+
+	poller.handleTranscriptWithCoordinator(now, coordinator, nil, "ascultă hitul către barcelona")
+	if len(alerter.successEvents) != 0 {
+		t.Fatal("partial transcript triggered before phrase was complete")
+	}
+	poller.handleTranscriptWithCoordinator(now.Add(5*time.Second), coordinator, nil, "trimite acum un mesaj audio pe whatsapp")
+	if len(alerter.successEvents) != 1 {
+		t.Fatalf("AlertSuccess() calls = %d, want 1", len(alerter.successEvents))
 	}
 }
 
