@@ -1543,17 +1543,24 @@ templ AudioStatsComponent(state AppState) {
 			</div>
 		</div>
 		<div class="grid grid-cols-2 gap-4">
-			for _, conn := range state.Connections {
+			for _, person := range state.Persons {
 				<div class="bg-white/5 p-3 rounded">
-					<div class="text-xs font-mono text-muted mb-2">{ conn.Phone }</div>
+					<div class="text-sm font-bold text-white mb-1">{ person.Name }</div>
+					<div class="text-xs font-mono text-muted mb-2">
+						if len(person.Phones) > 0 {
+							{ strings.Join(person.Phones, ", ") }
+						} else {
+							No phones assigned
+						}
+					</div>
 					<div class="flex justify-between">
 						<div>
 							<span class="text-xs text-muted uppercase">Unused:</span> 
-							<span class="text-success font-bold">{ fmt.Sprintf("%d", conn.UnusedAudios) }</span>
+							<span class="text-success font-bold">{ fmt.Sprintf("%d", person.UnusedAudios) }</span>
 						</div>
 						<div>
 							<span class="text-xs text-muted uppercase">Used:</span> 
-							<span class="text-warning font-bold">{ fmt.Sprintf("%d", conn.UsedAudios) }</span>
+							<span class="text-warning font-bold">{ fmt.Sprintf("%d", person.UsedAudios) }</span>
 						</div>
 					</div>
 				</div>
