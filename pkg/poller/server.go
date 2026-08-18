@@ -41,6 +41,7 @@ type TelemetryServer struct {
 	onDisconnectPhone    func(phone string) error
 	timeNow              func() time.Time
 	transcribe           func(context.Context, []byte) (string, error)
+	alerter              Alerter
 }
 
 type ScheduleEntry struct {
@@ -548,6 +549,10 @@ func (s *TelemetryServer) SetWhatsAppClients(clients []WhatsAppClient) {
 	s.wappClients = clients
 }
 
+func (s *TelemetryServer) SetAlerter(alerter Alerter) {
+	s.alerter = alerter
+}
+
 func (s *TelemetryServer) SetOnAddPhone(fn func() error) {
 	s.onAddPhone = fn
 }
@@ -943,6 +948,29 @@ func (s *TelemetryServer) refreshStatePersons(ctx context.Context) {
 		return
 	}
 	HydrateConnectionPersons(s.dbMgr, s.stateMgr, ctx)
+	AlertUnassignedSenderPhones(s.stateMgr.Get(), s.alerter)
+}
+
+func AlertUnassignedSenderPhones(state AppState, alerter Alerter) {
+	if alerter == nil {
+		return
+	}
+	phones := make([]string, 0, state.UnassignedPhonesCount)
+	for _, conn := range state.Connections {
+		if conn.PersonID == nil || *conn.PersonID == 0 || conn.PersonSlug == "" {
+			phones = append(phones, conn.Phone)
+		}
+	}
+	if len(phones) == 0 {
+		return
+	}
+	sort.Strings(phones)
+	_ = alerter.AlertCritical(AlertEvent{
+		Title:       "Unassigned WhatsApp Sender",
+		Message:     "Cannot send voice notes until these sender phones are assigned to a person: " + strings.Join(phones, ", "),
+		ActionLabel: "Assign Sender",
+		ActionURL:   "/",
+	})
 }
 
 func dashboardUploadPhones(conns []WAConnectionState) []string {
