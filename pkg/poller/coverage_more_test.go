@@ -73,7 +73,7 @@ func TestKillSwitchAndRadioLogAccessors(t *testing.T) {
 func TestHandleAddSenderPhone(t *testing.T) {
 	t.Run("missing callback", func(t *testing.T) {
 		server := &TelemetryServer{}
-		ctx, rec := newFormContext(http.MethodPost, "/api/sender/add", url.Values{})
+		ctx, rec := newFormContext(http.MethodPost, "/api/sender/add", url.Values{"person_id": {"1"}})
 		if err := server.handleAddSenderPhone(ctx); err != nil {
 			t.Fatalf("handleAddSenderPhone() error = %v", err)
 		}
@@ -85,12 +85,15 @@ func TestHandleAddSenderPhone(t *testing.T) {
 	t.Run("starts QR pairing", func(t *testing.T) {
 		calls := 0
 		server := &TelemetryServer{}
-		server.SetOnAddPhone(func() error {
+		server.SetOnAddPhoneWithPerson(func(personID *int64) error {
 			calls++
+			if personID == nil || *personID != 1 {
+				t.Fatalf("personID = %v, want 1", personID)
+			}
 			return nil
 		})
 
-		ctx, rec := newFormContext(http.MethodPost, "/api/sender/add", url.Values{})
+		ctx, rec := newFormContext(http.MethodPost, "/api/sender/add", url.Values{"person_id": {"1"}})
 		if err := server.handleAddSenderPhone(ctx); err != nil {
 			t.Fatalf("handleAddSenderPhone() error = %v", err)
 		}
@@ -99,6 +102,44 @@ func TestHandleAddSenderPhone(t *testing.T) {
 		}
 		if calls != 1 {
 			t.Fatalf("pairing callback calls = %d, want 1", calls)
+		}
+	})
+
+	t.Run("rejects pairing without person", func(t *testing.T) {
+		calls := 0
+		server := &TelemetryServer{}
+		server.SetOnAddPhoneWithPerson(func(*int64) error {
+			calls++
+			return nil
+		})
+
+		ctx, rec := newFormContext(http.MethodPost, "/api/sender/add", url.Values{})
+		if err := server.handleAddSenderPhone(ctx); err != nil {
+			t.Fatalf("handleAddSenderPhone() error = %v", err)
+		}
+		if rec.Code != http.StatusBadRequest || calls != 0 {
+			t.Fatalf("status = %d, callback calls = %d; want 400 and 0", rec.Code, calls)
+		}
+	})
+
+	t.Run("rejects nonexistent person", func(t *testing.T) {
+		dbMgr, err := NewDBManager(":memory:")
+		if err != nil {
+			t.Fatalf("NewDBManager() error = %v", err)
+		}
+		calls := 0
+		server := &TelemetryServer{dbMgr: dbMgr}
+		server.SetOnAddPhoneWithPerson(func(*int64) error {
+			calls++
+			return nil
+		})
+
+		ctx, rec := newFormContext(http.MethodPost, "/api/sender/add", url.Values{"person_id": {"999"}})
+		if err := server.handleAddSenderPhone(ctx); err != nil {
+			t.Fatalf("handleAddSenderPhone() error = %v", err)
+		}
+		if rec.Code != http.StatusBadRequest || calls != 0 {
+			t.Fatalf("status = %d, callback calls = %d; want 400 and 0", rec.Code, calls)
 		}
 	})
 }

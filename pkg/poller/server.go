@@ -366,7 +366,7 @@ func (s *TelemetryServer) streamEvents(c *echo.Context, isLogs bool) error {
 		_, _ = c.Response().Write((&SSEEvent{Event: "audio", Data: audioBuf.Bytes()}).Marshal())
 
 		var qrBuf bytes.Buffer
-		_ = QRComponent(state.Connections).Render(c.Request().Context(), &qrBuf)
+		_ = QRComponent(state).Render(c.Request().Context(), &qrBuf)
 		_, _ = c.Response().Write((&SSEEvent{Event: "qrcode", Data: qrBuf.Bytes()}).Marshal())
 
 		if f, ok := c.Response().(http.Flusher); ok {
@@ -561,14 +561,19 @@ func (s *TelemetryServer) SetOnDisconnectPhone(fn func(phone string) error) {
 }
 
 func (s *TelemetryServer) handleAddSenderPhone(c *echo.Context) error {
-	var personID *int64
 	pIDStr := strings.TrimSpace(c.FormValue("person_id"))
 	if pIDStr == "" {
 		pIDStr = strings.TrimSpace(c.QueryParam("person_id"))
 	}
-	if pIDStr != "" {
-		if id, err := strconv.ParseInt(pIDStr, 10, 64); err == nil && id > 0 {
-			personID = &id
+	id, err := strconv.ParseInt(pIDStr, 10, 64)
+	if err != nil || id <= 0 {
+		return c.String(http.StatusBadRequest, "A valid Person is required before pairing")
+	}
+	personID := &id
+	if s.dbMgr != nil {
+		person, err := s.dbMgr.GetPerson(c.Request().Context(), id)
+		if err != nil || person == nil {
+			return c.String(http.StatusBadRequest, "Selected Person does not exist")
 		}
 	}
 
@@ -603,7 +608,7 @@ func (s *TelemetryServer) handleDisconnectSenderPhone(c *echo.Context) error {
 
 	var qrBuf bytes.Buffer
 	state := s.stateMgr.Get()
-	_ = QRComponent(state.Connections).Render(c.Request().Context(), &qrBuf)
+	_ = QRComponent(state).Render(c.Request().Context(), &qrBuf)
 	return c.HTML(http.StatusOK, qrBuf.String())
 }
 

@@ -281,8 +281,18 @@ func (m *DBManager) DeletePerson(ctx context.Context, id int64) error {
 }
 
 func (m *DBManager) AssignPhoneToPerson(ctx context.Context, phone string, personID *int64) error {
-	_, err := m.db.ExecContext(ctx, "UPDATE sender_sessions SET person_id = ? WHERE phone = ?", personID, phone)
-	return err
+	result, err := m.db.ExecContext(ctx, "UPDATE sender_sessions SET person_id = ? WHERE phone = ?", personID, phone)
+	if err != nil {
+		return err
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if updated == 0 {
+		return fmt.Errorf("sender phone %s does not exist", phone)
+	}
+	return nil
 }
 
 func (m *DBManager) SetSenderSession(ctx context.Context, phone, dbFilename string) error {
