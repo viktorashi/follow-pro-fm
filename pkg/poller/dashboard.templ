@@ -281,6 +281,98 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 				});
 			}
 
+			let lastCheckedCanonical = null;
+
+			function handleCanonicalCheckboxClick(event, checkbox) {
+				const checkboxes = Array.from(document.querySelectorAll('.canonical-checkbox'));
+				if (event.shiftKey && lastCheckedCanonical && lastCheckedCanonical !== checkbox) {
+					const start = checkboxes.indexOf(checkbox);
+					const end = checkboxes.indexOf(lastCheckedCanonical);
+					const [low, high] = [Math.min(start, end), Math.max(start, end)];
+					checkboxes.slice(low, high + 1).forEach(cb => {
+						cb.checked = checkbox.checked;
+					});
+				}
+				lastCheckedCanonical = checkbox;
+				updateCanonicalSelectionUI();
+			}
+
+			function toggleSelectAllCanonical(checked) {
+				document.querySelectorAll('.canonical-checkbox').forEach(cb => {
+					cb.checked = checked;
+				});
+				updateCanonicalSelectionUI();
+			}
+
+			function updateCanonicalSelectionUI() {
+				const checkboxes = Array.from(document.querySelectorAll('.canonical-checkbox'));
+				const selected = checkboxes.filter(cb => cb.checked);
+				const count = selected.length;
+				
+				const countEl = document.getElementById('canonical-selected-count');
+				const btnCountEl = document.getElementById('canonical-batch-delete-count');
+				const batchBtn = document.getElementById('canonical-batch-delete-btn');
+				const selectAllCb = document.getElementById('select-all-canonical');
+
+				if (countEl) countEl.textContent = `${count} selected`;
+				if (btnCountEl) btnCountEl.textContent = count;
+				if (selectAllCb) {
+					selectAllCb.checked = checkboxes.length > 0 && count === checkboxes.length;
+					selectAllCb.indeterminate = count > 0 && count < checkboxes.length;
+				}
+				if (batchBtn) {
+					if (count > 0) {
+						batchBtn.disabled = false;
+						batchBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+					} else {
+						batchBtn.disabled = true;
+						batchBtn.classList.add('opacity-50', 'cursor-not-allowed');
+					}
+				}
+			}
+
+			function batchDeleteCanonical() {
+				const selectedFiles = [];
+				document.querySelectorAll('.canonical-checkbox:checked').forEach(cb => {
+					selectedFiles.push(cb.value);
+				});
+				if (selectedFiles.length === 0) {
+					alert('Please select at least one canonical signature to delete.');
+					return;
+				}
+				if (!confirm(`Are you sure you want to delete ${selectedFiles.length} canonical signature(s)?`)) return;
+
+				fetch('/api/canonical/batch-delete', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ files: selectedFiles })
+				}).then(async res => {
+					const payload = await res.json().catch(() => ({}));
+					if (!res.ok) throw new Error(payload.error || 'Batch delete failed');
+					window.location.reload();
+				}).catch(err => {
+					alert(err.message);
+				});
+			}
+
+			function deleteCanonical(filename) {
+				if (!confirm('Are you sure you want to delete this canonical signature?')) return;
+				const data = new FormData();
+				data.append('filename', filename);
+				fetch('/canonical/delete', {
+					method: 'POST',
+					body: data
+				}).then(async res => {
+					if (!res.ok) {
+						const payload = await res.json().catch(() => ({}));
+						throw new Error(payload.error || 'Delete failed');
+					}
+					window.location.reload();
+				}).catch(err => {
+					alert(err.message);
+				});
+			}
+
 			function deleteUnreviewed(filename) {
 				if (!confirm('Are you sure you want to delete this unreviewed signature?')) return;
 				const data = new FormData();
@@ -1207,16 +1299,34 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 							if len(canonicalChunks) == 0 {
 								<div class="text-sm text-muted">No canonical signatures exist yet.</div>
 							} else {
+								<div class="flex flex-wrap items-center justify-between gap-3 mb-4 p-3 rounded-xl bg-white/[0.03] border border-white/10">
+									<div class="flex items-center gap-3">
+										<label class="text-xs text-muted flex items-center gap-1.5 cursor-pointer select-none bg-black/40 px-2.5 py-1 rounded-lg border border-white/10 hover:border-white/20 transition-colors">
+											<input type="checkbox" id="select-all-canonical" onchange="toggleSelectAllCanonical(this.checked)" class="rounded border-white/20 text-primary focus:ring-0 cursor-pointer" />
+											<span class="font-medium text-white/90">Select All</span>
+										</label>
+										<span id="canonical-selected-count" class="text-xs text-muted font-mono">0 selected</span>
+									</div>
+									<div class="flex items-center gap-2">
+										<button type="button" id="canonical-batch-delete-btn" onclick="batchDeleteCanonical()" class="btn btn-danger btn-sm py-1 px-3 text-xs font-semibold flex items-center gap-1 opacity-50 cursor-not-allowed" disabled>
+											🗑️ Delete Selected (<span id="canonical-batch-delete-count">0</span>)
+										</button>
+									</div>
+								</div>
 								<div class="space-y-4">
 									for _, chunk := range canonicalChunks {
 										<div class="border border-white/10 rounded p-4 mb-3">
-											<div class="flex justify-between items-center gap-4 mb-3">
-												<div>
-													<div class="font-semibold break-all">{ chunk.Name }</div>
-													<div class="text-xs text-muted">{ fmt.Sprintf("%.2f MB", float64(chunk.Size)/(1024*1024)) } ({ fmt.Sprintf("%.0fs", chunk.DurationSeconds) }) · { chunk.ModTime.Format("2006-01-02 15:04:05") }</div>
+											<div class="flex justify-between items-start gap-4 mb-3">
+												<div class="flex items-start gap-3 min-w-0 flex-grow">
+													<input type="checkbox" class="canonical-checkbox rounded border-white/20 text-primary focus:ring-0 cursor-pointer mt-1 shrink-0" value={ chunk.Name } onclick="handleCanonicalCheckboxClick(event, this)" />
+													<div class="min-w-0 flex-grow">
+														<div class="font-semibold break-all">{ chunk.Name }</div>
+														<div class="text-xs text-muted">{ fmt.Sprintf("%.2f MB", float64(chunk.Size)/(1024*1024)) } ({ fmt.Sprintf("%.0fs", chunk.DurationSeconds) }) · { chunk.ModTime.Format("2006-01-02 15:04:05") }</div>
+													</div>
 												</div>
-												<div class="flex gap-2">
+												<div class="flex gap-2 shrink-0">
 													<a href={ templ.URL(chunk.PlayURL) } target="_blank" class="btn btn-secondary btn-sm">Listen</a>
+													<button type="button" class="btn btn-danger btn-sm" onclick={ templ.ComponentScript{Call: fmt.Sprintf("deleteCanonical('%s')", chunk.Name)} }>Delete</button>
 												</div>
 											</div>
 											if len(chunk.ParsedTranscripts) > 0 {

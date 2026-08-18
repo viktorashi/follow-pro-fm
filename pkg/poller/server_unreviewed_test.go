@@ -175,3 +175,116 @@ func TestTelemetryServer_HandleBatchDeleteUnreviewed(t *testing.T) {
 		t.Fatalf("chunk3.mp3 should still exist, got err: %v", err)
 	}
 }
+
+func TestTelemetryServer_HandleCanonicalDelete(t *testing.T) {
+	dataDir := t.TempDir()
+	dbMgr := mustNewTestDBManager(t)
+	canonicalDir := filepath.Join(dataDir, DirSignatures, BucketCanonical)
+	if err := os.MkdirAll(canonicalDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	filename := "The Weeknd - Take My Breath.mp3"
+	if err := os.WriteFile(filepath.Join(canonicalDir, filename), []byte("audio-bytes"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if err := dbMgr.UpsertSignatureFile(context.Background(), BucketCanonical, filename, time.Now(), "The Weeknd", "take my breath", ""); err != nil {
+		t.Fatalf("UpsertSignatureFile() error = %v", err)
+	}
+
+	server := &TelemetryServer{dataDir: dataDir, dbMgr: dbMgr}
+	e := echo.New()
+
+	// 1. Invalid filename
+	reqBad := httptest.NewRequest(http.MethodPost, "/canonical/delete", strings.NewReader("filename=../bad.mp3"))
+	reqBad.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	recBad := httptest.NewRecorder()
+	if err := server.handleCanonicalDelete(e.NewContext(reqBad, recBad)); err != nil {
+		t.Fatalf("handleCanonicalDelete(bad) error = %v", err)
+	}
+	if recBad.Code != http.StatusBadRequest {
+		t.Fatalf("bad status = %d, want %d", recBad.Code, http.StatusBadRequest)
+	}
+
+	// 2. Successful delete
+	req := httptest.NewRequest(http.MethodPost, "/canonical/delete", strings.NewReader("filename="+filename))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	if err := server.handleCanonicalDelete(e.NewContext(req, rec)); err != nil {
+		t.Fatalf("handleCanonicalDelete() error = %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	if _, err := os.Stat(filepath.Join(canonicalDir, filename)); !os.IsNotExist(err) {
+		t.Fatalf("file should be removed from disk")
+	}
+	if _, err := dbMgr.GetSignatureFile(context.Background(), BucketCanonical, filename); err == nil {
+		t.Fatalf("signature file should be removed from db")
+	}
+}
+
+func TestTelemetryServer_HandleBatchDeleteCanonical(t *testing.T) {
+	dataDir := t.TempDir()
+	dbMgr := mustNewTestDBManager(t)
+	canonicalDir := filepath.Join(dataDir, DirSignatures, BucketCanonical)
+	if err := os.MkdirAll(canonicalDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	files := []string{"sig1.mp3", "sig2.mp3", "sig3.mp3"}
+	for _, f := range files {
+		if err := os.WriteFile(filepath.Join(canonicalDir, f), []byte("dummy canonical"), 0o644); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", f, err)
+		}
+		_ = dbMgr.UpsertSignatureFile(context.Background(), BucketCanonical, f, time.Now(), "The Weeknd", "", "")
+	}
+
+	server := &TelemetryServer{dataDir: dataDir, dbMgr: dbMgr}
+	e := echo.New()
+
+	// 1. Empty files list -> 400
+	reqEmpty := httptest.NewRequest(http.MethodPost, "/api/canonical/batch-delete", strings.NewReader(`{"files":[]}`))
+	reqEmpty.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	recEmpty := httptest.NewRecorder()
+	if err := server.handleBatchDeleteCanonical(e.NewContext(reqEmpty, recEmpty)); err != nil {
+		t.Fatalf("handleBatchDeleteCanonical(empty) error = %v", err)
+	}
+	if recEmpty.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", recEmpty.Code, http.StatusBadRequest)
+	}
+
+	// 2. Batch delete sig1 and sig2
+	payload := `{"files":["sig1.mp3", "sig2.mp3", "../traversal.mp3"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/canonical/batch-delete", strings.NewReader(payload))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	if err := server.handleBatchDeleteCanonical(e.NewContext(req, rec)); err != nil {
+		t.Fatalf("handleBatchDeleteCanonical() error = %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var res struct {
+		Status  string `json:"status"`
+		Deleted int    `json:"deleted"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if res.Status != "ok" || res.Deleted != 2 {
+		t.Fatalf("res = %+v, want ok and deleted=2", res)
+	}
+
+	if _, err := os.Stat(filepath.Join(canonicalDir, "sig1.mp3")); !os.IsNotExist(err) {
+		t.Fatalf("sig1.mp3 should not exist")
+	}
+	if _, err := os.Stat(filepath.Join(canonicalDir, "sig2.mp3")); !os.IsNotExist(err) {
+		t.Fatalf("sig2.mp3 should not exist")
+	}
+	if _, err := os.Stat(filepath.Join(canonicalDir, "sig3.mp3")); err != nil {
+		t.Fatalf("sig3.mp3 should still exist")
+	}
+}
