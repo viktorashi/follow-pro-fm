@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestPersonCRUDAndSlugUniqueness(t *testing.T) {
+func TestPersonCRUDAndStableUniqueSlugs(t *testing.T) {
 	dbMgr, err := NewDBManager(":memory:")
 	if err != nil {
 		t.Fatalf("NewDBManager() error = %v", err)
@@ -49,8 +49,8 @@ func TestPersonCRUDAndSlugUniqueness(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPerson() error = %v", err)
 	}
-	if updated.Name != "Victor Alexandru" || updated.Slug != "victor-alexandru" {
-		t.Fatalf("updated = %+v, want Victor Alexandru", updated)
+	if updated.Name != "Victor Alexandru" || updated.Slug != "victor-stan" {
+		t.Fatalf("updated = %+v, want renamed person with original audio-pool slug", updated)
 	}
 
 	// Delete

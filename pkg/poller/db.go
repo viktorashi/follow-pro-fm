@@ -271,8 +271,7 @@ func (m *DBManager) UpdatePerson(ctx context.Context, id int64, name string) err
 	if name == "" {
 		return fmt.Errorf("person name cannot be empty")
 	}
-	slug := Slugify(name)
-	_, err := m.db.ExecContext(ctx, "UPDATE persons SET name = ?, slug = ? WHERE id = ?", name, slug, id)
+	_, err := m.db.ExecContext(ctx, "UPDATE persons SET name = ? WHERE id = ?", name, id)
 	return err
 }
 
