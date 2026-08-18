@@ -1151,7 +1151,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 				<!-- Right Column: QR Code & Logs -->
 				<div class="space-y-6">
 					<div id="qr-card" sse-swap="qrcode">
-						@QRComponent(state.Connections)
+						@QRComponent(state)
 					</div>
 
 					<div class="glass p-6">
@@ -1349,14 +1349,14 @@ templ AudioStatsComponent(state AppState) {
 	</div>
 }
 
-templ QRComponent(conns []WAConnectionState) {
-	if len(conns) == 0 {
+templ QRComponent(state AppState) {
+	if len(state.Connections) == 0 {
 		<div class="glass qr-card">
 			<h2 class="text-sm uppercase text-muted mb-4">WhatsApp Pairing</h2>
 			<div class="text-muted text-center">No sender phones configured yet.</div>
 		</div>
 	}
-	for _, conn := range conns {
+	for _, conn := range state.Connections {
 		<div class="glass qr-card mb-4">
 			<div class="flex justify-between items-center mb-4">
 				<h2 class="text-sm uppercase text-muted m-0">WhatsApp Pairing ({ conn.Phone })</h2>
@@ -1382,6 +1382,18 @@ templ QRComponent(conns []WAConnectionState) {
 					<span class="text-danger">Connection error</span>
 				} else {
 					<span class="text-muted">{ string(conn.Status) }</span>
+				}
+			</div>
+			<div class="mb-4">
+				<label class="text-xs text-muted mb-1">Assigned Person</label>
+				<select onchange={ templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', this.value)", conn.Phone)} } class="input">
+					<option value="0" selected={ conn.PersonID == nil || *conn.PersonID == 0 }>⚠ Unassigned — cannot send</option>
+					for _, person := range state.Persons {
+						<option value={ fmt.Sprintf("%d", person.ID) } selected={ conn.PersonID != nil && *conn.PersonID == person.ID }>{ person.Name } ({ person.Slug })</option>
+					}
+				</select>
+				if conn.PersonID == nil || *conn.PersonID == 0 || conn.PersonSlug == "" {
+					<div class="text-xs text-danger mt-1">This phone is connected but cannot send voice notes until assigned.</div>
 				}
 			</div>
 			<div class="qr-container">

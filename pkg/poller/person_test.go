@@ -1,9 +1,14 @@
 package poller
 
 import (
+	"bytes"
 	"context"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -123,6 +128,103 @@ func TestSenderSessionPersonAssignment(t *testing.T) {
 		if s.Phone == phone2 && (s.PersonID == nil || *s.PersonID != person.ID) {
 			t.Fatalf("s2 after assign = %+v, want assigned to person", s)
 		}
+	}
+}
+
+func TestQRComponentMakesUnassignedSenderRepairable(t *testing.T) {
+	person := Person{ID: 7, Name: "Bubu", Slug: "bubu"}
+	state := AppState{
+		Persons: []Person{person},
+		Connections: []WAConnectionState{{
+			Phone:             "+40725263339",
+			Status:            StatusConnected,
+			WhatsAppConnected: true,
+		}},
+	}
+	state.reconcileConnectionState()
+
+	var rendered bytes.Buffer
+	if err := QRComponent(state).Render(context.Background(), &rendered); err != nil {
+		t.Fatalf("QRComponent.Render() error = %v", err)
+	}
+	html := rendered.String()
+	for _, want := range []string{
+		"Assigned Person",
+		"Unassigned — cannot send",
+		"connected but cannot send voice notes until assigned",
+		"Bubu (bubu)",
+		"assignPhone",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("QRComponent output missing %q: %s", want, html)
+		}
+	}
+	if state.UnassignedPhonesCount != 1 {
+		t.Fatalf("UnassignedPhonesCount = %d, want 1", state.UnassignedPhonesCount)
+	}
+}
+
+func TestAlertUnassignedSenderPhones(t *testing.T) {
+	personID := int64(1)
+	recorder := &recordingAlerter{}
+	alerter := NewMultiAlerter(recorder)
+	state := AppState{Connections: []WAConnectionState{
+		{Phone: "+40722222222", PersonID: &personID, PersonSlug: "bubu"},
+		{Phone: "+40733333333"},
+		{Phone: "+40711111111"},
+	}}
+
+	AlertUnassignedSenderPhones(state, alerter)
+	AlertUnassignedSenderPhones(state, alerter)
+
+	if len(recorder.criticalEvents) != 1 {
+		t.Fatalf("critical alerts = %d, want 1 deduplicated warning", len(recorder.criticalEvents))
+	}
+	event := recorder.criticalEvents[0]
+	if event.Title != "Unassigned WhatsApp Sender" || !strings.Contains(event.Message, "+40711111111, +40733333333") {
+		t.Fatalf("unexpected alert: %+v", event)
+	}
+	if event.ActionURL != "/" {
+		t.Fatalf("ActionURL = %q, want dashboard", event.ActionURL)
+	}
+}
+
+func TestAssignPhoneRepairsPersistedAndRuntimeState(t *testing.T) {
+	dbMgr, err := NewDBManager(":memory:")
+	if err != nil {
+		t.Fatalf("NewDBManager() error = %v", err)
+	}
+	person, err := dbMgr.CreatePerson(context.Background(), "Bubu")
+	if err != nil {
+		t.Fatalf("CreatePerson() error = %v", err)
+	}
+	const phone = "+40725263339"
+	if err := dbMgr.SetSenderSession(context.Background(), phone, "wapp.sqlite"); err != nil {
+		t.Fatalf("SetSenderSession() error = %v", err)
+	}
+	stateMgr := NewStateManager()
+	stateMgr.Update(func(state *AppState) {
+		state.Connections = []WAConnectionState{{Phone: phone, Status: StatusConnected, WhatsAppConnected: true}}
+	})
+	server := &TelemetryServer{dbMgr: dbMgr, stateMgr: stateMgr}
+	ctx, rec := newFormContext(http.MethodPost, "/api/phones/assign", url.Values{
+		"phone":     {phone},
+		"person_id": {strconv.FormatInt(person.ID, 10)},
+	})
+
+	if err := server.handleAssignPhone(ctx); err != nil {
+		t.Fatalf("handleAssignPhone() error = %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	connection := stateMgr.Get().Connections[0]
+	if connection.PersonID == nil || *connection.PersonID != person.ID || connection.PersonSlug != "bubu" {
+		t.Fatalf("runtime connection = %+v, want assigned Bubu", connection)
+	}
+	sessions, err := dbMgr.SenderSessions(context.Background())
+	if err != nil || len(sessions) != 1 || sessions[0].PersonID == nil || *sessions[0].PersonID != person.ID {
+		t.Fatalf("persisted sessions = %+v, err = %v", sessions, err)
 	}
 }
 
