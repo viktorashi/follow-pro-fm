@@ -103,6 +103,33 @@ func TestWebSocketTranscriberRetriesPendingAudio(t *testing.T) {
 	}
 }
 
+func TestWebSocketTranscriberRetriesTimedOutRequest(t *testing.T) {
+	var connections atomic.Int32
+	server := realtimeTestServer(t, func(conn *websocket.Conn, ctx context.Context) {
+		readRealtimeEvents(t, conn, ctx)
+		if connections.Add(1) == 1 {
+			time.Sleep(100 * time.Millisecond)
+			return
+		}
+		_ = conn.Write(ctx, websocket.MessageText, []byte(`{"type":"conversation.item.input_audio_transcription.completed","transcript":"follow profm"}`))
+	})
+	defer server.Close()
+
+	transcripts := make(chan string, 1)
+	transcriber := NewWebSocketTranscriber(wsURL(server.URL), func(text string) { transcripts <- text })
+	transcriber.retryDelay = time.Millisecond
+	transcriber.requestTimeout = 10 * time.Millisecond
+	transcriber.Start(context.Background())
+	transcriber.audio <- make([]byte, transcriptionSessionBytes)
+	close(transcriber.audio)
+
+	select {
+	case <-transcripts:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for transcript after request timeout")
+	}
+}
+
 func TestWebSocketTranscriberCommitsPartialClosedStream(t *testing.T) {
 	received := make(chan []byte, 1)
 	server := realtimeTestServer(t, func(conn *websocket.Conn, ctx context.Context) {
@@ -126,6 +153,11 @@ func TestWebSocketTranscriberCommitsPartialClosedStream(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for partial commit")
+	}
+	select {
+	case <-transcriber.Done():
+	case <-time.After(time.Second):
+		t.Fatal("transcriber did not finish after the audio stream closed")
 	}
 }
 
