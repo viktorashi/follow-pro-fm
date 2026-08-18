@@ -94,6 +94,9 @@ func (t *WebSocketTranscriber) Start(ctx context.Context) {
 func (t *WebSocketTranscriber) run(ctx context.Context) error {
 	conn, _, err := websocket.Dial(ctx, t.url, nil)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
 		log.Printf("   ⚠️ Streaming transcription connect: %v", err)
 		return err
 	}
