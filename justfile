@@ -107,6 +107,10 @@ push-audios:
         rm -rf "$used_dir"
     done
 
+    # Audio pools contain audio only; this also drops empty legacy directories.
+    find "$TMP_STAGING" -type f ! \( -name "*.ogg" -o -name "*.mp3" -o -name "*.wav" \) -delete
+    find "$TMP_STAGING" -depth -type d -empty -delete
+
     flyctl ssh console -C "mkdir -p /data/audios"
     # STRICTLY forbid any database files from ever being uploaded
     env COPYFILE_DISABLE=1 tar -cf - --exclude='*.sqlite*' --exclude='*.db' --exclude='._*' -C "$TMP_STAGING" . | flyctl ssh console -C "tar -xf - -C /data/audios"
