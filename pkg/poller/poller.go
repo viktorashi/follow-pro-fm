@@ -610,27 +610,25 @@ func (p *Poller) runMetadataChecker(checker ContestChecker, checkImmediately boo
 }
 
 func (p *Poller) refreshAudioStats(s *AppState) {
-	personStats := make(map[string]PersonAudioStats)
 	totalUnused := 0
 	totalUsed := 0
 
-	for _, person := range s.Persons {
+	for i, person := range s.Persons {
 		unused, used := GetAudioStats(GetAudioDirForPerson(person.Slug, p.AudiosDir))
-		personStats[person.Slug] = PersonAudioStats{Unused: unused, Used: used}
-		totalUnused += unused
-		totalUsed += used
-	}
 
-	for i, conn := range s.Connections {
-		if conn.PersonSlug != "" {
-			if st, ok := personStats[conn.PersonSlug]; ok {
-				s.Connections[i].UnusedAudios = st.Unused
-				s.Connections[i].UsedAudios = st.Used
-				continue
+		var phones []string
+		for _, conn := range s.Connections {
+			if conn.PersonSlug == person.Slug {
+				phones = append(phones, conn.Phone)
 			}
 		}
-		s.Connections[i].UnusedAudios = 0
-		s.Connections[i].UsedAudios = 0
+
+		s.Persons[i].UnusedAudios = unused
+		s.Persons[i].UsedAudios = used
+		s.Persons[i].Phones = phones
+
+		totalUnused += unused
+		totalUsed += used
 	}
 
 	s.UnusedAudios = totalUnused

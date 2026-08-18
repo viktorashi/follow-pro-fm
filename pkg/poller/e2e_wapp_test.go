@@ -88,7 +88,7 @@ func TestPoller_E2E(t *testing.T) {
 
 	// Hydrate connections with PersonSlug/PersonID/PersonName from DB
 	if dbMgr != nil {
-		HydrateConnectionPersons(dbMgr, stateMgr, context.Background())
+		HydrateConnectionPersons(dbMgr, stateMgr, audiosDir, context.Background())
 	}
 
 	defer func() {

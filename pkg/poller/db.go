@@ -26,6 +26,10 @@ type Person struct {
 	Name      string    `json:"name"`
 	Slug      string    `json:"slug"`
 	CreatedAt time.Time `json:"created_at"`
+
+	UnusedAudios int      `json:"unused_audios,omitempty"`
+	UsedAudios   int      `json:"used_audios,omitempty"`
+	Phones       []string `json:"phones,omitempty"`
 }
 
 type SenderSession struct {
