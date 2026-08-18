@@ -106,6 +106,41 @@ func TestWebSocketTranscriberReconnects(t *testing.T) {
 	}
 }
 
+func TestWebSocketTranscriberFlushesBoundedSessions(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
+
+		received := 0
+		for received < transcriptionSessionBytes {
+			_, audio, err := conn.Read(r.Context())
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			received += len(audio)
+		}
+		_ = conn.Write(r.Context(), websocket.MessageText, []byte(`{"text":"follow profm"}`))
+	}))
+	defer server.Close()
+
+	transcriber := NewWebSocketTranscriber("ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	const chunkBytes = 32000
+	for range transcriptionSessionBytes/chunkBytes + 1 {
+		transcriber.audio <- make([]byte, chunkBytes)
+	}
+	if err := transcriber.run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(transcriber.audio); got != 1 {
+		t.Fatalf("queued chunks after one session = %d, want 1", got)
+	}
+}
+
 func TestWebsocketTranscriptAcceptsPlainText(t *testing.T) {
 	if got, want := websocketTranscript([]byte(" follow profm ")), "follow profm"; got != want {
 		t.Fatalf("transcript = %q, want %q", got, want)
