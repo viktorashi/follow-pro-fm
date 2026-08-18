@@ -1,24 +1,19 @@
-ARG WHISPER_IMAGE=fedirz/faster-whisper-server@sha256:760e5e43d427dc6cfbbc4731934b908b7de9c7e6d5309c6a1f0c8c923a5b6030
-FROM ${WHISPER_IMAGE} AS downloader
-
-ENV WHISPER_MODEL=base
-# Pre-download the model into /root/.cache/huggingface
-RUN uv run python -c "import os; from faster_whisper import download_model; download_model(os.environ['WHISPER_MODEL'])"
-
-FROM ${WHISPER_IMAGE}
+ARG SPEACHES_IMAGE=ghcr.io/speaches-ai/speaches:0.8.3-cpu@sha256:21e3df06d842fb7802ab470dd77c25f0e8c0d22950e8d8c6ae886e851af53ef8
+FROM ${SPEACHES_IMAGE} AS downloader
 ARG FASTER_WHISPER_VERSION=1.2.1
-RUN uv pip install --python /root/faster-whisper-server/.venv/bin/python "faster-whisper==${FASTER_WHISPER_VERSION}"
+RUN uv pip install --python .venv/bin/python "faster-whisper==${FASTER_WHISPER_VERSION}" && \
+    python -c "from speaches.executors.whisper.utils import model_registry; model_registry.download_model_files('Systran/faster-whisper-base')"
+
+FROM ${SPEACHES_IMAGE}
+ARG FASTER_WHISPER_VERSION=1.2.1
+RUN uv pip install --python .venv/bin/python "faster-whisper==${FASTER_WHISPER_VERSION}"
 
 # Copy only the downloaded model cache, leaving behind any uv/pip download cache
-COPY --from=downloader /root/.cache/huggingface /root/.cache/huggingface
+COPY --from=downloader /home/ubuntu/.cache/huggingface /home/ubuntu/.cache/huggingface
 
 ENV UVICORN_HOST="0.0.0.0" \
     ENABLE_UI="false" \
-    WHISPER_MODEL="base" \
-    WHISPER__MODEL="base" \
+    WHISPER__INFERENCE_DEVICE="cpu" \
     WHISPER__COMPUTE_TYPE="int8" \
-    DEFAULT_LANGUAGE="ro" \
-    MIN_DURATION="9" \
-    OMP_NUM_THREADS="4"
-
-CMD ["uv", "run", "--no-sync", "uvicorn", "--factory", "faster_whisper_server.main:create_app"]
+    WHISPER__CPU_THREADS="1" \
+    OMP_NUM_THREADS="1"
