@@ -28,7 +28,6 @@ const (
 	dashcamAfterDuration    = 2 * time.Minute
 	fingerprintTailBytes    = 768 * 1024
 	contestCaptureWindow    = 2 * time.Second
-	transcriptionTailBytes  = 5 * 16000 // 5s of the 128kbps MP3 stream.
 	transcriptionTextWindow = 15 * time.Second
 )
 
@@ -110,24 +109,22 @@ func shouldBypassCampaignTimeChecks() bool {
 }
 
 type Poller struct {
-	APIURL                       string
-	PollInterval                 time.Duration
-	ActiveCampaigns              []Campaign
-	TargetPhone                  string
-	SendVoiceNote                func(senderPhone string, targetPhone string, audioPath string) error
-	DisconnectWhatsApp           func()
-	ConnectWhatsApp              func() error
-	StateMgr                     *StateManager
-	Alerter                      Alerter
-	AudiosDir                    string
-	SignaturesDir                string
-	AudioBuffer                  *CircularAudioBuffer
-	TranscriptionBuffer          *TimeSeriesBuffer[string]
-	DBMgr                        *DBManager
-	BaseURL                      string
-	ContestCheckCooldown         time.Duration
-	Transcribe                   func(context.Context, []byte) (string, error)
-	StreamingTranscriptionActive func() bool
+	APIURL               string
+	PollInterval         time.Duration
+	ActiveCampaigns      []Campaign
+	TargetPhone          string
+	SendVoiceNote        func(senderPhone string, targetPhone string, audioPath string) error
+	DisconnectWhatsApp   func()
+	ConnectWhatsApp      func() error
+	StateMgr             *StateManager
+	Alerter              Alerter
+	AudiosDir            string
+	SignaturesDir        string
+	AudioBuffer          *CircularAudioBuffer
+	TranscriptionBuffer  *TimeSeriesBuffer[string]
+	DBMgr                *DBManager
+	BaseURL              string
+	ContestCheckCooldown time.Duration
 
 	matchesMu    sync.Mutex
 	matchesToday int
@@ -172,16 +169,9 @@ type fingerprintContestChecker struct {
 	coordinator *ContestCheckCoordinator
 }
 
-type transcriptionContestChecker struct {
-	poller      *Poller
-	coordinator *ContestCheckCoordinator
-	lastVersion int64
-}
-
 var (
 	_ ContestChecker = (*metadataContestChecker)(nil)
 	_ ContestChecker = (*fingerprintContestChecker)(nil)
-	_ ContestChecker = (*transcriptionContestChecker)(nil)
 )
 
 const (
@@ -535,25 +525,18 @@ func (p *Poller) Start() {
 	}
 
 	var fingerprintChecker ContestChecker
-	var transcriptionChecker ContestChecker
 	if p.AudioBuffer != nil {
 		fingerprintChecker = &fingerprintContestChecker{
 			poller:      p,
 			coordinator: coordinator,
 		}
 		p.AudioBuffer.Start()
-		if p.Transcribe != nil {
-			transcriptionChecker = &transcriptionContestChecker{poller: p, coordinator: coordinator}
-		}
 	}
 
 	shouldPoll := p.prepareStartState()
 	go p.runMetadataChecker(metadataChecker, shouldPoll)
 	if fingerprintChecker != nil {
 		go runPeriodicChecker(p, fingerprintChecker)
-	}
-	if transcriptionChecker != nil {
-		go runPeriodicChecker(p, transcriptionChecker)
 	}
 
 	select {}
@@ -1058,40 +1041,8 @@ func (c *fingerprintContestChecker) Check(now time.Time) {
 	p.evaluateAndTriggerCampaign(now, campaignArtist, triggerSourceFingerprint, 0, fmt.Sprintf("fingerprint match %q", name), nil)
 }
 
-func (c *transcriptionContestChecker) Check(now time.Time) {
-	p := c.poller
-	coordinator := c.coordinator
-	checker := c
-	if p.Transcribe == nil || (p.StreamingTranscriptionActive != nil && p.StreamingTranscriptionActive()) || !coordinator.CanCheck(now) || !p.canRunContestChecker(now) {
-		return
-	}
-	if p.hasReachedDailyLimit(now) {
-		return
-	}
-	capture := p.captureContestAudio(now, SongInfo{})
-	if capture == nil || capture.Audio.Version == checker.lastVersion {
-		return
-	}
-	checker.lastVersion = capture.Audio.Version
-
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-
-	audioData := capture.Audio.Data
-	if len(audioData) > transcriptionTailBytes {
-		audioData = audioData[len(audioData)-transcriptionTailBytes:]
-	}
-
-	transcript, err := p.Transcribe(ctx, audioData)
-	if err != nil {
-		log.Printf("   ⚠️ Transcription failed: %v", err)
-		return
-	}
-	p.handleTranscriptWithCoordinator(now, coordinator, capture, transcript)
-}
-
-// HandleStreamingTranscript applies a live transcription through the same
-// coordinator and persistence safeguards as the batch fallback.
+// HandleStreamingTranscript applies live Whisper output through the shared
+// coordinator and persistence safeguards.
 func (p *Poller) HandleStreamingTranscript(transcript string) {
 	now := time.Now()
 	p.handleTranscriptWithCoordinator(now, p.contestCheckCoordinator(), p.captureContestAudio(now, SongInfo{}), transcript)

@@ -18,10 +18,8 @@ type WebSocketTranscriber struct {
 	audio        chan []byte
 	onTranscript func(string)
 
-	mu               sync.RWMutex
-	connected        bool
-	enabled          bool
-	hasConnectedOnce bool
+	mu        sync.RWMutex
+	connected bool
 }
 
 func NewWebSocketTranscriber(url string, onTranscript func(string)) *WebSocketTranscriber {
@@ -29,7 +27,6 @@ func NewWebSocketTranscriber(url string, onTranscript func(string)) *WebSocketTr
 		url:          url,
 		audio:        make(chan []byte, 64),
 		onTranscript: onTranscript,
-		enabled:      true,
 	}
 }
 
@@ -41,12 +38,6 @@ func (t *WebSocketTranscriber) IsConnected() bool {
 	return t.connected
 }
 
-func (t *WebSocketTranscriber) SetEnabled(enabled bool) {
-	t.mu.Lock()
-	t.enabled = enabled
-	t.mu.Unlock()
-}
-
 func (t *WebSocketTranscriber) setConnected(connected bool) {
 	t.mu.Lock()
 	t.connected = connected
@@ -56,19 +47,7 @@ func (t *WebSocketTranscriber) setConnected(connected bool) {
 func (t *WebSocketTranscriber) Start(ctx context.Context) {
 	go func() {
 		for ctx.Err() == nil {
-			t.mu.RLock()
-			enabled := t.enabled
-			hasConnectedOnce := t.hasConnectedOnce
-			t.mu.RUnlock()
-
-			if enabled || !hasConnectedOnce {
-				err := t.run(ctx)
-				if err == nil {
-					t.mu.Lock()
-					t.hasConnectedOnce = true
-					t.mu.Unlock()
-				}
-			}
+			_ = t.run(ctx)
 
 			if ctx.Err() == nil {
 				time.Sleep(2 * time.Second)

@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -95,86 +96,38 @@ func loadTranscriptionCases(t *testing.T) []transcriptionTestCase {
 
 func TestWhisperContainerTranscription(t *testing.T) {
 	t.Setenv("BYPASS_CAMPAIGN_TIME_CHECKS", "true")
-	// Check if docker daemon is available
 	if err := exec.Command("docker", "info").Run(); err != nil {
 		t.Skip("Docker daemon not available, skipping Whisper container transcription E2E test")
 	}
 
 	containerName := "profm-whisper-test"
+	imageName := "profm-whisper-test:local"
 	testPort := 18000
 	healthURL := fmt.Sprintf("http://127.0.0.1:%d/health", testPort)
-	transcriptionURL := fmt.Sprintf("http://127.0.0.1:%d/v1/audio/transcriptions", testPort)
+	wsURL := fmt.Sprintf("ws://127.0.0.1:%d/v1/audio/transcriptions?vad_filter=true", testPort)
 
-	// Probe existing container if running to see if it is fully functional
-	alreadyHealthy := false
-	resp, err := http.Get(healthURL)
-	if err == nil && resp.StatusCode == http.StatusOK {
-		_ = resp.Body.Close()
-		// Test actual transcription endpoint to ensure worker thread is alive (not EOFing)
-		probeTranscriber := NewHTTPTranscriber(transcriptionURL)
-		probeCtx, probeCancel := context.WithTimeout(context.Background(), 3*time.Second)
-		_, probeErr := probeTranscriber(probeCtx, []byte("fake_audio"))
-		probeCancel()
-		if probeErr == nil || (!strings.Contains(probeErr.Error(), "EOF") && !strings.Contains(probeErr.Error(), "connection refused")) {
-			alreadyHealthy = true
-		}
+	if out, err := exec.Command("docker", "build", "-q", "-t", imageName, "../../whisper-server").CombinedOutput(); err != nil {
+		t.Fatalf("docker build failed: %v, output: %s", err, out)
 	}
-
-	if alreadyHealthy {
-		t.Logf("Reusing existing healthy Whisper test container %s at %s", containerName, healthURL)
-	} else {
-		// Force-remove any stale/dead container before starting a fresh instance
+	imageID, err := exec.Command("docker", "image", "inspect", imageName, "--format", "{{.Id}}").Output()
+	if err != nil {
+		t.Fatalf("docker image inspect failed: %v", err)
+	}
+	containerImageID, _ := exec.Command("docker", "inspect", containerName, "--format", "{{.Image}}").Output()
+	alreadyHealthy := strings.TrimSpace(string(imageID)) == strings.TrimSpace(string(containerImageID)) && whisperHealthy(healthURL)
+	if !alreadyHealthy {
 		_ = exec.Command("docker", "rm", "-f", containerName).Run()
-
-		imageName := "fedirz/faster-whisper-server:latest-cpu"
-		t.Logf("Spinning up test Whisper container %s on port %d...", containerName, testPort)
-
-		// Use a local directory bind mount so GitHub Actions can cache it
-		cacheDir, err := filepath.Abs("../../.whisper_cache")
+		out, err := exec.Command("docker", "run", "-d", "-p", fmt.Sprintf("%d:8000", testPort), "--name", containerName, imageName).CombinedOutput()
 		if err != nil {
-			t.Fatalf("failed to resolve cache dir: %v", err)
+			t.Fatalf("docker run failed: %v, output: %s", err, out)
 		}
-		if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-			t.Fatalf("failed to create cache dir: %v", err)
-		}
-
-		runCmd := exec.Command(
-			"docker", "run", "-d",
-			"-p", fmt.Sprintf("%d:8000", testPort),
-			"-v", fmt.Sprintf("%s:/root/.cache/huggingface", cacheDir),
-			"-e", "UVICORN_HOST=0.0.0.0",
-			"-e", "ENABLE_UI=false",
-			"-e", "WHISPER_MODEL=base",
-			"-e", "WHISPER__MODEL=base",
-			"-e", "WHISPER__COMPUTE_TYPE=int8",
-			"-e", "DEFAULT_LANGUAGE=ro",
-			"-e", "OMP_NUM_THREADS=4",
-			"--name", containerName,
-			imageName,
-		)
-		if out, err := runCmd.CombinedOutput(); err != nil {
-			t.Fatalf("docker run failed: %v, output: %s", err, string(out))
-		}
-
-		// Wait for container readiness via /health endpoint
-		healthy := false
-		for i := 0; i < 240; i++ {
+		for deadline := time.Now().Add(2 * time.Minute); !whisperHealthy(healthURL); {
+			if time.Now().After(deadline) {
+				t.Fatalf("Whisper container failed to become healthy at %s", healthURL)
+			}
 			time.Sleep(500 * time.Millisecond)
-			resp, err := http.Get(healthURL)
-			if err == nil && resp.StatusCode == http.StatusOK {
-				_ = resp.Body.Close()
-				healthy = true
-				break
-			}
-			if resp != nil {
-				_ = resp.Body.Close()
-			}
-		}
-		if !healthy {
-			t.Fatalf("Whisper container failed to become healthy at %s", healthURL)
 		}
 	}
-	transcriber := NewHTTPTranscriber(transcriptionURL)
 
 	cases := loadTranscriptionCases(t)
 	if len(cases) == 0 {
@@ -185,9 +138,9 @@ func TestWhisperContainerTranscription(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 			defer cancel()
 
-			liveTranscript, err := runProductionTranscriptionCheck(ctx, transcriber, tc, filepath.Join(t.TempDir(), "phrases.sqlite"))
+			liveTranscript, err := runProductionWebSocketCheck(ctx, wsURL, tc, filepath.Join(t.TempDir(), "phrases.sqlite"))
 			if err != nil {
-				t.Fatalf("Transcribe failed for %s: %v", tc.Name, err)
+				t.Fatalf("streaming transcription failed for %s: %v", tc.Name, err)
 			}
 			t.Logf("[%s] Live transcript: %q | Full text: %q", tc.Name, liveTranscript, tc.FullText)
 
@@ -199,7 +152,28 @@ func TestWhisperContainerTranscription(t *testing.T) {
 	}
 }
 
-func runProductionTranscriptionCheck(ctx context.Context, transcriber func(context.Context, []byte) (string, error), tc transcriptionTestCase, dbPath string) (string, error) {
+func whisperHealthy(url string) bool {
+	resp, err := http.Get(url)
+	if err != nil {
+		return false
+	}
+	_ = resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+type transcriptionTriggerAlerter struct {
+	once      sync.Once
+	triggered chan struct{}
+}
+
+func (a *transcriptionTriggerAlerter) AlertCritical(AlertEvent) error { return nil }
+func (a *transcriptionTriggerAlerter) AlertInfo(AlertEvent) error     { return nil }
+func (a *transcriptionTriggerAlerter) AlertSuccess(AlertEvent) error {
+	a.once.Do(func() { close(a.triggered) })
+	return nil
+}
+
+func runProductionWebSocketCheck(ctx context.Context, wsURL string, tc transcriptionTestCase, dbPath string) (string, error) {
 	db, err := NewDBManager(dbPath)
 	if err != nil {
 		return "", err
@@ -210,39 +184,57 @@ func runProductionTranscriptionCheck(ctx context.Context, transcriber func(conte
 		}
 	}
 
-	buffer := NewCircularAudioBuffer("", transcriptionTailBytes*2)
-	alerter := &recordingAlerter{}
-	lastTranscript := ""
+	alerter := &transcriptionTriggerAlerter{triggered: make(chan struct{})}
 	poller := &Poller{
 		ActiveCampaigns:     []Campaign{{Artist: "Test Campaign"}},
-		AudioBuffer:         buffer,
 		TranscriptionBuffer: NewTimeSeriesBuffer[string](10 * time.Minute),
 		DBMgr:               db,
 		Alerter:             alerter,
 		StateMgr:            createMockStateMgr(),
-		Transcribe: func(ctx context.Context, audio []byte) (string, error) {
-			transcript, err := transcriber(ctx, audio)
-			lastTranscript = transcript
-			return transcript, err
-		},
 	}
-	checker := &transcriptionContestChecker{poller: poller, coordinator: NewContestCheckCoordinator(time.Minute)}
-	now := time.Date(2026, time.August, 18, 12, 0, 0, 0, bucharestLocation)
+	var transcriptMu sync.Mutex
+	lastTranscript := ""
+	transcriber := NewWebSocketTranscriber(wsURL, func(transcript string) {
+		transcriptMu.Lock()
+		lastTranscript = transcript
+		transcriptMu.Unlock()
+		poller.HandleStreamingTranscript(transcript)
+	})
+	transcriber.Start(ctx)
+	for !transcriber.IsConnected() {
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
 
-	for start := 0; start < len(tc.AudioBytes); start += transcriptionTailBytes {
-		end := start + transcriptionTailBytes
-		if end > len(tc.AudioBytes) {
-			end = len(tc.AudioBytes)
+	mp3 := make(chan []byte)
+	NewPCMConverter(mp3, transcriber.Audio()).Start(ctx)
+	go func() {
+		defer close(mp3)
+		const streamChunkBytes = 8192
+		for start := 0; start < len(tc.AudioBytes); start += streamChunkBytes {
+			end := start + streamChunkBytes
+			if end > len(tc.AudioBytes) {
+				end = len(tc.AudioBytes)
+			}
+			select {
+			case mp3 <- tc.AudioBytes[start:end]:
+			case <-ctx.Done():
+				return
+			}
 		}
-		buffer.writeBytes(tc.AudioBytes[start:end])
-		checker.Check(now)
-		if len(alerter.successEvents) > 0 {
-			return lastTranscript, nil
-		}
-		if err := ctx.Err(); err != nil {
-			return lastTranscript, err
-		}
-		now = now.Add(contestCaptureWindow)
+	}()
+
+	select {
+	case <-alerter.triggered:
+		transcriptMu.Lock()
+		defer transcriptMu.Unlock()
+		return lastTranscript, nil
+	case <-ctx.Done():
+		transcriptMu.Lock()
+		defer transcriptMu.Unlock()
+		return lastTranscript, ctx.Err()
 	}
-	return lastTranscript, fmt.Errorf("production transcription checker did not trigger")
 }

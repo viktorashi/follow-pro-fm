@@ -471,7 +471,6 @@ func main() {
 	defer audioBuffer.Stop()
 	pcmInput, unsubscribePCM := audioBuffer.Subscribe(128)
 	defer unsubscribePCM()
-	var streamingTranscriber *poller.WebSocketTranscriber
 	contestCheckCooldown := poller.DefaultContestCheckCooldown
 	if configured := os.Getenv("CONTEST_CHECK_COOLDOWN"); configured != "" {
 		parsed, err := time.ParseDuration(configured)
@@ -497,10 +496,6 @@ func main() {
 		DBMgr:                dbMgr,
 		BaseURL:              baseURL,
 		ContestCheckCooldown: contestCheckCooldown,
-		Transcribe:           transcribe,
-		StreamingTranscriptionActive: func() bool {
-			return streamingTranscriber != nil && streamingTranscriber.IsConnected()
-		},
 		SendVoiceNote: func(senderPhone string, targetPhone string, audioPath string) error {
 			wappMutex.RLock()
 			c, ok := wappClients[senderPhone]
@@ -515,9 +510,6 @@ func main() {
 			return fmt.Errorf("sender phone %s is not connected or logged in", senderPhone)
 		},
 		DisconnectWhatsApp: func() {
-			if streamingTranscriber != nil {
-				streamingTranscriber.SetEnabled(false)
-			}
 			wappMutex.RLock()
 			defer wappMutex.RUnlock()
 			for _, c := range wappClients {
@@ -527,9 +519,6 @@ func main() {
 			}
 		},
 		ConnectWhatsApp: func() error {
-			if streamingTranscriber != nil {
-				streamingTranscriber.SetEnabled(true)
-			}
 			wappMutex.RLock()
 			defer wappMutex.RUnlock()
 			for _, c := range wappClients {
@@ -541,7 +530,7 @@ func main() {
 			return nil
 		},
 	}
-	streamingTranscriber = poller.NewWebSocketTranscriber(streamingTranscriptionURL, p.HandleStreamingTranscript)
+	streamingTranscriber := poller.NewWebSocketTranscriber(streamingTranscriptionURL, p.HandleStreamingTranscript)
 	pcmConverter := poller.NewPCMConverter(pcmInput, streamingTranscriber.Audio())
 	streamingTranscriber.Start(context.Background())
 	pcmConverter.Start(context.Background())
