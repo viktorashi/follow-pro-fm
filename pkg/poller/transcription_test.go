@@ -1,6 +1,3 @@
-//go:build e2e
-// +build e2e
-
 package poller
 
 import (
@@ -23,6 +20,15 @@ func TestNewHTTPTranscriberPostsAudioAndReadsText(t *testing.T) {
 		defer func() { _ = file.Close() }()
 		if data, _ := io.ReadAll(file); string(data) != "radio" {
 			t.Fatalf("audio = %q, want radio", data)
+		}
+		for field, want := range map[string]string{
+			"model":              transcriptionModel,
+			"language":           "ro",
+			"without_timestamps": "true",
+		} {
+			if got := r.FormValue(field); got != want {
+				t.Errorf("%s = %q, want %q", field, got, want)
+			}
 		}
 		_, _ = w.Write([]byte(`{"text":"follow profm"}`))
 	}))

@@ -195,20 +195,12 @@ func runProductionWebSocketCheck(ctx context.Context, transcriptionURL string, t
 	var transcriptMu sync.Mutex
 	lastTranscript := ""
 	mp3 := make(chan []byte)
-	transcriber := StartStreamingTranscription(ctx, mp3, transcriptionURL, func(transcript string) {
+	StartStreamingTranscription(ctx, mp3, transcriptionURL, func(transcript string) {
 		transcriptMu.Lock()
 		lastTranscript = transcript
 		transcriptMu.Unlock()
 		poller.HandleStreamingTranscript(transcript)
 	})
-	for !transcriber.IsConnected() {
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
-
 	go func() {
 		defer close(mp3)
 		const streamChunkBytes = 8192
