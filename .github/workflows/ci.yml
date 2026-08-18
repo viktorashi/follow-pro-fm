@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
     branches: [main]
 
@@ -57,12 +57,6 @@ jobs:
           restore-keys: |
             golangci-lint-data-${{ runner.os }}-${{ env.GOLANGCI_LINT_VERSION }}-
 
-      - name: Restore Whisper Model cache
-        uses: actions/cache@v4
-        with:
-          path: .whisper_cache
-          key: whisper-cache-${{ runner.os }}-base
-
       - name: Lint
         run: ./scripts/golangci-lint-shim.sh run
 
@@ -86,6 +80,10 @@ jobs:
         run: |
           bin/gotestsum --junitfile junit.xml -- -coverprofile=coverage.out ./pkg/...
           go tool cover -func=coverage.out
+
+      - name: Test production Whisper WebSocket pipeline
+        timeout-minutes: 15
+        run: go test -tags=e2e -v -run TestWhisperContainerTranscription ./pkg/poller
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
