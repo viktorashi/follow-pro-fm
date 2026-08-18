@@ -1,6 +1,7 @@
 package poller
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -638,6 +639,32 @@ func TestPoller_captureContestAudioSharesOneSnapshotAndMetadata(t *testing.T) {
 	}
 	if next := poller.captureContestAudio(now.Add(contestCaptureWindow), SongInfo{}); next == first {
 		t.Fatal("expected the next checker window to capture fresh audio")
+	}
+}
+
+func TestTranscriptionCheckerSendsOnlyRecentPromptWindow(t *testing.T) {
+	now := bucharestTime(2026, time.June, 17, 12, 0, 0)
+	audio := append(bytes.Repeat([]byte("old"), transcriptionTailBytes/3), bytes.Repeat([]byte("new"), 20)...)
+	buffer := NewCircularAudioBuffer("", len(audio))
+	buffer.writeBytes(audio)
+
+	var got []byte
+	poller := &Poller{
+		ActiveCampaigns: []Campaign{{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"}},
+		AudioBuffer:     buffer,
+		Transcribe: func(_ context.Context, audio []byte) (string, error) {
+			got = append([]byte(nil), audio...)
+			return "unrelated", nil
+		},
+	}
+
+	(&transcriptionContestChecker{poller: poller, coordinator: NewContestCheckCoordinator(time.Minute)}).Check(now)
+
+	if len(got) != transcriptionTailBytes {
+		t.Fatalf("transcribed bytes = %d, want %d", len(got), transcriptionTailBytes)
+	}
+	if !bytes.HasSuffix(got, []byte("newnewnew")) {
+		t.Fatal("transcription checker did not keep the newest audio")
 	}
 }
 
