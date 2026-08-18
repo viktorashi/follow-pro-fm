@@ -62,7 +62,8 @@ func (c *PCMConverter) run(ctx context.Context) {
 			chunk := append([]byte(nil), buf[:n]...)
 			select {
 			case c.output <- chunk:
-			default:
+			case <-ctx.Done():
+				return
 			}
 		}
 		if err != nil {

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -57,6 +58,51 @@ func TestWebSocketTranscriberSendsPCMAndReceivesTranscript(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for transcript")
+	}
+}
+
+func TestWebSocketTranscriberReconnects(t *testing.T) {
+	var connections atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
+		if connections.Add(1) == 1 {
+			return
+		}
+		if _, _, err := conn.Read(r.Context()); err != nil {
+			return
+		}
+		_ = conn.Write(r.Context(), websocket.MessageText, []byte(`{"text":"follow profm"}`))
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	transcripts := make(chan string, 1)
+	transcriber := NewWebSocketTranscriber("ws"+strings.TrimPrefix(server.URL, "http"), func(text string) {
+		transcripts <- text
+	})
+	transcriber.Start(ctx)
+
+	deadline := time.Now().Add(4 * time.Second)
+	for connections.Load() < 2 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if connections.Load() < 2 {
+		t.Fatal("transcriber did not reconnect")
+	}
+	transcriber.Audio() <- []byte{1}
+	select {
+	case transcript := <-transcripts:
+		if transcript != "follow profm" {
+			t.Fatalf("transcript = %q, want follow profm", transcript)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for transcript after reconnect")
 	}
 }
 
