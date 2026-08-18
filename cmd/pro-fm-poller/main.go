@@ -225,7 +225,7 @@ func main() {
 			// Broadcast QR Code
 			if connsStr != lastConnsStr || state.Status != lastState.Status {
 				var qrBuf bytes.Buffer
-				_ = poller.QRComponent(state.Connections).Render(context.Background(), &qrBuf)
+				_ = poller.QRComponent(state).Render(context.Background(), &qrBuf)
 				sseBroadcaster.Broadcast("qrcode", qrBuf.Bytes())
 			}
 
