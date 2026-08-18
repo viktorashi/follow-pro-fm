@@ -14,6 +14,32 @@ import (
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
 
+func getEnvPrefix() string {
+	envName := os.Getenv("ENVIRONMENT")
+	if envName == "" {
+		envName = "production"
+	}
+	if envName != "prod" && envName != "production" {
+		return fmt.Sprintf("[%s] ", strings.ToUpper(envName))
+	}
+	return ""
+}
+
+func getBaseURL() string {
+	baseURL := os.Getenv("BASE_URL")
+	if baseURL != "" {
+		return baseURL
+	}
+	if appName := os.Getenv("FLY_APP_NAME"); appName != "" {
+		return fmt.Sprintf("https://%s.fly.dev", appName)
+	}
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	return "http://localhost:" + port
+}
+
 // AlertEvent contains structured data for an alert.
 type AlertEvent struct {
 	Title       string
@@ -60,55 +86,43 @@ func (m *MultiAlerter) shouldSend(event AlertEvent) bool {
 	return true
 }
 
-func (m *MultiAlerter) AlertCritical(event AlertEvent) error {
+func (m *MultiAlerter) broadcast(event AlertEvent, sender func(Alerter, AlertEvent) error) error {
 	if !m.shouldSend(event) {
 		return nil
 	}
 	var lastErr error
 	for _, a := range m.alerters {
-		if err := a.AlertCritical(event); err != nil {
+		if err := sender(a, event); err != nil {
 			lastErr = err
 		}
 	}
 	return lastErr
+}
+
+func (m *MultiAlerter) AlertCritical(event AlertEvent) error {
+	return m.broadcast(event, Alerter.AlertCritical)
 }
 
 func (m *MultiAlerter) AlertInfo(event AlertEvent) error {
-	if !m.shouldSend(event) {
-		return nil
-	}
-	var lastErr error
-	for _, a := range m.alerters {
-		if err := a.AlertInfo(event); err != nil {
-			lastErr = err
-		}
-	}
-	return lastErr
+	return m.broadcast(event, Alerter.AlertInfo)
 }
 
 func (m *MultiAlerter) AlertSuccess(event AlertEvent) error {
-	if !m.shouldSend(event) {
-		return nil
-	}
-	var lastErr error
-	for _, a := range m.alerters {
-		if err := a.AlertSuccess(event); err != nil {
-			lastErr = err
-		}
-	}
-	return lastErr
+	return m.broadcast(event, Alerter.AlertSuccess)
 }
 
 // TelegramAlerter sends notifications via a Telegram Bot.
 type TelegramAlerter struct {
 	BotToken string
 	ChatID   string
+	Client   *http.Client
 }
 
 func NewTelegramAlerter(token, chatID string) *TelegramAlerter {
 	return &TelegramAlerter{
 		BotToken: token,
 		ChatID:   chatID,
+		Client:   http.DefaultClient,
 	}
 }
 
@@ -119,17 +133,8 @@ func (t *TelegramAlerter) send(prefix string, event AlertEvent) error {
 
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", t.BotToken)
 
-	envPrefix := ""
-	envName := os.Getenv("ENVIRONMENT")
-	if envName == "" {
-		envName = "production"
-	}
-	if envName != "prod" && envName != "production" {
-		envPrefix = fmt.Sprintf("[%s] ", strings.ToUpper(envName))
-	}
-
 	// Format Telegram message
-	msg := fmt.Sprintf("<b>%s%s %s</b>\n\n%s", envPrefix, prefix, event.Title, event.Message)
+	msg := fmt.Sprintf("<b>%s%s %s</b>\n\n%s", getEnvPrefix(), prefix, event.Title, event.Message)
 	if event.ActionURL != "" {
 		label := event.ActionLabel
 		if label == "" {
@@ -138,18 +143,7 @@ func (t *TelegramAlerter) send(prefix string, event AlertEvent) error {
 		msg += fmt.Sprintf("\n\n<a href=\"%s\">%s</a>", event.ActionURL, label)
 	}
 
-	baseURL := os.Getenv("BASE_URL")
-	if baseURL == "" {
-		if appName := os.Getenv("FLY_APP_NAME"); appName != "" {
-			baseURL = fmt.Sprintf("https://%s.fly.dev", appName)
-		} else {
-			port := os.Getenv("PORT")
-			if port == "" {
-				port = "8080"
-			}
-			baseURL = "http://localhost:" + port
-		}
-	}
+	baseURL := getBaseURL()
 
 	if baseURL != "" && event.ActionURL != baseURL {
 		msg += fmt.Sprintf("\n\n<a href=\"%s\">Live Dashboard</a>", baseURL)
@@ -162,7 +156,11 @@ func (t *TelegramAlerter) send(prefix string, event AlertEvent) error {
 	}
 	body, _ := json.Marshal(payload)
 
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+	client := t.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Post(url, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		return err
 	}
@@ -220,17 +218,8 @@ func (e *EmailAlerter) send(prefix string, event AlertEvent) error {
 		return nil // No one to email
 	}
 
-	envPrefix := ""
-	envName := os.Getenv("ENVIRONMENT")
-	if envName == "" {
-		envName = "production"
-	}
-	if envName != "prod" && envName != "production" {
-		envPrefix = fmt.Sprintf("[%s] ", strings.ToUpper(envName))
-	}
-
 	from := mail.NewEmail("ProFM Poller", e.FromEmail)
-	subject := envPrefix + prefix + " " + event.Title
+	subject := getEnvPrefix() + prefix + " " + event.Title
 
 	// Create a plain text version of the HTML message
 	plainTextContent := strings.ReplaceAll(event.Message, "<br>", "\n")
@@ -259,18 +248,7 @@ func (e *EmailAlerter) send(prefix string, event AlertEvent) error {
 		htmlContent += fmt.Sprintf("<br><br><a href=\"%s\" style=\"padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;\">%s</a>", event.ActionURL, label)
 	}
 
-	baseURL := os.Getenv("BASE_URL")
-	if baseURL == "" {
-		if appName := os.Getenv("FLY_APP_NAME"); appName != "" {
-			baseURL = fmt.Sprintf("https://%s.fly.dev", appName)
-		} else {
-			port := os.Getenv("PORT")
-			if port == "" {
-				port = "8080"
-			}
-			baseURL = "http://localhost:" + port
-		}
-	}
+	baseURL := getBaseURL()
 
 	if baseURL != "" && event.ActionURL != baseURL {
 		plainTextContent += fmt.Sprintf("\n\nLive Dashboard: %s", baseURL)

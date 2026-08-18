@@ -13,11 +13,6 @@ import (
 	"time"
 )
 
-const (
-	CanonicalSenderPhone           = "+40734788254"
-	CanonicalSenderPhoneNormalized = "40734788254"
-)
-
 func NormalizePhone(phone string) string {
 	normalized := strings.ReplaceAll(phone, " ", "")
 	normalized = strings.ReplaceAll(normalized, "+", "")
@@ -27,7 +22,7 @@ func NormalizePhone(phone string) string {
 // InitAudioPool ensures the used directory exists.
 func InitAudioPool(audiosDir string) error {
 	usedDir := filepath.Join(audiosDir, "used")
-	return os.MkdirAll(usedDir, 0755)
+	return os.MkdirAll(usedDir, 0o755)
 }
 
 // GetAudioStats returns the count of unused and used audio files.
@@ -96,7 +91,7 @@ func HashAudioFile(audioPath string) (string, error) {
 	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
 }
 
-func GetRandomAvailableAudio(audiosDir string, isHashUsed func(string) (bool, error)) (string, string, error) {
+func GetRandomAvailableAudio(audiosDir string, isHashUsed func(string) (bool, error), reservedHashes map[string]struct{}) (string, string, error) {
 	entries, err := os.ReadDir(audiosDir)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to read audios directory: %w", err)
@@ -121,6 +116,9 @@ func GetRandomAvailableAudio(audiosDir string, isHashUsed func(string) (bool, er
 		contentHash, err := HashAudioFile(candidate)
 		if err != nil {
 			return "", "", err
+		}
+		if _, reserved := reservedHashes[contentHash]; reserved {
+			continue
 		}
 		if isHashUsed == nil {
 			return candidate, contentHash, nil
@@ -148,7 +146,7 @@ func MarkAudioUsed(audioPath string) error {
 	base := filepath.Base(audioPath)
 	usedDir := filepath.Join(dir, "used")
 
-	if err := os.MkdirAll(usedDir, 0755); err != nil {
+	if err := os.MkdirAll(usedDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create used directory: %w", err)
 	}
 
@@ -270,78 +268,93 @@ func listUsedAudioFiles(rootDir string) ([]string, error) {
 	return files, err
 }
 
-func GetAudioDirForPhone(phone string, rootDir string) string {
-	normalized := NormalizePhone(phone)
-	if normalized == CanonicalSenderPhoneNormalized {
+func GetAudioDirForPerson(personSlug string, rootDir string) string {
+	personSlug = strings.TrimSpace(personSlug)
+	if personSlug == "" {
 		return rootDir
 	}
-	// ensure the directory exists
-	dir := filepath.Join(rootDir, normalized)
+	dir := filepath.Join(rootDir, personSlug)
 	_ = InitAudioPool(dir)
 	return dir
 }
 
-type PhoneAudioStats struct {
-	Unused int
-	Used   int
-}
-
-func GetAudioStatsPerPhone(conns []WAConnectionState, rootDir string) map[string]PhoneAudioStats {
-	stats := make(map[string]PhoneAudioStats)
-
-	// Always ensure canonical phone has an entry
-	stats[CanonicalSenderPhone] = PhoneAudioStats{}
-	for _, conn := range conns {
-		stats[conn.Phone] = PhoneAudioStats{}
+func MoveAudioFiles(sourceDir, targetDir string, filenames []string) error {
+	if err := InitAudioPool(targetDir); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Join(targetDir, "used"), 0o755); err != nil {
+		return err
 	}
 
-	_ = filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
+	for _, filename := range filenames {
+		filename = filepath.Base(filename)
+		if filename == "" || filename == "." || filename == ".." {
+			continue
 		}
-		if d.IsDir() {
-			return nil
+
+		srcActive := filepath.Join(sourceDir, filename)
+		if _, err := os.Stat(srcActive); err == nil {
+			dstActive := filepath.Join(targetDir, filename)
+			if err := moveAudioFile(srcActive, dstActive); err != nil {
+				return fmt.Errorf("failed to move active file %s: %w", filename, err)
+			}
+			continue
 		}
-		if strings.HasSuffix(strings.ToLower(d.Name()), ".ogg") {
-			isUsed := filepath.Base(filepath.Dir(path)) == "used"
 
-			// Determine which phone this belongs to
-			rel, err := filepath.Rel(rootDir, path)
-			if err != nil {
-				return nil
+		srcUsed := filepath.Join(sourceDir, "used", filename)
+		if _, err := os.Stat(srcUsed); err == nil {
+			dstUsed := filepath.Join(targetDir, "used", filename)
+			if err := moveAudioFile(srcUsed, dstUsed); err != nil {
+				return fmt.Errorf("failed to move used file %s: %w", filename, err)
 			}
-			parts := strings.Split(rel, string(os.PathSeparator))
-
-			phone := CanonicalSenderPhone
-			// If the file is in a subdirectory (other than "used" directly under rootDir), it belongs to a specific phone pool
-			if len(parts) > 1 && parts[0] != "used" {
-				normalized := parts[0]
-				// Find matching phone in conns
-				found := false
-				for _, conn := range conns {
-					if NormalizePhone(conn.Phone) == normalized {
-						phone = conn.Phone
-						found = true
-						break
-					}
-				}
-				if !found {
-					// Fallback if directory exists but phone not in conns
-					// We construct a pseudo-phone number to track it
-					phone = "+" + normalized
-				}
-			}
-
-			s := stats[phone]
-			if isUsed {
-				s.Used++
-			} else {
-				s.Unused++
-			}
-			stats[phone] = s
+			continue
 		}
-		return nil
-	})
+	}
+	return nil
+}
 
+func moveAudioFile(source, destination string) error {
+	if _, err := os.Stat(destination); err == nil {
+		return fmt.Errorf("destination already exists: %s", destination)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	return os.Rename(source, destination)
+}
+
+func ListAudioFilesForPerson(personSlug string, rootDir string) ([]string, []string, error) {
+	personDir := GetAudioDirForPerson(personSlug, rootDir)
+	var active, used []string
+
+	if entries, err := os.ReadDir(personDir); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ".ogg") {
+				active = append(active, e.Name())
+			}
+		}
+	}
+
+	if usedEntries, err := os.ReadDir(filepath.Join(personDir, "used")); err == nil {
+		for _, e := range usedEntries {
+			if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ".ogg") {
+				used = append(used, e.Name())
+			}
+		}
+	}
+
+	return active, used, nil
+}
+
+func GetAudioStatsPerPerson(persons []Person, rootDir string) map[string]PersonAudioStats {
+	stats := make(map[string]PersonAudioStats)
+	for _, p := range persons {
+		unused, used := GetAudioStats(GetAudioDirForPerson(p.Slug, rootDir))
+		stats[p.Slug] = PersonAudioStats{Unused: unused, Used: used}
+	}
 	return stats
+}
+
+type PersonAudioStats struct {
+	Unused int
+	Used   int
 }

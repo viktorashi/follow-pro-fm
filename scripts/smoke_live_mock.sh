@@ -33,7 +33,6 @@ printf '%s\n' "${TRUSTED_EMAIL}" > "${TMP_DIR}/trusted-emails.txt"
   BASE_URL="${BASE_URL}" \
   MOCK_WHATSAPP=true \
   TARGET_PHONE="${TARGET_PHONE}" \
-  WAPP_DB_PATH="${TMP_DIR}/wapp.sqlite" \
   APP_DB_PATH="${TMP_DIR}/app.sqlite" \
   AUDIOS_DIR="${TMP_DIR}/audios" \
   ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
@@ -63,10 +62,14 @@ dashboard_html="$(curl -fsS -b "${COOKIE_JAR}" "${BASE_URL}/")"
 echo "${dashboard_html}" | rg -q "Currently Playing"
 
 schedule_json="$(curl -fsS -b "${COOKIE_JAR}" "${BASE_URL}/api/schedule")"
-echo "${schedule_json}" | rg -q "2026-06-"
+echo "${schedule_json}" | rg -q '"target_matches"'
 
 curl -fsS -b "${COOKIE_JAR}" \
-  -F "phone=+40734788254" \
+  -F "name=Smoke Sender" \
+  "${BASE_URL}/api/persons" >/dev/null
+
+curl -fsS -b "${COOKIE_JAR}" \
+  -F "person_slug=smoke-sender" \
   -F "audio=@${ROOT_DIR}/pkg/poller/testdata/waveform_sample.ogg;type=audio/ogg" \
   "${BASE_URL}/api/audio/upload" >/dev/null
 
@@ -82,6 +85,6 @@ rg -q '\[[0-9]{2}:[0-9]{2}:[0-9]{2}\] .+ - .+' "${LOG_PATH}"
 dashboard_html="$(curl -fsS -b "${COOKIE_JAR}" "${BASE_URL}/")"
 echo "${dashboard_html}" | rg -qv "Waiting for broadcast"
 
-test -f "${TMP_DIR}/audios/waveform_sample.ogg"
+test -f "${TMP_DIR}/audios/smoke-sender/waveform_sample.ogg"
 
 echo "Smoke test passed."

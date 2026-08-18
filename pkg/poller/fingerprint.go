@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"gonum.org/v1/gonum/dsp/fourier"
@@ -95,31 +96,124 @@ func findMatchingCanonicalSignature(stream []byte, streamFormat, canonicalDir st
 	return findMatchingCanonicalSignatureInSet(stream, streamFormat, canonicalDir, nil)
 }
 
-func findMatchingCanonicalSignatureInSet(stream []byte, streamFormat, canonicalDir string, allowed map[string]struct{}) (bool, string, error) {
-	sigs, err := GetCanonicalSignatures(canonicalDir)
+type cachedSignature struct {
+	raw      []byte
+	features []float64
+	modTime  time.Time
+}
+
+var signatureCache sync.Map // map[string]*cachedSignature
+
+func getCachedSignature(canonicalDir, name string, info os.FileInfo) (*cachedSignature, error) {
+	path := filepath.Join(canonicalDir, name)
+
+	cacheKey := path
+	if val, ok := signatureCache.Load(cacheKey); ok {
+		cached := val.(*cachedSignature)
+		if cached.modTime.Equal(info.ModTime()) {
+			return cached, nil
+		}
+	}
+
+	data, err := os.ReadFile(path)
 	if err != nil {
+		return nil, err
+	}
+
+	sigFormat := fingerprintFormatForName(name)
+	features, err := extractFingerprintFeatures(data, sigFormat)
+	if err != nil {
+		return nil, err
+	}
+
+	cached := &cachedSignature{
+		raw:      data,
+		features: features,
+		modTime:  info.ModTime(),
+	}
+	signatureCache.Store(cacheKey, cached)
+
+	return cached, nil
+}
+
+type canonicalDirCacheEntry struct {
+	modTime time.Time
+	entries []os.DirEntry
+}
+
+var dirCache sync.Map // map[string]*canonicalDirCacheEntry
+
+func findMatchingCanonicalSignatureInSet(stream []byte, streamFormat, canonicalDir string, allowed map[string]struct{}) (bool, string, error) {
+	dirInfo, err := os.Stat(canonicalDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, "", nil
+		}
 		return false, "", err
 	}
 
+	var entries []os.DirEntry
+	if val, ok := dirCache.Load(canonicalDir); ok {
+		cached := val.(*canonicalDirCacheEntry)
+		if cached.modTime.Equal(dirInfo.ModTime()) {
+			entries = cached.entries
+		}
+	}
+
+	if entries == nil {
+		entries, err = os.ReadDir(canonicalDir)
+		if err != nil {
+			return false, "", err
+		}
+		dirCache.Store(canonicalDir, &canonicalDirCacheEntry{
+			modTime: dirInfo.ModTime(),
+			entries: entries,
+		})
+	}
+
 	var firstDecodeErr error
-	for name, sig := range sigs {
+
+	// Pre-extract stream features once outside the loop to avoid O(N) redundant extractions
+	streamFeatures, streamErr := extractFingerprintFeatures(stream, streamFormat)
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
 		if allowed != nil {
 			if _, ok := allowed[name]; !ok {
 				continue
 			}
 		}
-		sigFormat := fingerprintFormatForName(name)
-		matched, _, err := matchSignatureWithFormats(stream, streamFormat, sig, sigFormat)
-		if err == nil {
-			if matched {
-				return true, name, nil
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		cached, err := getCachedSignature(canonicalDir, name, info)
+		if err != nil {
+			continue
+		}
+
+		if len(cached.raw) > 0 && bytes.Contains(stream, cached.raw) {
+			return true, name, nil
+		}
+
+		if streamErr != nil {
+			if firstDecodeErr == nil {
+				firstDecodeErr = streamErr
 			}
 			continue
 		}
-		if firstDecodeErr == nil {
-			firstDecodeErr = err
+
+		if len(cached.features) == 0 || len(streamFeatures) < len(cached.features) {
+			continue
 		}
-		if len(sig) > 0 && bytes.Contains(stream, sig) {
+
+		score := maxFeatureSimilarity(streamFeatures, cached.features, fingerprintCoefficientCount)
+		if score >= fingerprintSimilarityFloor {
 			return true, name, nil
 		}
 	}
@@ -202,7 +296,7 @@ func signatureCampaignArtist(ctx context.Context, dbMgr *DBManager, campaigns []
 		return "", fmt.Errorf("no active campaign found for %s at %s", filename, info.ModTime().Format(time.RFC3339))
 	}
 	if dbMgr != nil {
-		_ = dbMgr.UpsertSignatureFile(ctx, bucket, filename, info.ModTime(), campaignArtist, "")
+		_ = dbMgr.UpsertSignatureFile(ctx, bucket, filename, info.ModTime(), campaignArtist, "", "")
 	}
 	return campaignArtist, nil
 }
@@ -226,7 +320,7 @@ func allowedCanonicalSignatureNames(ctx context.Context, dbMgr *DBManager, campa
 		if entry.IsDir() {
 			continue
 		}
-		campaignArtist, err := signatureCampaignArtist(ctx, dbMgr, campaigns, "canonical", entry.Name(), canonicalDir)
+		campaignArtist, err := signatureCampaignArtist(ctx, dbMgr, campaigns, BucketCanonical, entry.Name(), canonicalDir)
 		if err != nil {
 			continue
 		}

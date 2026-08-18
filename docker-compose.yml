@@ -8,7 +8,6 @@ services:
     environment:
       - ENVIRONMENT=dev
       - TRANSCRIPTION_URL=http://whisper:8000/v1/audio/transcriptions
-      - TRANSCRIPTION_WS_URL=ws://whisper:8000/v1/audio/transcriptions
       - BASE_URL=http://localhost:8080
     volumes:
       - ./data:/data
@@ -26,8 +25,3 @@ services:
       timeout: 5s
       retries: 20
       start_period: 10s
-    volumes:
-      - whisper_models:/root/.cache/huggingface
-
-volumes:
-  whisper_models:

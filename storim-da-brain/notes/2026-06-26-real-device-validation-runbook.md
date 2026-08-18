@@ -23,7 +23,7 @@ Later configured windows are:
 - `just test` passes
 - `just smoke-live-mock` passes
 - The target phone has recent chat history with the sender phone
-- The sender phone is a secondary number you are comfortable linking through `whatsmeow`
+- The sender phone is another number you are comfortable linking through `whatsmeow`
 - The target number is reachable and not blocked/restricted
 
 ## 1. Warm Up the Real Target Number

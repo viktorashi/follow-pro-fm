@@ -1,3 +1,6 @@
+//go:build e2e
+// +build e2e
+
 package poller
 
 import (
@@ -10,9 +13,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/a-h/templ"
-	"github.com/labstack/echo/v5"
 )
 
 func TestRenderDashboardTemplates(t *testing.T) {
@@ -21,23 +24,26 @@ func TestRenderDashboardTemplates(t *testing.T) {
 	state.UnusedAudios = 3
 	state.UsedAudios = 7
 	state.Connections = []WAConnectionState{
-		{Phone: CanonicalSenderPhone, Status: StatusPairingRequired, WhatsAppConnected: true, QRCodeData: "data:image/png;base64,Zm9v"},
+		{Phone: "+40700000001", Status: StatusPairingRequired, WhatsAppConnected: true, QRCodeData: "data:image/png;base64,Zm9v"},
 	}
 
 	chunks := []ReviewChunk{{
 		Name:    "BTS - Butter.mp3",
 		Size:    128,
-		ModTime: "2026-06-27 12:00:00",
+		ModTime: time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC),
 		PlayURL: "/api/unreviewed/file?name=BTS+-+Butter.mp3",
 	}}
 	schedules := []ScheduleEntry{{Date: "2026-06-23", TargetMatches: []int{1, 3, 5}}}
 	files := []FileInfo{{Name: "audio.ogg", Path: "audios/audio.ogg", Size: 42, ModTime: "2026-06-27 12:00:00"}}
 	logs := []RadioLog{{ID: 1, PlayedDatetime: "2026-06-27 12:00:00", Artist: "BTS", Title: "Dynamite"}}
 
+	persons := []Person{{ID: 1, Name: "Test Sender", Slug: "test-sender"}}
+	personAudios := map[string]PersonAudioFiles{"test-sender": {Active: []string{"audio.ogg"}}}
+
 	components := map[string]templ.Component{
 		"Layout":          Layout("T"),
 		"Login":           Login(),
-		"Dashboard":       Dashboard(state, chunks, nil, []string{CanonicalSenderPhone}, schedules, []string{"BTS", "Ariana", "The Weeknd"}),
+		"Dashboard":       Dashboard(state, chunks, nil, []string{"+40700000001"}, schedules, []string{"BTS", "Ariana", "The Weeknd"}, map[string][]string{}, persons, personAudios),
 		"StatusComponent": StatusComponent(state),
 		"SongComponent":   SongComponent(state.CurrentSong),
 		"AudioStats":      AudioStatsComponent(state),
@@ -63,7 +69,9 @@ func TestRenderDashboardTemplates(t *testing.T) {
 func TestRenderDashboardTemplatesBodies(t *testing.T) {
 	state := NewStateManager().Get()
 	state.CurrentSong = "BTS - Dynamite"
-	state.Connections = []WAConnectionState{{Phone: CanonicalSenderPhone, Status: StatusConnected, WhatsAppConnected: true}}
+	state.Connections = []WAConnectionState{{Phone: "+40700000001", Status: StatusConnected, WhatsAppConnected: true}}
+	persons := []Person{{ID: 1, Name: "Test Sender", Slug: "test-sender"}}
+	personAudios := map[string]PersonAudioFiles{"test-sender": {Active: []string{"audio.ogg"}}}
 
 	cases := []struct {
 		name   string
@@ -73,7 +81,7 @@ func TestRenderDashboardTemplatesBodies(t *testing.T) {
 		{
 			name: "Dashboard",
 			render: func(buf *bytes.Buffer) error {
-				return Dashboard(state, nil, nil, []string{CanonicalSenderPhone}, []ScheduleEntry{{Date: "2026-06-23", TargetMatches: []int{1, 3}}}, []string{"BTS", "Ariana", "The Weeknd"}).Render(context.Background(), buf)
+				return Dashboard(state, nil, nil, []string{"+40700000001"}, []ScheduleEntry{{Date: "2026-06-23", TargetMatches: []int{1, 3}}}, []string{"BTS", "Ariana", "The Weeknd"}, map[string][]string{}, persons, personAudios).Render(context.Background(), buf)
 			},
 			want: "Daily RNG Schedule",
 		},
@@ -177,7 +185,7 @@ func TestSSEEventMarshalAndBufferRead(t *testing.T) {
 
 func TestHandleUnreviewedCropAndHelpers(t *testing.T) {
 	dataDir := t.TempDir()
-	unreviewedDir := filepath.Join(dataDir, "signatures", "unreviewed")
+	unreviewedDir := filepath.Join(dataDir, DirSignatures, BucketUnreviewed)
 	if err := os.MkdirAll(unreviewedDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
@@ -212,7 +220,7 @@ func TestHandleUnreviewedCropAndHelpers(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	canonical, err := os.ReadFile(filepath.Join(dataDir, "signatures", "canonical", filename))
+	canonical, err := os.ReadFile(filepath.Join(dataDir, DirSignatures, BucketCanonical, filename))
 	if err != nil {
 		t.Fatalf("ReadFile(canonical) error = %v", err)
 	}
@@ -255,13 +263,10 @@ func TestListScheduleEntriesAndDashboardPhones(t *testing.T) {
 	phones := dashboardUploadPhones([]WAConnectionState{
 		{Phone: "+40111222333"},
 		{Phone: "40111222333"},
-		{Phone: CanonicalSenderPhone},
+		{Phone: "+40700000001"},
 	})
-	if len(phones) != 2 || phones[0] != CanonicalSenderPhone || phones[1] != "+40111222333" {
+	if len(phones) != 2 || phones[0] != "+40111222333" || phones[1] != "+40700000001" {
 		t.Fatalf("dashboardUploadPhones() = %+v", phones)
-	}
-	if !isKnownDashboardPhone("40111222333", []WAConnectionState{{Phone: "+40111222333"}}) {
-		t.Fatal("expected normalized dashboard phone match")
 	}
 }
 
@@ -277,10 +282,6 @@ func multipartNewWriter(t *testing.T, body *bytes.Buffer, fields map[string]stri
 		t.Fatalf("Close() error = %v", err)
 	}
 	return w.FormDataContentType()
-}
-
-func newTestEcho() *echo.Echo {
-	return echo.New()
 }
 
 func nilContext() context.Context {

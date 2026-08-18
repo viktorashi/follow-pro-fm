@@ -5,6 +5,7 @@
 *.db
 *.bak
 coverage.out
+junit.xml
 *.bin
 .env
 bin/

@@ -1,7 +1,9 @@
 # .dockerignore - keep the build context small and avoid leaking secrets
+.env
 wapp.sqlite
 tests/
 coverage.out
+junit.xml
 pro-fm-poller
 bin/
 *.sqlite

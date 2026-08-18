@@ -29,9 +29,8 @@ Ordered from oldest relevant verified slice to newest:
 ### R2. Multiple WhatsApp connections
 
 - Dynamic sender phone add flow exists on the dashboard.
-- Each phone gets its own sqlite database file and audio pool.
-- Canonical sender still uses root `data/audios/`.
-- Audio lookup remains non-recursive per phone pool.
+- Each phone gets its own sqlite database file and is assigned to a person.
+- Audio lookup remains non-recursive per person pool.
 - Send-state reuse protection remains global across connections.
 
 ### R3. Circular audio buffer
@@ -55,10 +54,10 @@ Ordered from oldest relevant verified slice to newest:
 - Schedule persistence and edit API are present.
 - Schedule writes are bounded to campaign weekdays and valid match indices.
 
-### R6. Dashboard per-phone upload
+### R6. Dashboard per-person upload
 
-- Dashboard upload form targets a chosen phone.
-- Upload endpoint writes `.ogg` files into the selected phone's active pool.
+- Dashboard upload form targets a chosen person.
+- Upload endpoint writes `.ogg` files into the selected person's active pool.
 
 ## Verified Commands
 
