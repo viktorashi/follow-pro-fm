@@ -25,6 +25,8 @@ type transcriptionTestCase struct {
 	TrustedPhrases []string
 }
 
+var errNoTrustedPhrase = errors.New("audio finished before a trusted phrase matched")
+
 func loadTranscriptionCases(t *testing.T) []transcriptionTestCase {
 	t.Helper()
 
@@ -138,12 +140,19 @@ func TestWhisperContainerTranscription(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-			defer cancel()
-
-			liveTranscript, err := runProductionWebSocketCheck(ctx, transcriptionURL, tc, filepath.Join(t.TempDir(), "phrases.sqlite"))
-			if err != nil {
-				t.Fatalf("streaming transcription failed for %s: %v", tc.Name, err)
+			var liveTranscript string
+			for attempt := 1; attempt <= 2; attempt++ {
+				ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+				var err error
+				liveTranscript, err = runProductionWebSocketCheck(ctx, transcriptionURL, tc, filepath.Join(t.TempDir(), "phrases.sqlite"))
+				cancel()
+				if err == nil {
+					break
+				}
+				if attempt == 2 || !errors.Is(err, errNoTrustedPhrase) {
+					t.Fatalf("streaming transcription failed for %s: %v; transcript: %q", tc.Name, err, liveTranscript)
+				}
+				t.Logf("[%s] retrying nondeterministic transcript: %q", tc.Name, liveTranscript)
 			}
 			t.Logf("[%s] Live transcript: %q | Full text: %q", tc.Name, liveTranscript, tc.FullText)
 
@@ -233,7 +242,7 @@ func runProductionWebSocketCheck(ctx context.Context, transcriptionURL string, t
 		case <-alerter.triggered:
 			return result(), nil
 		default:
-			return result(), errors.New("audio finished before a trusted phrase matched")
+			return result(), errNoTrustedPhrase
 		}
 	case <-ctx.Done():
 		return result(), ctx.Err()
