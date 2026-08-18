@@ -3,6 +3,7 @@ package poller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/url"
 	"strings"
@@ -12,7 +13,9 @@ import (
 	"github.com/coder/websocket"
 )
 
-const transcriptionSessionBytes = 10 * 16000 * 2
+const transcriptionSessionBytes = 9 * 16000 * 2
+
+var errTranscriptionAudioClosed = errors.New("transcription audio closed")
 
 // StartStreamingTranscription connects any MP3 chunk source to the production
 // ffmpeg and Whisper WebSocket pipeline.
@@ -77,6 +80,9 @@ func (t *WebSocketTranscriber) Start(ctx context.Context) {
 	go func() {
 		for ctx.Err() == nil {
 			err := t.run(ctx)
+			if errors.Is(err, errTranscriptionAudioClosed) {
+				return
+			}
 
 			if ctx.Err() == nil && err != nil {
 				time.Sleep(2 * time.Second)
@@ -116,7 +122,15 @@ func (t *WebSocketTranscriber) run(ctx context.Context) error {
 			return nil
 		case <-readDone:
 			return nil
-		case audio := <-t.audio:
+		case audio, ok := <-t.audio:
+			if !ok {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-readDone:
+					return errTranscriptionAudioClosed
+				}
+			}
 			if err := conn.Write(ctx, websocket.MessageBinary, audio); err != nil {
 				return err
 			}
