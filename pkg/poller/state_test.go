@@ -124,3 +124,50 @@ func TestStateManagerKeepsRuntimeStatusWhenConnectionsChange(t *testing.T) {
 		t.Fatalf("status = %q, want %q", state.Status, StatusPolling)
 	}
 }
+
+func TestStateManagerSnapshotsDoNotExposeMutableState(t *testing.T) {
+	sm := NewStateManager()
+	personID := int64(7)
+	sm.Update(func(s *AppState) {
+		s.Persons = []Person{{ID: personID, Name: "Alice"}}
+		s.Connections = []WAConnectionState{{Phone: "+401", PersonID: &personID, PersonName: "Alice"}}
+	})
+
+	snapshot := sm.Get()
+	snapshot.Persons[0].Name = "mutated"
+	snapshot.Connections[0].Phone = "+999"
+	*snapshot.Connections[0].PersonID = 99
+
+	got := sm.Get()
+	if got.Persons[0].Name != "Alice" || got.Connections[0].Phone != "+401" || *got.Connections[0].PersonID != 7 {
+		t.Fatalf("Get() exposed mutable state: %+v", got)
+	}
+
+	first := sm.Subscribe()
+	second := sm.Subscribe()
+	sm.Update(func(s *AppState) { s.CurrentSong = "BTS" })
+	firstSnapshot := <-first
+	secondSnapshot := <-second
+	firstSnapshot.Connections[0].Phone = "+888"
+	if secondSnapshot.Connections[0].Phone != "+401" || sm.Get().Connections[0].Phone != "+401" {
+		t.Fatal("subscriber snapshots share mutable connection storage")
+	}
+}
+
+func TestStateManagerReplaceAndRemoveConnection(t *testing.T) {
+	sm := NewStateManager()
+	sm.Update(func(s *AppState) {
+		s.Connections = []WAConnectionState{{Phone: "+401", Status: StatusConnected, WhatsAppConnected: true}}
+	})
+
+	sm.ReplaceConnectionPhone("+401", "+402")
+	if got := sm.Get().Connections[0].Phone; got != "+402" {
+		t.Fatalf("replaced phone = %q, want +402", got)
+	}
+
+	sm.RemoveConnection("+402")
+	state := sm.Get()
+	if len(state.Connections) != 0 || state.WhatsAppConnected || state.Status != StatusInitializing {
+		t.Fatalf("state after removing last connection = %+v", state)
+	}
+}

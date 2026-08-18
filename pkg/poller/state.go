@@ -76,6 +76,8 @@ func (s *AppState) reconcileConnectionState() {
 	switch s.Status {
 	case StatusInitializing, StatusConnected, StatusPairingRequired, StatusError:
 		switch {
+		case len(s.Connections) == 0:
+			s.Status = StatusInitializing
 		case anyPairingRequired:
 			s.Status = StatusPairingRequired
 		case anyConnected:
@@ -111,12 +113,13 @@ func (sm *StateManager) Update(fn func(state *AppState)) {
 	defer sm.mu.Unlock()
 
 	fn(&sm.state)
+	sm.state = cloneAppState(sm.state)
 	sm.state.reconcileConnectionState()
 
 	// Broadcast
 	for ch := range sm.subscribers {
 		select {
-		case ch <- sm.state:
+		case ch <- cloneAppState(sm.state):
 		default:
 			// If channel is blocked, skip it to avoid blocking the state machine
 		}
@@ -139,7 +142,7 @@ func (sm *StateManager) UpdateConnection(phone string, fn func(conn *WAConnectio
 	// Broadcast
 	for ch := range sm.subscribers {
 		select {
-		case ch <- sm.state:
+		case ch <- cloneAppState(sm.state):
 		default:
 		}
 	}
@@ -172,7 +175,7 @@ func (sm *StateManager) RemoveConnection(phone string) {
 	// Broadcast
 	for ch := range sm.subscribers {
 		select {
-		case ch <- sm.state:
+		case ch <- cloneAppState(sm.state):
 		default:
 		}
 	}
@@ -182,7 +185,19 @@ func (sm *StateManager) RemoveConnection(phone string) {
 func (sm *StateManager) Get() AppState {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
-	return sm.state
+	return cloneAppState(sm.state)
+}
+
+func cloneAppState(state AppState) AppState {
+	state.Persons = append([]Person(nil), state.Persons...)
+	state.Connections = append([]WAConnectionState(nil), state.Connections...)
+	for i := range state.Connections {
+		if state.Connections[i].PersonID != nil {
+			personID := *state.Connections[i].PersonID
+			state.Connections[i].PersonID = &personID
+		}
+	}
+	return state
 }
 
 // Subscribe returns a channel that receives state updates.
