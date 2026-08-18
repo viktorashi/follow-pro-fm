@@ -201,7 +201,6 @@ func runProductionWebSocketCheck(ctx context.Context, transcriptionURL string, t
 		transcriptMu.Unlock()
 		poller.HandleStreamingTranscript(transcript)
 	})
-	transcriber.Start(ctx)
 	for !transcriber.IsConnected() {
 		select {
 		case <-ctx.Done():
