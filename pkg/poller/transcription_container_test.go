@@ -185,12 +185,7 @@ func TestWhisperContainerTranscription(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 			defer cancel()
 
-			audioBytes := tc.AudioBytes
-			if len(audioBytes) > transcriptionTailBytes {
-				audioBytes = audioBytes[:transcriptionTailBytes]
-			}
-
-			liveTranscript, err := transcriber(ctx, audioBytes)
+			liveTranscript, overlap, matched, err := transcribeMatchingWindow(ctx, transcriber, tc)
 			if err != nil {
 				t.Fatalf("Transcribe failed for %s: %v", tc.Name, err)
 			}
@@ -200,8 +195,6 @@ func TestWhisperContainerTranscription(t *testing.T) {
 				t.Fatalf("[%s] Got empty transcription from Whisper", tc.Name)
 			}
 
-			matched := strings.Contains(normalizeTriggerValue(liveTranscript), normalizeTriggerValue(tc.FullText)) || strings.Contains(normalizeTriggerValue(tc.FullText), normalizeTriggerValue(liveTranscript))
-			overlap := transcriptWordOverlap(liveTranscript, tc.FullText)
 			t.Logf("[%s] Reference overlap ratio: %.2f%%", tc.Name, overlap*100)
 
 			if !matched && overlap < 0.45 {
@@ -228,6 +221,41 @@ func TestWhisperContainerTranscription(t *testing.T) {
 	}
 }
 
+func transcribeMatchingWindow(ctx context.Context, transcriber func(context.Context, []byte) (string, error), tc transcriptionTestCase) (string, float64, bool, error) {
+	bestTranscript := ""
+	bestOverlap := 0.0
+	for start := 0; start < len(tc.AudioBytes); start += transcriptionTailBytes {
+		end := start + transcriptionTailBytes
+		if end > len(tc.AudioBytes) {
+			end = len(tc.AudioBytes)
+		}
+
+		transcript, err := transcriber(ctx, tc.AudioBytes[start:end])
+		if err != nil {
+			return "", 0, false, err
+		}
+		matched := transcriptContainsReference(transcript, tc.FullText)
+		overlap := transcriptWordOverlap(transcript, tc.FullText)
+		if overlap > bestOverlap {
+			bestTranscript = transcript
+			bestOverlap = overlap
+		}
+		if matched || overlap >= 0.45 {
+			return transcript, overlap, true, nil
+		}
+	}
+	return bestTranscript, bestOverlap, false, nil
+}
+
+func transcriptContainsReference(transcript, reference string) bool {
+	transcript = normalizeTriggerValue(transcript)
+	reference = normalizeTriggerValue(reference)
+	if transcript == "" || reference == "" {
+		return false
+	}
+	return strings.Contains(transcript, reference)
+}
+
 func transcriptWordOverlap(s1, s2 string) float64 {
 	s1 = normalizeTriggerValue(s1)
 	s2 = normalizeTriggerValue(s2)
@@ -246,9 +274,5 @@ func transcriptWordOverlap(s1, s2 string) float64 {
 			intersection++
 		}
 	}
-	minLen := len(w1)
-	if len(w2) < minLen {
-		minLen = len(w2)
-	}
-	return float64(intersection) / float64(minLen)
+	return float64(intersection) / float64(len(w2))
 }
