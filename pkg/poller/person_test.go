@@ -162,6 +162,9 @@ func TestPoller_doTriggerVoiceNote_MultiplePhonesPerPersonDrawDistinctAudios(t *
 		AudiosDir:   audiosDir,
 		DBMgr:       dbMgr,
 		SendVoiceNote: func(senderPhone, targetPhone, audioPath string) error {
+			if _, err := os.Stat(audioPath); err != nil {
+				return err
+			}
 			sentAudios = append(sentAudios, audioPath)
 			return nil
 		},

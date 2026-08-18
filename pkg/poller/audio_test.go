@@ -88,9 +88,36 @@ func TestGetRandomAvailableAudioSkipsGloballyUsedContentHashes(t *testing.T) {
 
 	_, _, err = GetRandomAvailableAudio(rootDir, func(hash string) (bool, error) {
 		return dbMgr.IsAudioHashUsed(context.Background(), hash)
-	})
+	}, nil)
 	if err == nil {
 		t.Fatalf("Expected audio pool to be exhausted when only globally used content remains")
+	}
+}
+
+func TestGetRandomAvailableAudioDoesNotMoveReservedCandidates(t *testing.T) {
+	dir := t.TempDir()
+	reservedPath := filepath.Join(dir, "reserved.ogg")
+	freshPath := filepath.Join(dir, "fresh.ogg")
+	if err := os.WriteFile(reservedPath, []byte("reserved"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(freshPath, []byte("fresh"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reservedHash, err := HashAudioFile(reservedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, _, err := GetRandomAvailableAudio(dir, nil, map[string]struct{}{reservedHash: {}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != freshPath {
+		t.Fatalf("selected %q, want %q", got, freshPath)
+	}
+	if _, err := os.Stat(reservedPath); err != nil {
+		t.Fatalf("reserved audio was moved before send: %v", err)
 	}
 }
 

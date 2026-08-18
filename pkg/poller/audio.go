@@ -91,7 +91,7 @@ func HashAudioFile(audioPath string) (string, error) {
 	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
 }
 
-func GetRandomAvailableAudio(audiosDir string, isHashUsed func(string) (bool, error)) (string, string, error) {
+func GetRandomAvailableAudio(audiosDir string, isHashUsed func(string) (bool, error), reservedHashes map[string]struct{}) (string, string, error) {
 	entries, err := os.ReadDir(audiosDir)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to read audios directory: %w", err)
@@ -116,6 +116,9 @@ func GetRandomAvailableAudio(audiosDir string, isHashUsed func(string) (bool, er
 		contentHash, err := HashAudioFile(candidate)
 		if err != nil {
 			return "", "", err
+		}
+		if _, reserved := reservedHashes[contentHash]; reserved {
+			continue
 		}
 		if isHashUsed == nil {
 			return candidate, contentHash, nil
