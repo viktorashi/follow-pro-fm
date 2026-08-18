@@ -5,7 +5,7 @@ Alwayss, use the ponytail skill (It might have already been injected in your con
 Never merge / push onto main by yourself unless specifically prompted otherwise.
 That's what's actually deploying to main through CI / CD
 For anything you're given, make atomic, structured ordered commits. Don't leave the worktree dirty.
-Don't run tests / formatting / linting / typechecks / whatever manually. Committing will trigger the git hooks so don't worry about it.
+Don't run tests (unless you literally just wrote them) / formatting / linting / typechecks / whatever manually. Committing will trigger the git hooks so don't worry about it.
 
 Only amend commits if they've not yet been pushed. So that you NEVER have to FORCE-PUSH.
 
