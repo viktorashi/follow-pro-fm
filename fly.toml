@@ -2,12 +2,16 @@
 # See https://fly.io/docs/reference/configuration/
 
 app = 'pro-fm-poller'
-primary_region = 'fra'  # Frankfurt (FRA) - closest available to Romania
+primary_region = 'fra' # Frankfurt (FRA) - closest available to Romania
 
 [build]
 
 [env]
 TZ = 'Europe/Bucharest'
+ENVIRONMENT = 'production'
+TELEGRAM_CHAT_ID = 5943195496
+EMAIL_FROM = 'ioanvictorstan@gmail.com'
+TARGET_PHONE = '+40771001872'
 
 # Persistent volume for everything the app needs
 [mounts]
@@ -15,9 +19,9 @@ source = 'pro_fm_data'
 destination = '/data'
 
 [http_service]
-  internal_port = 8080
-  force_https = true
-  auto_stop_machines = false
-  auto_start_machines = true
-  max_machines_running = 1
-  min_machines_running = 1
+internal_port = 8080
+force_https = true
+auto_stop_machines = false
+auto_start_machines = true
+max_machines_running = 1
+min_machines_running = 1
