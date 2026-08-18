@@ -104,7 +104,7 @@ func TestWhisperContainerTranscription(t *testing.T) {
 	imageName := "profm-whisper-test:local"
 	testPort := 18000
 	healthURL := fmt.Sprintf("http://127.0.0.1:%d/health", testPort)
-	wsURL := fmt.Sprintf("ws://127.0.0.1:%d/v1/audio/transcriptions?vad_filter=true", testPort)
+	transcriptionURL := fmt.Sprintf("http://127.0.0.1:%d/v1/audio/transcriptions", testPort)
 
 	if out, err := exec.Command("docker", "build", "-q", "-t", imageName, "../../whisper-server").CombinedOutput(); err != nil {
 		t.Fatalf("docker build failed: %v, output: %s", err, out)
@@ -138,7 +138,7 @@ func TestWhisperContainerTranscription(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 			defer cancel()
 
-			liveTranscript, err := runProductionWebSocketCheck(ctx, wsURL, tc, filepath.Join(t.TempDir(), "phrases.sqlite"))
+			liveTranscript, err := runProductionWebSocketCheck(ctx, transcriptionURL, tc, filepath.Join(t.TempDir(), "phrases.sqlite"))
 			if err != nil {
 				t.Fatalf("streaming transcription failed for %s: %v", tc.Name, err)
 			}
@@ -173,7 +173,7 @@ func (a *transcriptionTriggerAlerter) AlertSuccess(AlertEvent) error {
 	return nil
 }
 
-func runProductionWebSocketCheck(ctx context.Context, wsURL string, tc transcriptionTestCase, dbPath string) (string, error) {
+func runProductionWebSocketCheck(ctx context.Context, transcriptionURL string, tc transcriptionTestCase, dbPath string) (string, error) {
 	db, err := NewDBManager(dbPath)
 	if err != nil {
 		return "", err
@@ -194,7 +194,8 @@ func runProductionWebSocketCheck(ctx context.Context, wsURL string, tc transcrip
 	}
 	var transcriptMu sync.Mutex
 	lastTranscript := ""
-	transcriber := NewWebSocketTranscriber(wsURL, func(transcript string) {
+	mp3 := make(chan []byte)
+	transcriber := StartStreamingTranscription(ctx, mp3, transcriptionURL, func(transcript string) {
 		transcriptMu.Lock()
 		lastTranscript = transcript
 		transcriptMu.Unlock()
@@ -209,8 +210,6 @@ func runProductionWebSocketCheck(ctx context.Context, wsURL string, tc transcrip
 		}
 	}
 
-	mp3 := make(chan []byte)
-	NewPCMConverter(mp3, transcriber.Audio()).Start(ctx)
 	go func() {
 		defer close(mp3)
 		const streamChunkBytes = 8192

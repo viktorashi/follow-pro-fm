@@ -146,3 +146,14 @@ func TestWebsocketTranscriptAcceptsPlainText(t *testing.T) {
 		t.Fatalf("transcript = %q, want %q", got, want)
 	}
 }
+
+func TestTranscriptionWebSocketURL(t *testing.T) {
+	for input, want := range map[string]string{
+		"http://whisper:8000/v1/audio/transcriptions": "ws://whisper:8000/v1/audio/transcriptions?vad_filter=true",
+		"wss://whisper/v1/audio/transcriptions":       "wss://whisper/v1/audio/transcriptions?vad_filter=true",
+	} {
+		if got := transcriptionWebSocketURL(input); got != want {
+			t.Fatalf("transcriptionWebSocketURL(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
