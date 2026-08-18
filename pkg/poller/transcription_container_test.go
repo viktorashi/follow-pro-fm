@@ -107,8 +107,10 @@ func TestWhisperContainerTranscription(t *testing.T) {
 	healthURL := fmt.Sprintf("http://127.0.0.1:%d/health", testPort)
 	transcriptionURL := fmt.Sprintf("http://127.0.0.1:%d/v1/audio/transcriptions", testPort)
 
-	if out, err := exec.Command("docker", "build", "-q", "-t", imageName, "../../whisper-server").CombinedOutput(); err != nil {
-		t.Fatalf("docker build failed: %v, output: %s", err, out)
+	if os.Getenv("WHISPER_TEST_IMAGE_READY") != "1" {
+		if out, err := exec.Command("docker", "build", "-q", "-t", imageName, "../../whisper-server").CombinedOutput(); err != nil {
+			t.Fatalf("docker build failed: %v, output: %s", err, out)
+		}
 	}
 	imageID, err := exec.Command("docker", "image", "inspect", imageName, "--format", "{{.Id}}").Output()
 	if err != nil {
