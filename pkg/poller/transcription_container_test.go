@@ -185,7 +185,12 @@ func TestWhisperContainerTranscription(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 			defer cancel()
 
-			liveTranscript, err := transcriber(ctx, tc.AudioBytes)
+			audioBytes := tc.AudioBytes
+			if len(audioBytes) > transcriptionTailBytes {
+				audioBytes = audioBytes[:transcriptionTailBytes]
+			}
+
+			liveTranscript, err := transcriber(ctx, audioBytes)
 			if err != nil {
 				t.Fatalf("Transcribe failed for %s: %v", tc.Name, err)
 			}

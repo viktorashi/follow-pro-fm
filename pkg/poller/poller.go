@@ -23,11 +23,12 @@ import (
 )
 
 const (
-	MaxDailyMatches      = 6
-	followProFMKeyword   = "follow profm"
-	dashcamAfterDuration = 2 * time.Minute
-	fingerprintTailBytes = 768 * 1024
-	contestCaptureWindow = 2 * time.Second
+	MaxDailyMatches        = 6
+	followProFMKeyword     = "follow profm"
+	dashcamAfterDuration   = 2 * time.Minute
+	fingerprintTailBytes   = 768 * 1024
+	contestCaptureWindow   = 2 * time.Second
+	transcriptionTailBytes = 5 * 16000 // 5s of the 128kbps MP3 stream.
 )
 
 var bucharestLocation = loadBucharestLocation()
@@ -1076,9 +1077,8 @@ func (c *transcriptionContestChecker) Check(now time.Time) {
 	defer cancel()
 
 	audioData := capture.Audio.Data
-	const bytesPerSec = 16000
-	if len(audioData) > 60*bytesPerSec {
-		audioData = audioData[len(audioData)-60*bytesPerSec:]
+	if len(audioData) > transcriptionTailBytes {
+		audioData = audioData[len(audioData)-transcriptionTailBytes:]
 	}
 
 	transcript, err := p.Transcribe(ctx, audioData)
