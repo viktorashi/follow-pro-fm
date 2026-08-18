@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -28,6 +28,9 @@ jobs:
           cache-dependency-path: "go.sum"
 
       - uses: docker/setup-buildx-action@v3
+
+      - name: Create tool cache directory
+        run: mkdir -p bin
 
       - name: Restore ffmpeg cache
         uses: actions/cache@v4
