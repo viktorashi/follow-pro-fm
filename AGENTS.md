@@ -21,18 +21,10 @@ Whichever change you make, keep in mind with utmost importance, that the state o
 
 Instead some other artists' songs need to be playing in between when you redetect a new song from the campaign artist.
 
-The dates are given in main as so:
-
-```go
- // Load campaigns in memory
- activeCampaigns := []poller.Campaign{
-  {StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
-  {StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana"},
-  {StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd"},
- }
- //posibil extensibil
-
-```
+`poller.DefaultActiveCampaigns` is the single source of truth for every contest
+window. Shakira was intentionally added after the original three campaigns.
+Never duplicate or independently cap those dates elsewhere; extend only that
+array and derive polling, schedules, and dashboard windows from it.
 
 Also these rules, which you must follow strictly are in: `rulez/` in some PDF's or whatever else i end up adding in there.
 

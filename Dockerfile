@@ -36,7 +36,7 @@ COPY --from=builder /src/bin/ffmpeg /src/bin/ffprobe /usr/local/bin/
 
 
 
-# /data is where the persistent volume will be mounted for wapp.sqlite
+# /data is where the persistent app and per-sender session databases are mounted.
 RUN mkdir -p /data
 
 COPY static ./static
