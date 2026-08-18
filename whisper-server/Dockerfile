@@ -6,12 +6,14 @@ RUN uv pip install --python .venv/bin/python "faster-whisper==${FASTER_WHISPER_V
 
 FROM ${SPEACHES_IMAGE}
 ARG FASTER_WHISPER_VERSION=1.2.1
-RUN uv pip install --python .venv/bin/python "faster-whisper==${FASTER_WHISPER_VERSION}"
+RUN uv pip install --python .venv/bin/python "faster-whisper==${FASTER_WHISPER_VERSION}" && \
+    sed -i 's/turn_detection: TurnDetection | NotGiven/turn_detection: TurnDetection | None | NotGiven/' src/speaches/types/realtime.py
 
 # Copy only the downloaded model cache, leaving behind any uv/pip download cache
 COPY --from=downloader /home/ubuntu/.cache/huggingface /home/ubuntu/.cache/huggingface
 
 ENV UVICORN_HOST="0.0.0.0" \
+    LOOPBACK_HOST_URL="http://127.0.0.1:8000" \
     ENABLE_UI="false" \
     WHISPER__INFERENCE_DEVICE="cpu" \
     WHISPER__COMPUTE_TYPE="int8" \

@@ -6,6 +6,7 @@ dockerfile = "Dockerfile"
 
 [env]
 UVICORN_HOST = "0.0.0.0"
+LOOPBACK_HOST_URL = "http://127.0.0.1:8000"
 ENABLE_UI = "false"
 WHISPER__INFERENCE_DEVICE = "cpu"
 WHISPER__COMPUTE_TYPE = "int8"
