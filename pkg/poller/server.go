@@ -612,6 +612,10 @@ func (s *TelemetryServer) handleAudioUpload(c *echo.Context) error {
 	if personSlug == "" {
 		return c.String(http.StatusBadRequest, "Person is required")
 	}
+	audioDir, err := s.personAudioDir(c.Request().Context(), personSlug)
+	if err != nil {
+		return c.String(http.StatusBadRequest, "Unknown person")
+	}
 
 	form, err := c.MultipartForm()
 	if err != nil {
@@ -623,7 +627,6 @@ func (s *TelemetryServer) handleAudioUpload(c *echo.Context) error {
 		return c.String(http.StatusBadRequest, "At least one audio file is required")
 	}
 
-	audioDir := GetAudioDirForPerson(personSlug, s.audiosDir)
 	if err := os.MkdirAll(audioDir, 0755); err != nil {
 		return c.String(http.StatusInternalServerError, "Failed to prepare audio directory")
 	}
@@ -684,7 +687,10 @@ func (s *TelemetryServer) handleAudioPlay(c *echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid file name")
 	}
 
-	targetDir := GetAudioDirForPerson(slug, s.audiosDir)
+	targetDir, err := s.personAudioDir(c.Request().Context(), slug)
+	if err != nil {
+		return c.String(http.StatusBadRequest, "Unknown person")
+	}
 	filePath := filepath.Join(targetDir, filename)
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -864,8 +870,14 @@ func (s *TelemetryServer) handleBatchMoveAudios(c *echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "At least one file must be selected"})
 	}
 
-	srcDir := GetAudioDirForPerson(req.FromSlug, s.audiosDir)
-	dstDir := GetAudioDirForPerson(req.ToSlug, s.audiosDir)
+	srcDir, err := s.personAudioDir(c.Request().Context(), req.FromSlug)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unknown source person"})
+	}
+	dstDir, err := s.personAudioDir(c.Request().Context(), req.ToSlug)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unknown target person"})
+	}
 
 	if err := MoveAudioFiles(srcDir, dstDir, req.Files); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -876,6 +888,21 @@ func (s *TelemetryServer) handleBatchMoveAudios(c *echo.Context) error {
 		"status": "ok",
 		"moved":  len(req.Files),
 	})
+}
+
+func (s *TelemetryServer) personAudioDir(ctx context.Context, slug string) (string, error) {
+	slug = strings.TrimSpace(slug)
+	if s.dbMgr == nil || !isSafeFilename(slug) {
+		return "", fmt.Errorf("invalid person slug")
+	}
+	person, err := s.dbMgr.GetPersonBySlug(ctx, slug)
+	if err != nil {
+		return "", err
+	}
+	if !isSafeFilename(person.Slug) {
+		return "", fmt.Errorf("invalid stored person slug")
+	}
+	return filepath.Join(s.audiosDir, person.Slug), nil
 }
 
 // HydrateConnectionPersons loads persons and sender_sessions from the DB
