@@ -113,3 +113,65 @@ func TestTelemetryServer_HandleUnreviewedCropCopiesRecordedMetadataToCanonical(t
 		t.Fatalf("RecordedAt = %s, want %s", meta.RecordedAt.Format(time.RFC3339), recordedAt.Format(time.RFC3339))
 	}
 }
+
+func TestTelemetryServer_HandleBatchDeleteUnreviewed(t *testing.T) {
+	dataDir := t.TempDir()
+	unreviewedDir := filepath.Join(dataDir, DirSignatures, BucketUnreviewed)
+	if err := os.MkdirAll(unreviewedDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	files := []string{"chunk1.mp3", "chunk2.mp3", "chunk3.mp3"}
+	for _, f := range files {
+		if err := os.WriteFile(filepath.Join(unreviewedDir, f), []byte("dummy audio"), 0o644); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", f, err)
+		}
+	}
+
+	server := &TelemetryServer{dataDir: dataDir}
+	e := echo.New()
+
+	// 1. Test empty request
+	reqEmpty := httptest.NewRequest(http.MethodPost, "/api/unreviewed/batch-delete", strings.NewReader(`{"files":[]}`))
+	reqEmpty.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	recEmpty := httptest.NewRecorder()
+	if err := server.handleBatchDeleteUnreviewed(e.NewContext(reqEmpty, recEmpty)); err != nil {
+		t.Fatalf("handleBatchDeleteUnreviewed() error = %v", err)
+	}
+	if recEmpty.Code != http.StatusBadRequest {
+		t.Fatalf("empty files status = %d, want %d", recEmpty.Code, http.StatusBadRequest)
+	}
+
+	// 2. Test valid batch delete
+	payload := `{"files":["chunk1.mp3", "chunk2.mp3", "../unsafe.mp3"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/unreviewed/batch-delete", strings.NewReader(payload))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	if err := server.handleBatchDeleteUnreviewed(e.NewContext(req, rec)); err != nil {
+		t.Fatalf("handleBatchDeleteUnreviewed() error = %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var res struct {
+		Status  string `json:"status"`
+		Deleted int    `json:"deleted"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if res.Status != "ok" || res.Deleted != 2 {
+		t.Fatalf("res = %+v, want status ok and deleted 2", res)
+	}
+
+	if _, err := os.Stat(filepath.Join(unreviewedDir, "chunk1.mp3")); !os.IsNotExist(err) {
+		t.Fatalf("chunk1.mp3 still exists")
+	}
+	if _, err := os.Stat(filepath.Join(unreviewedDir, "chunk2.mp3")); !os.IsNotExist(err) {
+		t.Fatalf("chunk2.mp3 still exists")
+	}
+	if _, err := os.Stat(filepath.Join(unreviewedDir, "chunk3.mp3")); err != nil {
+		t.Fatalf("chunk3.mp3 should still exist, got err: %v", err)
+	}
+}
