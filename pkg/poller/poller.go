@@ -69,7 +69,7 @@ var DefaultActiveCampaigns = []Campaign{
 	{StartDate: "15-06-2026", EndDate: "26-06-2026", Artist: "BTS"},
 	{StartDate: "20-07-2026", EndDate: "31-07-2026", Artist: "Ariana"},
 	{StartDate: "10-08-2026", EndDate: "21-08-2026", Artist: "The Weeknd"},
-	{StartDate: "7-09-2026", EndDate: "18-09-2026", Artist: "Shakira"},
+	{StartDate: "07-09-2026", EndDate: "18-09-2026", Artist: "Shakira"},
 }
 
 // IsActive checks if the current time falls within the campaign date period

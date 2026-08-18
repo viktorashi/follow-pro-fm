@@ -311,6 +311,7 @@ func main() {
 		wappMutex.RLock()
 		if _, exists := wappClients[p]; exists {
 			wappMutex.RUnlock()
+			ensureSenderConnectionState(stateMgr, p, personID, personName, personSlug)
 			return nil // Already added
 		}
 		wappMutex.RUnlock()
