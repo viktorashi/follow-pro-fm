@@ -139,6 +139,9 @@ func (s *TelemetryServer) registerRoutes() {
 	protected.POST("/api/signatures/transcribe", s.handleTranscribeSignature)
 	protected.POST("/unreviewed/crop", s.handleUnreviewedCrop)
 	protected.POST("/unreviewed/delete", s.handleUnreviewedDelete)
+	protected.POST("/api/unreviewed/batch-delete", s.handleBatchDeleteUnreviewed)
+	protected.POST("/canonical/delete", s.handleCanonicalDelete)
+	protected.POST("/api/canonical/batch-delete", s.handleBatchDeleteCanonical)
 	protected.POST("/api/unreviewed/remux-all", s.handleRemuxAllUnreviewed)
 }
 
@@ -1246,7 +1249,106 @@ func (s *TelemetryServer) handleUnreviewedDelete(c *echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to delete file: " + err.Error()})
 	}
 
+	if s.dbMgr != nil {
+		_ = s.dbMgr.DeleteSignatureFile(c.Request().Context(), BucketUnreviewed, filename)
+	}
+
 	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
+}
+
+func (s *TelemetryServer) handleBatchDeleteUnreviewed(c *echo.Context) error {
+	var req struct {
+		Files []string `json:"files"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+	}
+	if len(req.Files) == 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "At least one file must be selected"})
+	}
+
+	unreviewedDir := filepath.Join(s.dataDir, DirSignatures, BucketUnreviewed)
+	deletedCount := 0
+
+	for _, filename := range req.Files {
+		filename = strings.TrimSpace(filename)
+		if !isSafeFilename(filename) {
+			continue
+		}
+		targetPath := filepath.Join(unreviewedDir, filename)
+		if err := os.Remove(targetPath); err == nil {
+			deletedCount++
+			if s.dbMgr != nil {
+				_ = s.dbMgr.DeleteSignatureFile(c.Request().Context(), BucketUnreviewed, filename)
+			}
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"status":  "ok",
+		"deleted": deletedCount,
+	})
+}
+
+func (s *TelemetryServer) handleCanonicalDelete(c *echo.Context) error {
+	filename := c.FormValue("filename")
+	if !isSafeFilename(filename) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid filename"})
+	}
+
+	canonicalDir := filepath.Join(s.dataDir, DirSignatures, BucketCanonical)
+	targetPath := filepath.Join(canonicalDir, filename)
+
+	if _, err := os.Stat(targetPath); err != nil {
+		if os.IsNotExist(err) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "file not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	if err := os.Remove(targetPath); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to delete file: " + err.Error()})
+	}
+
+	if s.dbMgr != nil {
+		_ = s.dbMgr.DeleteSignatureFile(c.Request().Context(), BucketCanonical, filename)
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
+}
+
+func (s *TelemetryServer) handleBatchDeleteCanonical(c *echo.Context) error {
+	var req struct {
+		Files []string `json:"files"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+	}
+	if len(req.Files) == 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "At least one file must be selected"})
+	}
+
+	canonicalDir := filepath.Join(s.dataDir, DirSignatures, BucketCanonical)
+	deletedCount := 0
+
+	for _, filename := range req.Files {
+		filename = strings.TrimSpace(filename)
+		if !isSafeFilename(filename) {
+			continue
+		}
+		targetPath := filepath.Join(canonicalDir, filename)
+		if err := os.Remove(targetPath); err == nil {
+			deletedCount++
+			if s.dbMgr != nil {
+				_ = s.dbMgr.DeleteSignatureFile(c.Request().Context(), BucketCanonical, filename)
+			}
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"status":  "ok",
+		"deleted": deletedCount,
+	})
 }
 
 func (s *TelemetryServer) listChunks(bucket string) ([]ReviewChunk, error) {
