@@ -53,7 +53,7 @@ func TestPoller_E2E_NoWhatsApp(t *testing.T) {
 	stateMgr.Update(func(s *AppState) {
 		s.Connections = []WAConnectionState{{Phone: senderPhone, WhatsAppConnected: true, Status: StatusConnected}}
 	})
-	HydrateConnectionPersons(dbMgr, stateMgr, context.Background())
+	HydrateConnectionPersons(dbMgr, stateMgr, audiosDir, context.Background())
 
 	sent := 0
 	poller := &Poller{

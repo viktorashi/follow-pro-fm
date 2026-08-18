@@ -1009,7 +1009,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 																<span class="w-2.5 h-2.5 rounded-full bg-danger inline-block shadow-sm shadow-danger/50" title="Disconnected / Error"></span>
 															}
 															<span class="font-mono font-medium text-white/90">{ conn.Phone }</span>
-															<select onchange={ templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', this.value)", conn.Phone)} } class="bg-black/50 text-white rounded-lg px-2.5 py-1 text-xs border border-white/20 focus:outline-none focus:border-primary cursor-pointer">
+															<select onchange={ templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', event.target.value)", conn.Phone)} } class="bg-black/50 text-white rounded-lg px-2.5 py-1 text-xs border border-white/20 focus:outline-none focus:border-primary cursor-pointer">
 																<option value={ fmt.Sprintf("%d", p.ID) } selected>{ p.Name }</option>
 																for _, other := range persons {
 																	if other.ID != p.ID {
@@ -1543,17 +1543,24 @@ templ AudioStatsComponent(state AppState) {
 			</div>
 		</div>
 		<div class="grid grid-cols-2 gap-4">
-			for _, conn := range state.Connections {
+			for _, person := range state.Persons {
 				<div class="bg-white/5 p-3 rounded">
-					<div class="text-xs font-mono text-muted mb-2">{ conn.Phone }</div>
+					<div class="text-sm font-bold text-white mb-1">{ person.Name }</div>
+					<div class="text-xs font-mono text-muted mb-2">
+						if len(person.Phones) > 0 {
+							{ strings.Join(person.Phones, ", ") }
+						} else {
+							No phones assigned
+						}
+					</div>
 					<div class="flex justify-between">
 						<div>
 							<span class="text-xs text-muted uppercase">Unused:</span> 
-							<span class="text-success font-bold">{ fmt.Sprintf("%d", conn.UnusedAudios) }</span>
+							<span class="text-success font-bold">{ fmt.Sprintf("%d", person.UnusedAudios) }</span>
 						</div>
 						<div>
 							<span class="text-xs text-muted uppercase">Used:</span> 
-							<span class="text-warning font-bold">{ fmt.Sprintf("%d", conn.UsedAudios) }</span>
+							<span class="text-warning font-bold">{ fmt.Sprintf("%d", person.UsedAudios) }</span>
 						</div>
 					</div>
 				</div>
@@ -1599,7 +1606,7 @@ templ QRComponent(state AppState) {
 			</div>
 			<div class="mb-4">
 				<label class="text-xs text-muted mb-1">Assigned Person</label>
-				<select onchange={ templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', this.value)", conn.Phone)} } class="input">
+				<select onchange={ templ.ComponentScript{Call: fmt.Sprintf("assignPhone('%s', event.target.value)", conn.Phone)} } class="input">
 					<option value="0" selected={ conn.PersonID == nil || *conn.PersonID == 0 }>⚠ Unassigned — cannot send</option>
 					for _, person := range state.Persons {
 						<option value={ fmt.Sprintf("%d", person.ID) } selected={ conn.PersonID != nil && *conn.PersonID == person.ID }>{ person.Name } ({ person.Slug })</option>
