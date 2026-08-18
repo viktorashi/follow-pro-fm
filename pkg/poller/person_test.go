@@ -164,6 +164,31 @@ func TestQRComponentMakesUnassignedSenderRepairable(t *testing.T) {
 	}
 }
 
+func TestAlertUnassignedSenderPhones(t *testing.T) {
+	personID := int64(1)
+	recorder := &recordingAlerter{}
+	alerter := NewMultiAlerter(recorder)
+	state := AppState{Connections: []WAConnectionState{
+		{Phone: "+40722222222", PersonID: &personID, PersonSlug: "bubu"},
+		{Phone: "+40733333333"},
+		{Phone: "+40711111111"},
+	}}
+
+	AlertUnassignedSenderPhones(state, alerter)
+	AlertUnassignedSenderPhones(state, alerter)
+
+	if len(recorder.criticalEvents) != 1 {
+		t.Fatalf("critical alerts = %d, want 1 deduplicated warning", len(recorder.criticalEvents))
+	}
+	event := recorder.criticalEvents[0]
+	if event.Title != "Unassigned WhatsApp Sender" || !strings.Contains(event.Message, "+40711111111, +40733333333") {
+		t.Fatalf("unexpected alert: %+v", event)
+	}
+	if event.ActionURL != "/" {
+		t.Fatalf("ActionURL = %q, want dashboard", event.ActionURL)
+	}
+}
+
 func TestAssignPhoneRepairsPersistedAndRuntimeState(t *testing.T) {
 	dbMgr, err := NewDBManager(":memory:")
 	if err != nil {
