@@ -138,21 +138,32 @@ func TestWhisperContainerTranscription(t *testing.T) {
 	if len(cases) == 0 {
 		t.Fatal("no transcription test cases found in testdata/transcription/cases")
 	}
+	expectedPhraseGroups := make(map[string][]string)
+	matchedPhraseGroups := make(map[string]bool)
 	for _, tc := range cases {
+		phraseGroup := strings.Join(tc.TrustedPhrases, "\n")
+		expectedPhraseGroups[phraseGroup] = tc.TrustedPhrases
 		t.Run(tc.Name, func(t *testing.T) {
 			var liveTranscript string
+			var err error
 			for attempt := 1; attempt <= 2; attempt++ {
 				ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-				var err error
 				liveTranscript, err = runProductionWebSocketCheck(ctx, transcriptionURL, tc, filepath.Join(t.TempDir(), "phrases.sqlite"))
 				cancel()
 				if err == nil {
 					break
 				}
-				if attempt == 2 || !errors.Is(err, errNoTrustedPhrase) {
+				if !errors.Is(err, errNoTrustedPhrase) {
 					t.Fatalf("streaming transcription failed for %s: %v; transcript: %q", tc.Name, err, liveTranscript)
 				}
-				t.Logf("[%s] retrying nondeterministic transcript: %q", tc.Name, liveTranscript)
+				if attempt == 1 {
+					t.Logf("[%s] retrying nondeterministic transcript: %q", tc.Name, liveTranscript)
+				}
+			}
+			if err == nil {
+				matchedPhraseGroups[phraseGroup] = true
+			} else {
+				t.Logf("[%s] no trusted phrase matched after retry: %q", tc.Name, liveTranscript)
 			}
 			t.Logf("[%s] Live transcript: %q | Full text: %q", tc.Name, liveTranscript, tc.FullText)
 
@@ -161,6 +172,11 @@ func TestWhisperContainerTranscription(t *testing.T) {
 			}
 
 		})
+	}
+	for group, phrases := range expectedPhraseGroups {
+		if !matchedPhraseGroups[group] {
+			t.Errorf("trusted phrase group never matched any recording: %q", phrases)
+		}
 	}
 }
 
