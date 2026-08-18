@@ -301,8 +301,8 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 					}
 				}
 			}
-			function transcribeChunk(name, bucket) {
-				const btn = event.target;
+			function transcribeChunk(name, bucket, clickedButton) {
+				const btn = clickedButton;
 				const origText = btn.textContent;
 				btn.textContent = 'Transcribing...';
 				btn.disabled = true;
@@ -1022,7 +1022,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 													<button type="button" class="btn btn-secondary btn-sm"
 														data-name={ chunk.Name }
 														data-bucket="unreviewed"
-														onclick="window.transcribeChunk(this.dataset.name, this.dataset.bucket)">Transcribe</button>
+												onclick="window.transcribeChunk(this.dataset.name, this.dataset.bucket, this)">Transcribe</button>
 												</div>
 											}
 										</div>
@@ -1137,7 +1137,7 @@ templ Dashboard(state AppState, chunks []ReviewChunk, canonicalChunks []ReviewCh
 													<button type="button" class="btn btn-secondary btn-sm"
 														data-name={ chunk.Name }
 														data-bucket="canonical"
-														onclick="window.transcribeChunk(this.dataset.name, this.dataset.bucket)">Transcribe</button>
+												onclick="window.transcribeChunk(this.dataset.name, this.dataset.bucket, this)">Transcribe</button>
 												</div>
 											}
 										</div>
