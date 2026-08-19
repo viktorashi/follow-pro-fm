@@ -114,8 +114,6 @@ type Poller struct {
 	ActiveCampaigns      []Campaign
 	TargetPhone          string
 	SendVoiceNote        func(senderPhone string, targetPhone string, audioPath string) error
-	DisconnectWhatsApp   func()
-	ConnectWhatsApp      func() error
 	StateMgr             *StateManager
 	Alerter              Alerter
 	AudiosDir            string
@@ -571,13 +569,9 @@ func (p *Poller) runMetadataChecker(checker ContestChecker, checkImmediately boo
 
 		if !p.hasActiveCampaign(now) {
 			if !isSleeping {
-				log.Println("[INFO] No active campaigns right now. Entering sleep mode (disconnecting WhatsApp and pausing ProFM polling).")
-				if p.DisconnectWhatsApp != nil {
-					p.DisconnectWhatsApp()
-				}
+				log.Println("[INFO] No active campaigns right now. Entering sleep mode (pausing ProFM polling, but keeping WhatsApp connected).")
 				p.StateMgr.Update(func(s *AppState) {
 					s.Status = StatusSleeping
-					s.WhatsAppConnected = false
 				})
 				isSleeping = true
 			}
@@ -585,24 +579,12 @@ func (p *Poller) runMetadataChecker(checker ContestChecker, checkImmediately boo
 		}
 
 		if isSleeping {
-			log.Println("[INFO] Campaign is now active! Waking up (reconnecting WhatsApp and resuming polling).")
-			connectErr := error(nil)
-			if p.ConnectWhatsApp != nil {
-				connectErr = p.ConnectWhatsApp()
-				if connectErr != nil {
-					log.Printf("[ERROR] Failed to reconnect WhatsApp: %v\n", connectErr)
-				}
-			}
-
+			log.Println("[INFO] Campaign is now active! Waking up (resuming polling).")
+			
 			isSleeping = false
-
-			// Only transition to Polling state if there wasn't a connection error.
-			// If there was an error, the WhatsApp event handler likely set StatusError or StatusPairingRequired.
-			if connectErr == nil {
-				p.StateMgr.Update(func(s *AppState) {
-					s.Status = StatusPolling
-				})
-			}
+			p.StateMgr.Update(func(s *AppState) {
+				s.Status = StatusPolling
+			})
 		}
 
 		checker.Check(now)

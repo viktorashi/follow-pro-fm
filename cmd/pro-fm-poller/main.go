@@ -474,26 +474,6 @@ func main() {
 			}
 			return fmt.Errorf("sender phone %s is not connected or logged in", senderPhone)
 		},
-		DisconnectWhatsApp: func() {
-			wappMutex.RLock()
-			defer wappMutex.RUnlock()
-			for _, c := range wappClients {
-				if c.IsLoggedIn() {
-					c.Disconnect()
-				}
-			}
-		},
-		ConnectWhatsApp: func() error {
-			wappMutex.RLock()
-			defer wappMutex.RUnlock()
-			for _, c := range wappClients {
-				err := c.Connect()
-				if err != nil {
-					return err
-				}
-			}
-			return nil
-		},
 	}
 	poller.StartStreamingTranscription(context.Background(), pcmInput, streamingTranscriptionURL, p.HandleStreamingTranscript)
 	p.Start()
