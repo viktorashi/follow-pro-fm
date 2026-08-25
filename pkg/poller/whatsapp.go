@@ -88,20 +88,6 @@ func handleConnectionError(err error, label string, phone string, stateMgr *Stat
 	return waitRetry(ctx)
 }
 
-func alertWhatsAppDisconnected(alerter Alerter, baseURL string) bool {
-	if alerter == nil || baseURL == "" {
-		return false
-	}
-
-	_ = alerter.AlertCritical(AlertEvent{
-		Title:       "WhatsApp Disconnected",
-		Message:     "WhatsApp disconnected! Action required immediately. Scan the QR code on the dashboard.",
-		ActionLabel: "Open Live Dashboard",
-		ActionURL:   baseURL,
-	})
-	return true
-}
-
 func encodeQRCodeData(code string) string {
 	png, _ := qrcode.Encode(code, qrcode.Medium, 256)
 	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
@@ -355,7 +341,6 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 				fmt.Print("\033[s") // Save cursor position
 				fmt.Println("\n👉 Please scan the QR code below using your WhatsApp Business/personal app (Settings -> Linked Devices -> Link a Device):")
 				paired := false
-				alertSent := false
 				for evt := range qrChan {
 					if evt.Event == "code" {
 						if stateMgr != nil {
@@ -363,10 +348,6 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 								s.Status = StatusPairingRequired
 								s.QRCodeData = encodeQRCodeData(evt.Code)
 							})
-						}
-
-						if !alertSent {
-							alertSent = alertWhatsAppDisconnected(alerter, baseURL)
 						}
 
 						fmt.Print("\033[u\033[J") // Restore cursor and clear to end of screen
@@ -658,15 +639,12 @@ func (m *MockWhatsAppClient) Connect() error {
 			for _, h := range handlers {
 				h(&events.Connected{})
 			}
-		} else {
-			if m.stateMgr != nil {
-				m.stateMgr.UpdateConnection(m.phone, func(s *WAConnectionState) {
-					s.Status = StatusPairingRequired
-					s.QRCodeData = encodeQRCodeData("mock-qr-code")
-					s.WhatsAppConnected = false
-				})
-			}
-			alertWhatsAppDisconnected(m.alerter, m.baseURL)
+		} else if m.stateMgr != nil {
+			m.stateMgr.UpdateConnection(m.phone, func(s *WAConnectionState) {
+				s.Status = StatusPairingRequired
+				s.QRCodeData = encodeQRCodeData("mock-qr-code")
+				s.WhatsAppConnected = false
+			})
 		}
 	}()
 
