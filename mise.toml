@@ -5,10 +5,16 @@ lockfile = true
 
 [tools]
 go = "1.26.4"
+"go:github.com/a-h/templ/cmd/templ" = "v0.3.1020"
+"go:golang.org/x/tools/gopls" = "v0.23.0"
 golangci-lint = "2.12.2"
 gotestsum = "1.13.0"
 hadolint = "2.15.1"
 flyctl = "0.4.59"
+"aqua:docker/cli" = "29.7.2"
+clang = "22.1.8"
+make = "4.4.1"
+perl = "5.44.0.0"
 
 [env]
 _.path = ["{{ config_root }}/bin"]

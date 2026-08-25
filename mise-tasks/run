@@ -3,4 +3,4 @@
 set -euo pipefail
 
 cd "$MISE_PROJECT_ROOT"
-ENVIRONMENT=dev docker compose up --build
+ENVIRONMENT=dev docker-compose up --build
