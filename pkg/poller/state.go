@@ -46,41 +46,49 @@ type AppState struct {
 	LastVoiceNoteSentAt   time.Time
 }
 
-func (s *AppState) reconcileConnectionState() {
-	anyConnected := false
-	anyPairingRequired := false
-	anyError := false
-	unassigned := 0
+type connectionSummary struct {
+	anyConnected       bool
+	anyPairingRequired bool
+	anyError           bool
+	unassigned         int
+}
 
-	for _, conn := range s.Connections {
+func summarizeConnections(connections []WAConnectionState) connectionSummary {
+	var summary connectionSummary
+	for _, conn := range connections {
 		if conn.WhatsAppConnected {
-			anyConnected = true
+			summary.anyConnected = true
 		}
 		if conn.PersonID == nil || *conn.PersonID == 0 || conn.PersonSlug == "" {
-			unassigned++
+			summary.unassigned++
 		}
 		switch conn.Status {
 		case StatusPairingRequired:
-			anyPairingRequired = true
+			summary.anyPairingRequired = true
 		case StatusError:
-			anyError = true
+			summary.anyError = true
 		}
 	}
-	s.UnassignedPhonesCount = unassigned
+	return summary
+}
+
+func (s *AppState) reconcileConnectionState() {
+	summary := summarizeConnections(s.Connections)
+	s.UnassignedPhonesCount = summary.unassigned
 	s.HasMegaCriticalAlert = len(s.Persons) == 0 && len(s.Connections) > 0
 
-	s.WhatsAppConnected = anyConnected
+	s.WhatsAppConnected = summary.anyConnected
 
 	switch s.Status {
 	case StatusInitializing, StatusConnected, StatusPairingRequired, StatusError:
 		switch {
 		case len(s.Connections) == 0:
 			s.Status = StatusInitializing
-		case anyPairingRequired:
+		case summary.anyPairingRequired:
 			s.Status = StatusPairingRequired
-		case anyConnected:
+		case summary.anyConnected:
 			s.Status = StatusConnected
-		case anyError:
+		case summary.anyError:
 			s.Status = StatusError
 		case len(s.Connections) > 0:
 			s.Status = StatusInitializing
@@ -93,6 +101,17 @@ type StateManager struct {
 	mu          sync.RWMutex
 	state       AppState
 	subscribers map[chan AppState]struct{}
+}
+
+func (sm *StateManager) reconcileAndBroadcast() {
+	sm.state.reconcileConnectionState()
+	for ch := range sm.subscribers {
+		select {
+		case ch <- cloneAppState(sm.state):
+		default:
+			// If channel is blocked, skip it to avoid blocking the state machine.
+		}
+	}
 }
 
 func NewStateManager() *StateManager {
@@ -112,16 +131,7 @@ func (sm *StateManager) Update(fn func(state *AppState)) {
 
 	fn(&sm.state)
 	sm.state = cloneAppState(sm.state)
-	sm.state.reconcileConnectionState()
-
-	// Broadcast
-	for ch := range sm.subscribers {
-		select {
-		case ch <- cloneAppState(sm.state):
-		default:
-			// If channel is blocked, skip it to avoid blocking the state machine
-		}
-	}
+	sm.reconcileAndBroadcast()
 }
 
 // UpdateConnection updates only the state of a specific WhatsApp connection.
@@ -135,15 +145,7 @@ func (sm *StateManager) UpdateConnection(phone string, fn func(conn *WAConnectio
 			break
 		}
 	}
-	sm.state.reconcileConnectionState()
-
-	// Broadcast
-	for ch := range sm.subscribers {
-		select {
-		case ch <- cloneAppState(sm.state):
-		default:
-		}
-	}
+	sm.reconcileAndBroadcast()
 }
 
 func (sm *StateManager) ReplaceConnectionPhone(from, to string) {
@@ -168,15 +170,7 @@ func (sm *StateManager) RemoveConnection(phone string) {
 		}
 	}
 	sm.state.Connections = filtered
-	sm.state.reconcileConnectionState()
-
-	// Broadcast
-	for ch := range sm.subscribers {
-		select {
-		case ch <- cloneAppState(sm.state):
-		default:
-		}
-	}
+	sm.reconcileAndBroadcast()
 }
 
 // Get returns a copy of the current state.
