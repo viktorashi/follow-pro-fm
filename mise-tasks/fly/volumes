@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="List Fly.io volumes"
+set -euo pipefail
+flyctl volumes list

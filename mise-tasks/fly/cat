@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#MISE description="Read a file from the Fly volume"
+set -euo pipefail
+
+if (($# != 1)); then
+  printf 'Usage: mise run fly:cat -- <filepath>\n' >&2
+  exit 2
+fi
+flyctl ssh console -C "cat /data/$1"

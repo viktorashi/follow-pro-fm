@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#MISE description="Run package tests and open an HTML coverage report"
+#MISE depends=["ffmpeg:build", "generate"]
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+go test -coverprofile=coverage.out ./pkg/...
+go tool cover -func=coverage.out
+go tool cover -html=coverage.out

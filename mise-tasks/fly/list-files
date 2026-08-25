@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="List files persisted on the Fly volume"
+set -euo pipefail
+flyctl ssh console -C 'find /data -maxdepth 4'

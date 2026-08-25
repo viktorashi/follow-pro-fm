@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#MISE description="Run the complete CI verification pipeline locally"
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+mise run docker:build-whisper
+mise run docker:build-app
+mise run ffmpeg:build
+mise run generate
+mise run lint
+mise run docker:lint
+mise run gopls
+gotestsum --junitfile junit.xml -- -coverprofile=coverage.out ./pkg/...
+go tool cover -func=coverage.out
+WHISPER_TEST_IMAGE_READY=1 go test -tags=e2e -v -run '^TestWhisperContainerTranscription$' ./pkg/poller

@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#MISE description="Open production, CI, monitoring, and email dashboards"
+set -euo pipefail
+
+urls=(
+  'https://pro-fm-poller.fly.dev'
+  'https://fly.io/apps/pro-fm-poller'
+  'https://app.codecov.io/gh/viktorashi/follow-pro-fm'
+  'https://github.com/viktorashi/follow-pro-fm/actions/workflows/ci.yml'
+  'https://app.sendgrid.com/email_logs'
+  'https://fly-metrics.net/d/fly-logs/fly-logs?orgId=1722175&var-app=pro-fm-poller'
+)
+
+case "$(uname -s)" in
+  Darwin) opener=(open) ;;
+  Linux)
+    if command -v explorer.exe >/dev/null 2>&1; then
+      opener=(explorer.exe)
+    elif command -v xdg-open >/dev/null 2>&1; then
+      opener=(xdg-open)
+    else
+      printf 'No supported browser opener found.\n' >&2
+      exit 1
+    fi
+    ;;
+  *)
+    printf 'Unsupported operating system: %s\n' "$(uname -s)" >&2
+    exit 1
+    ;;
+esac
+
+for url in "${urls[@]}"; do
+  "${opener[@]}" "$url"
+done

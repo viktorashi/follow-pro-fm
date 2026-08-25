@@ -8,7 +8,7 @@ repo = "local"
 [[repos.hooks]]
 id = "go-lint"
 name = "go lint"
-entry = "just lint"
+entry = "mise run lint"
 language = "system"
 files = "\\.go$"
 pass_filenames = false
@@ -16,7 +16,7 @@ pass_filenames = false
 [[repos.hooks]]
 id = "go-format"
 name = "go format"
-entry = "just format"
+entry = "mise run format"
 language = "system"
 files = "\\.go$"
 pass_filenames = false
@@ -24,7 +24,7 @@ pass_filenames = false
 [[repos.hooks]]
 id = "gopls"
 name = "gopls diagnostics"
-entry = "./scripts/gopls-check.sh"
+entry = "mise run gopls --"
 language = "system"
 files = "\\.go$"
 pass_filenames = true
@@ -33,7 +33,7 @@ priority = 20
 [[repos.hooks]]
 id = "go-test"
 name = "go test"
-entry = "just test"
+entry = "mise run test"
 language = "system"
 stages = ["pre-push"]
 pass_filenames = false
@@ -42,8 +42,16 @@ pass_filenames = false
 [[repos.hooks]]
 id = "validate-fly-config"
 name = "Validate Fly config"
-entry = "fly config validate"
+entry = "mise run fly:validate"
 language = "system"
 stages = ["pre-commit"]
 files = "fly.toml"
+pass_filenames = false
+
+[[repos.hooks]]
+id = "docker-lint"
+name = "Dockerfile lint"
+entry = "mise run docker:lint"
+language = "system"
+files = "(^|/)Dockerfile$"
 pass_filenames = false

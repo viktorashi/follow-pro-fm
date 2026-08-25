@@ -1,0 +1,17 @@
+min_version = "2026.8.3"
+
+[settings]
+lockfile = true
+
+[tools]
+go = "1.26.4"
+golangci-lint = "2.12.2"
+gotestsum = "1.13.0"
+hadolint = "2.15.1"
+flyctl = "0.4.59"
+
+[env]
+_.path = ["{{ config_root }}/bin"]
+
+[task_config]
+includes = ["mise-tasks"]
