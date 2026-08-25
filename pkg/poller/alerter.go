@@ -209,7 +209,7 @@ func (e *EmailAlerter) send(prefix string, event AlertEvent) error {
 
 	var targets []string
 	if data, err := os.ReadFile(e.TargetsFile); err == nil {
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			email := strings.TrimSpace(line)
 			if email != "" {
 				targets = append(targets, email)

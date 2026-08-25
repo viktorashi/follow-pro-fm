@@ -1,5 +1,4 @@
 //go:build e2e
-// +build e2e
 
 package poller
 
@@ -35,13 +34,10 @@ func TestExtractWaveform_Stress(t *testing.T) {
 	writePCM := func(name string, durationSeconds float64, sample func(i int, t float64) float64) string {
 		t.Helper()
 
-		sampleCount := int(math.Round(durationSeconds * sampleRate))
-		if sampleCount < 0 {
-			sampleCount = 0
-		}
+		sampleCount := max(int(math.Round(durationSeconds*sampleRate)), 0)
 
 		pcm := make([]byte, sampleCount*2)
-		for i := 0; i < sampleCount; i++ {
+		for i := range sampleCount {
 			timestamp := float64(i) / sampleRate
 			value := sample(i, timestamp)
 			if value > 1 {

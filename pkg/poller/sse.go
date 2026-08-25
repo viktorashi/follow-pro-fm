@@ -18,8 +18,8 @@ func (e *SSEEvent) Marshal() []byte {
 		fmt.Fprintf(&buf, "event: %s\n", e.Event)
 	}
 	// HTMX SSE expects data lines
-	lines := bytes.Split(e.Data, []byte("\n"))
-	for _, line := range lines {
+	lines := bytes.SplitSeq(e.Data, []byte("\n"))
+	for line := range lines {
 		fmt.Fprintf(&buf, "data: %s\n", line)
 	}
 	buf.WriteString("\n")

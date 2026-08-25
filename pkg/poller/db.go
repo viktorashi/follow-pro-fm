@@ -360,8 +360,8 @@ func (m *DBManager) IsTrustedEmail(ctx context.Context, email string) (bool, err
 		return false, fmt.Errorf("failed to read trusted emails file: %w", err)
 	}
 
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(string(data), "\n")
+	for line := range lines {
 		line = strings.ToLower(strings.TrimSpace(line))
 		if line == email {
 			return true, nil

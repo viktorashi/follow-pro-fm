@@ -79,7 +79,8 @@ func loadMultipleFingerprintCaseConfig(t *testing.T, path string) (bool, string)
 		k := strings.TrimSpace(key)
 		v := strings.TrimSpace(value)
 
-		if k == "should_match" {
+		switch k {
+		case "should_match":
 			parsed, err := strconv.ParseBool(v)
 			if err != nil && v != "1" && v != "0" {
 				t.Fatalf("invalid should_match in %s: %v", path, err)
@@ -90,7 +91,7 @@ func loadMultipleFingerprintCaseConfig(t *testing.T, path string) (bool, string)
 				expectedMatch = v != "0"
 			}
 			foundShouldMatch = true
-		} else if k == "includes_audios_from" {
+		case "includes_audios_from":
 			includesAudiosFrom = strings.Trim(v, `"'`)
 		}
 	}

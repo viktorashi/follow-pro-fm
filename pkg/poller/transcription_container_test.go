@@ -1,5 +1,4 @@
 //go:build e2e
-// +build e2e
 
 package poller
 
@@ -233,10 +232,7 @@ func runProductionWebSocketCheck(ctx context.Context, transcriptionURL string, t
 		defer close(mp3)
 		const streamChunkBytes = 8192
 		for start := 0; start < len(tc.AudioBytes); start += streamChunkBytes {
-			end := start + streamChunkBytes
-			if end > len(tc.AudioBytes) {
-				end = len(tc.AudioBytes)
-			}
+			end := min(start+streamChunkBytes, len(tc.AudioBytes))
 			select {
 			case mp3 <- tc.AudioBytes[start:end]:
 			case <-ctx.Done():

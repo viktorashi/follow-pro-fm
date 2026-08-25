@@ -23,7 +23,6 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
-	"google.golang.org/protobuf/proto"
 	"modernc.org/sqlite"
 )
 
@@ -249,7 +248,7 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 	wrapper := &whatsappClientWrapper{}
 
 	// Add event handlers to ensure we're processing E2E and presence
-	wrapper.AddEventHandler(func(evt interface{}) {
+	wrapper.AddEventHandler(func(evt any) {
 		switch evt.(type) {
 		case *events.Connected:
 			// Tell WhatsApp servers we are online.
@@ -294,7 +293,7 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 	})
 
 	// Set a realistic device name
-	store.DeviceProps.Os = proto.String("Mac OS")
+	store.DeviceProps.Os = new("Mac OS")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	pairingCancelsMutex.Lock()
@@ -385,7 +384,7 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 					return
 				}
 
-				for i := 0; i < ConnectionRetryAttempts; i++ {
+				for range ConnectionRetryAttempts {
 					if client.IsLoggedIn() && client.IsConnected() {
 						break
 					}
@@ -416,7 +415,7 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 			// Wait for LoggedOut event to restart the connection/pairing loop,
 			// or ctx.Done() to terminate the loop cleanly when disconnected from UI.
 			logoutChan := make(chan struct{})
-			handlerID := client.AddEventHandler(func(evt interface{}) {
+			handlerID := client.AddEventHandler(func(evt any) {
 				if _, ok := evt.(*events.LoggedOut); ok {
 					select {
 					case <-logoutChan:
@@ -443,7 +442,7 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 func retryWhatsAppOperation[T any](operationName string, action func() (T, error)) (T, error) {
 	var result T
 	var err error
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		result, err = action()
 		if err == nil {
 			break
@@ -474,7 +473,7 @@ func normalizePhoneNumber(phone string) string {
 func SendVoiceNote(client WhatsAppClient, phone string, audioPath string) error {
 	normalized := normalizePhoneNumber(phone)
 	// Wait up to 15 seconds for the client to be fully connected and logged in
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		if client.IsConnected() && client.IsLoggedIn() {
 			break
 		}
@@ -570,17 +569,17 @@ func SendVoiceNote(client WhatsAppClient, phone string, audioPath string) error 
 	// Construct AudioMessage with Push-To-Talk set to true (native voice note bubble)
 	msg := &waE2E.Message{
 		AudioMessage: &waE2E.AudioMessage{
-			URL:               proto.String(uploaded.URL),
-			DirectPath:        proto.String(uploaded.DirectPath),
+			URL:               new(uploaded.URL),
+			DirectPath:        new(uploaded.DirectPath),
 			MediaKey:          uploaded.MediaKey,
-			Mimetype:          proto.String("audio/ogg; codecs=opus"),
+			Mimetype:          new("audio/ogg; codecs=opus"),
 			FileEncSHA256:     uploaded.FileEncSHA256,
 			FileSHA256:        uploaded.FileSHA256,
-			FileLength:        proto.Uint64(uint64(len(audioData))),
-			PTT:               proto.Bool(true), // Makes it a native voice note
-			Seconds:           proto.Uint32(estimatedSeconds),
+			FileLength:        new(uint64(len(audioData))),
+			PTT:               new(true), // Makes it a native voice note
+			Seconds:           new(estimatedSeconds),
 			Waveform:          waveform,
-			MediaKeyTimestamp: proto.Int64(time.Now().Unix()),
+			MediaKeyTimestamp: new(time.Now().Unix()),
 		},
 	}
 
@@ -792,7 +791,7 @@ func ExtractWaveform(audioPath string) ([]byte, error) {
 	}
 
 	samples := make([]int16, sampleCount)
-	for i := 0; i < sampleCount; i++ {
+	for i := range sampleCount {
 		samples[i] = int16(binary.LittleEndian.Uint16(pcmBytes[i*2 : i*2+2]))
 	}
 
@@ -805,12 +804,9 @@ func ExtractWaveform(audioPath string) ([]byte, error) {
 	peaks := make([]int16, numBuckets)
 	maxPeak := int16(0)
 
-	for i := 0; i < numBuckets; i++ {
+	for i := range numBuckets {
 		start := i * bucketSize
-		end := start + bucketSize
-		if end > sampleCount {
-			end = sampleCount
-		}
+		end := min(start+bucketSize, sampleCount)
 
 		maxVal := int16(0)
 		for j := start; j < end; j++ {

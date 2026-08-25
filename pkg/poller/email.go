@@ -37,12 +37,12 @@ func (s *SMTPSender) Send(message *mail.SGMailV3) (*rest.Response, error) {
 		cType = message.Content[0].Type
 	}
 
-	msg := []byte(fmt.Sprintf("To: %s\r\n"+
+	msg := fmt.Appendf(nil, "To: %s\r\n"+
 		"From: %s\r\n"+
 		"Subject: %s\r\n"+
 		"Content-Type: %s; charset=UTF-8\r\n"+
 		"\r\n"+
-		"%s\r\n", to, from, subject, cType, body))
+		"%s\r\n", to, from, subject, cType, body)
 
 	err := smtp.SendMail(s.Addr, nil, from, []string{to}, msg)
 	if err != nil {
