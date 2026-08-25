@@ -267,6 +267,13 @@ func main() {
 
 	wappClients := make(map[string]poller.WhatsAppClient)
 	var wappMutex sync.RWMutex
+	syncTelemetryClients := func() {
+		clients := make([]poller.WhatsAppClient, 0, len(wappClients))
+		for _, client := range wappClients {
+			clients = append(clients, client)
+		}
+		telemetryServer.SetWhatsAppClients(clients)
+	}
 
 	addSenderPhone := func(p string, dbForPhone string, personID *int64, personName, personSlug string) error {
 		p = strings.TrimSpace(p)
@@ -299,12 +306,7 @@ func main() {
 
 		wappMutex.Lock()
 		wappClients[p] = c
-
-		var wappClientsSlice []poller.WhatsAppClient
-		for _, client := range wappClients {
-			wappClientsSlice = append(wappClientsSlice, client)
-		}
-		telemetryServer.SetWhatsAppClients(wappClientsSlice)
+		syncTelemetryClients()
 		wappMutex.Unlock()
 
 		return nil
@@ -352,12 +354,7 @@ func main() {
 			delete(wappClients, pendingPhone)
 			wappClients[phone] = client
 			stateMgr.ReplaceConnectionPhone(pendingPhone, phone)
-
-			clients := make([]poller.WhatsAppClient, 0, len(wappClients))
-			for _, connectedClient := range wappClients {
-				clients = append(clients, connectedClient)
-			}
-			telemetryServer.SetWhatsAppClients(clients)
+			syncTelemetryClients()
 		})
 		if err != nil {
 			removeSenderConnectionState(stateMgr, pendingPhone)
@@ -366,11 +363,7 @@ func main() {
 
 		wappMutex.Lock()
 		wappClients[pendingPhone] = client
-		clients := make([]poller.WhatsAppClient, 0, len(wappClients))
-		for _, connectedClient := range wappClients {
-			clients = append(clients, connectedClient)
-		}
-		telemetryServer.SetWhatsAppClients(clients)
+		syncTelemetryClients()
 		wappMutex.Unlock()
 		return nil
 	}
@@ -396,12 +389,7 @@ func main() {
 			delete(wappClients, p)
 			client.Disconnect()
 		}
-
-		var wappClientsSlice []poller.WhatsAppClient
-		for _, connectedClient := range wappClients {
-			wappClientsSlice = append(wappClientsSlice, connectedClient)
-		}
-		telemetryServer.SetWhatsAppClients(wappClientsSlice)
+		syncTelemetryClients()
 		wappMutex.Unlock()
 
 		stateMgr.RemoveConnection(p)

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Remove Apple metadata files from the Fly volume"
+set -euo pipefail
+flyctl ssh console -C "sh -c 'find /data -name \"._*\" -type f -delete'"

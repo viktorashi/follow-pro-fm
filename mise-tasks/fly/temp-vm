@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Start a temporary Ubuntu Machine with a volume attached"
+set -euo pipefail
+volume_id="${1:-vol_rkg633w5y5p0z3o4}"
+flyctl machine run ubuntu:latest --app pro-fm-poller --volume "$volume_id:/data" --shell

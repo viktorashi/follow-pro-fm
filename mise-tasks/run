@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Run the complete local stack in Docker Compose"
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+ENVIRONMENT=dev docker-compose up --build

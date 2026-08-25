@@ -6,7 +6,7 @@ all the pics are found in pics/ here
 
 try the context thing for each of the subagent, looping and revising until they get everything up and ready
 
-If if you are to give them sepparate worktrees make sure each one runs just setup-dev before doing anything. Anything you do never merge into main. Also don't let them push their sepparate branches.
+If if you are to give them sepparate worktrees make sure each one runs `mise run setup` before doing anything. Anything you do never merge into main. Also don't let them push their sepparate branches.
 
 Don't let them run e2e-tests by themselves since that would require me to be at the computer / with the phone to confirm their reception
 

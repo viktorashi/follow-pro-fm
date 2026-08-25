@@ -14,13 +14,11 @@ func TestContestCheckCoordinatorClaimsOneSharedWindow(t *testing.T) {
 	var winners atomic.Int32
 	var wg sync.WaitGroup
 	for range 16 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if coordinator.Claim(now, "test", "test_pattern") {
 				winners.Add(1)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

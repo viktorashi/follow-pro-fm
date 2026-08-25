@@ -23,7 +23,6 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
-	"google.golang.org/protobuf/proto"
 	"modernc.org/sqlite"
 )
 
@@ -88,16 +87,36 @@ func handleConnectionError(err error, label string, phone string, stateMgr *Stat
 	return waitRetry(ctx)
 }
 
+func encodeQRCodeData(code string) string {
+	png, _ := qrcode.Encode(code, qrcode.Medium, 256)
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+}
+
+func markWhatsAppPaired(stateMgr *StateManager, phone string) {
+	if stateMgr == nil {
+		return
+	}
+	stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
+		s.Status = StatusConnected
+		s.QRCodeData = ""
+		s.WhatsAppConnected = true
+	})
+}
+
 type whatsappClientWrapper struct {
 	mu       sync.RWMutex
 	client   *whatsmeow.Client
 	handlers []whatsmeow.EventHandler
 }
 
-func withClient[T any](w *whatsappClientWrapper, action func(*whatsmeow.Client) (T, error)) (T, error) {
+func (w *whatsappClientWrapper) currentClient() *whatsmeow.Client {
 	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
+	defer w.mu.RUnlock()
+	return w.client
+}
+
+func withClient[T any](w *whatsappClientWrapper, action func(*whatsmeow.Client) (T, error)) (T, error) {
+	c := w.currentClient()
 	if c != nil {
 		return action(c)
 	}
@@ -106,9 +125,7 @@ func withClient[T any](w *whatsappClientWrapper, action func(*whatsmeow.Client) 
 }
 
 func withClientErr(w *whatsappClientWrapper, action func(*whatsmeow.Client) error) error {
-	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
+	c := w.currentClient()
 	if c != nil {
 		return action(c)
 	}
@@ -116,9 +133,7 @@ func withClientErr(w *whatsappClientWrapper, action func(*whatsmeow.Client) erro
 }
 
 func withClientVal[T any](w *whatsappClientWrapper, action func(*whatsmeow.Client) T) T {
-	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
+	c := w.currentClient()
 	if c != nil {
 		return action(c)
 	}
@@ -127,9 +142,7 @@ func withClientVal[T any](w *whatsappClientWrapper, action func(*whatsmeow.Clien
 }
 
 func withClientVoid(w *whatsappClientWrapper, action func(*whatsmeow.Client)) {
-	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
+	c := w.currentClient()
 	if c != nil {
 		action(c)
 	}
@@ -235,7 +248,7 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 	wrapper := &whatsappClientWrapper{}
 
 	// Add event handlers to ensure we're processing E2E and presence
-	wrapper.AddEventHandler(func(evt interface{}) {
+	wrapper.AddEventHandler(func(evt any) {
 		switch evt.(type) {
 		case *events.Connected:
 			// Tell WhatsApp servers we are online.
@@ -280,7 +293,7 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 	})
 
 	// Set a realistic device name
-	store.DeviceProps.Os = proto.String("Mac OS")
+	store.DeviceProps.Os = new("Mac OS")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	pairingCancelsMutex.Lock()
@@ -327,26 +340,13 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 				fmt.Print("\033[s") // Save cursor position
 				fmt.Println("\n👉 Please scan the QR code below using your WhatsApp Business/personal app (Settings -> Linked Devices -> Link a Device):")
 				paired := false
-				alertSent := false
 				for evt := range qrChan {
 					if evt.Event == "code" {
 						if stateMgr != nil {
-							png, _ := qrcode.Encode(evt.Code, qrcode.Medium, 256)
-							b64 := base64.StdEncoding.EncodeToString(png)
 							stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
 								s.Status = StatusPairingRequired
-								s.QRCodeData = "data:image/png;base64," + b64
+								s.QRCodeData = encodeQRCodeData(evt.Code)
 							})
-						}
-
-						if !alertSent && alerter != nil && baseURL != "" {
-							_ = alerter.AlertCritical(AlertEvent{
-								Title:       "WhatsApp Disconnected",
-								Message:     "WhatsApp disconnected! Action required immediately. Scan the QR code on the dashboard.",
-								ActionLabel: "Open Live Dashboard",
-								ActionURL:   baseURL,
-							})
-							alertSent = true
 						}
 
 						fmt.Print("\033[u\033[J") // Restore cursor and clear to end of screen
@@ -358,13 +358,7 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 						case "success":
 							fmt.Println("✅ Successfully paired!")
 							paired = true
-							if stateMgr != nil {
-								stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
-									s.Status = StatusConnected
-									s.QRCodeData = ""
-									s.WhatsAppConnected = true
-								})
-							}
+							markWhatsAppPaired(stateMgr, phone)
 							if len(onPaired) > 0 && client.Store.ID != nil && client.Store.ID.User != "" {
 								onPaired[0]("+" + client.Store.ID.User)
 							}
@@ -390,7 +384,7 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 					return
 				}
 
-				for i := 0; i < ConnectionRetryAttempts; i++ {
+				for range ConnectionRetryAttempts {
 					if client.IsLoggedIn() && client.IsConnected() {
 						break
 					}
@@ -421,7 +415,7 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 			// Wait for LoggedOut event to restart the connection/pairing loop,
 			// or ctx.Done() to terminate the loop cleanly when disconnected from UI.
 			logoutChan := make(chan struct{})
-			handlerID := client.AddEventHandler(func(evt interface{}) {
+			handlerID := client.AddEventHandler(func(evt any) {
 				if _, ok := evt.(*events.LoggedOut); ok {
 					select {
 					case <-logoutChan:
@@ -448,7 +442,7 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 func retryWhatsAppOperation[T any](operationName string, action func() (T, error)) (T, error) {
 	var result T
 	var err error
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		result, err = action()
 		if err == nil {
 			break
@@ -479,7 +473,7 @@ func normalizePhoneNumber(phone string) string {
 func SendVoiceNote(client WhatsAppClient, phone string, audioPath string) error {
 	normalized := normalizePhoneNumber(phone)
 	// Wait up to 15 seconds for the client to be fully connected and logged in
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		if client.IsConnected() && client.IsLoggedIn() {
 			break
 		}
@@ -575,17 +569,17 @@ func SendVoiceNote(client WhatsAppClient, phone string, audioPath string) error 
 	// Construct AudioMessage with Push-To-Talk set to true (native voice note bubble)
 	msg := &waE2E.Message{
 		AudioMessage: &waE2E.AudioMessage{
-			URL:               proto.String(uploaded.URL),
-			DirectPath:        proto.String(uploaded.DirectPath),
+			URL:               new(uploaded.URL),
+			DirectPath:        new(uploaded.DirectPath),
 			MediaKey:          uploaded.MediaKey,
-			Mimetype:          proto.String("audio/ogg; codecs=opus"),
+			Mimetype:          new("audio/ogg; codecs=opus"),
 			FileEncSHA256:     uploaded.FileEncSHA256,
 			FileSHA256:        uploaded.FileSHA256,
-			FileLength:        proto.Uint64(uint64(len(audioData))),
-			PTT:               proto.Bool(true), // Makes it a native voice note
-			Seconds:           proto.Uint32(estimatedSeconds),
+			FileLength:        new(uint64(len(audioData))),
+			PTT:               new(true), // Makes it a native voice note
+			Seconds:           new(estimatedSeconds),
 			Waveform:          waveform,
-			MediaKeyTimestamp: proto.Int64(time.Now().Unix()),
+			MediaKeyTimestamp: new(time.Now().Unix()),
 		},
 	}
 
@@ -640,34 +634,16 @@ func (m *MockWhatsAppClient) Connect() error {
 		m.mu.Unlock()
 
 		if loggedIn {
-			if m.stateMgr != nil {
-				m.stateMgr.UpdateConnection(m.phone, func(s *WAConnectionState) {
-					s.Status = StatusConnected
-					s.WhatsAppConnected = true
-					s.QRCodeData = ""
-				})
-			}
+			markWhatsAppPaired(m.stateMgr, m.phone)
 			for _, h := range handlers {
 				h(&events.Connected{})
 			}
-		} else {
-			if m.stateMgr != nil {
-				png, _ := qrcode.Encode("mock-qr-code", qrcode.Medium, 256)
-				b64 := base64.StdEncoding.EncodeToString(png)
-				m.stateMgr.UpdateConnection(m.phone, func(s *WAConnectionState) {
-					s.Status = StatusPairingRequired
-					s.QRCodeData = "data:image/png;base64," + b64
-					s.WhatsAppConnected = false
-				})
-			}
-			if m.alerter != nil && m.baseURL != "" {
-				_ = m.alerter.AlertCritical(AlertEvent{
-					Title:       "WhatsApp Disconnected",
-					Message:     "WhatsApp disconnected! Action required immediately. Scan the QR code on the dashboard.",
-					ActionLabel: "Open Live Dashboard",
-					ActionURL:   m.baseURL,
-				})
-			}
+		} else if m.stateMgr != nil {
+			m.stateMgr.UpdateConnection(m.phone, func(s *WAConnectionState) {
+				s.Status = StatusPairingRequired
+				s.QRCodeData = encodeQRCodeData("mock-qr-code")
+				s.WhatsAppConnected = false
+			})
 		}
 	}()
 
@@ -782,14 +758,7 @@ func (m *MockWhatsAppClient) SimulatePairing() {
 	m.connected = true
 
 	_ = os.WriteFile(m.dbPath, []byte("paired"), 0o644)
-
-	if m.stateMgr != nil {
-		m.stateMgr.UpdateConnection(m.phone, func(s *WAConnectionState) {
-			s.Status = StatusConnected
-			s.WhatsAppConnected = true
-			s.QRCodeData = ""
-		})
-	}
+	markWhatsAppPaired(m.stateMgr, m.phone)
 
 	for _, h := range m.eventHandlers {
 		h(&events.Connected{})
@@ -822,7 +791,7 @@ func ExtractWaveform(audioPath string) ([]byte, error) {
 	}
 
 	samples := make([]int16, sampleCount)
-	for i := 0; i < sampleCount; i++ {
+	for i := range sampleCount {
 		samples[i] = int16(binary.LittleEndian.Uint16(pcmBytes[i*2 : i*2+2]))
 	}
 
@@ -835,12 +804,9 @@ func ExtractWaveform(audioPath string) ([]byte, error) {
 	peaks := make([]int16, numBuckets)
 	maxPeak := int16(0)
 
-	for i := 0; i < numBuckets; i++ {
+	for i := range numBuckets {
 		start := i * bucketSize
-		end := start + bucketSize
-		if end > sampleCount {
-			end = sampleCount
-		}
+		end := min(start+bucketSize, sampleCount)
 
 		maxVal := int16(0)
 		for j := start; j < end; j++ {

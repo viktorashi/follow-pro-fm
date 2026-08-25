@@ -15,3 +15,5 @@ data/
 apku-ala
 downloaded-from-fly
 .whisper_cache
+mise.local.toml
+mise.*.local.toml

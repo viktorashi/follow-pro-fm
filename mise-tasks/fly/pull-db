@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Download application and sender databases from Fly"
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+mkdir -p data
+flyctl ssh console -C "sh -c 'cd /data && tar -cf - app.sqlite wapp_*.sqlite'" | tar -xf - -C data

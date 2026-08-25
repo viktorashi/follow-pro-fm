@@ -20,8 +20,8 @@ Later configured windows are:
 ## Preconditions
 
 - You are on branch `dev`
-- `just test` passes
-- `just smoke-live-mock` passes
+- `mise run test` passes
+- `mise run smoke:live-mock` passes
 - The target phone has recent chat history with the sender phone
 - The sender phone is another number you are comfortable linking through `whatsmeow`
 - The target number is reachable and not blocked/restricted
@@ -135,8 +135,8 @@ After any real-device run:
 Useful commands:
 
 ```sh
-just test
-just smoke-live-mock
+mise run test
+mise run smoke:live-mock
 docker build -t pro-fm-poller:test .
 ```
 

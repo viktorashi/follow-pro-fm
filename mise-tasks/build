@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Generate source and build the application"
+#MISE depends=["generate"]
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+CGO_ENABLED=1 go build -o ./pro-fm-poller ./cmd/pro-fm-poller/main.go

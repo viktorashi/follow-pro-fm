@@ -86,8 +86,7 @@ func TestWebSocketTranscriberRetriesPendingAudio(t *testing.T) {
 	transcripts := make(chan string, 1)
 	transcriber := NewWebSocketTranscriber(wsURL(server.URL), func(text string) { transcripts <- text })
 	transcriber.retryDelay = time.Millisecond
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	transcriber.Start(ctx)
 	transcriber.audio <- make([]byte, transcriptionSessionBytes)
 	close(transcriber.audio)

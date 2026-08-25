@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Format Go source"
+#MISE alias=["fmt", "f"]
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+go fmt ./...

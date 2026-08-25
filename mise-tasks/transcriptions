@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Run the Whisper container transcription test"
+#MISE depends=["docker:build-whisper"]
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+WHISPER_TEST_IMAGE_READY=1 go test -tags=e2e -v -run '^TestWhisperContainerTranscription$' ./pkg/poller

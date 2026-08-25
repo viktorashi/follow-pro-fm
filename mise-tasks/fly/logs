@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Stream production logs"
+set -euo pipefail
+flyctl logs

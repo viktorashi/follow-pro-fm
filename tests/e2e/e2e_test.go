@@ -135,9 +135,9 @@ func setupTestEnv(t *testing.T) *TestEnv {
 		title := env.MockTitle
 		env.mu.Unlock()
 
-		resp := map[string]interface{}{
-			"data": map[string]interface{}{
-				"epg": map[string]interface{}{
+		resp := map[string]any{
+			"data": map[string]any{
+				"epg": map[string]any{
 					"playerExtendedSongTitle":    artist,
 					"playerExtendedSongSubtitle": title,
 				},
@@ -222,7 +222,7 @@ func (e *TestEnv) startManagedApp(t *testing.T) *exec.Cmd {
 }
 
 func (e *TestEnv) startApp(ctx context.Context) (*exec.Cmd, error) {
-	cmd := exec.Command(binPath)
+	cmd := exec.CommandContext(ctx, binPath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = append(os.Environ(),
@@ -331,7 +331,7 @@ func TestE2E(t *testing.T) {
 			time.Sleep(3 * time.Second)
 
 			// Check sent messages JSON
-			var records []map[string]interface{}
+			var records []map[string]any
 			data, err := os.ReadFile(env.MockSentMsgPath)
 			if err != nil {
 				t.Fatalf("failed to read mock sent messages: %v", err)
@@ -544,7 +544,7 @@ func TestE2E(t *testing.T) {
 
 			time.Sleep(3 * time.Second)
 
-			var records []map[string]interface{}
+			var records []map[string]any
 			if data, err := os.ReadFile(env.MockSentMsgPath); err == nil {
 				_ = json.Unmarshal(data, &records)
 			}
@@ -617,7 +617,7 @@ func TestE2E(t *testing.T) {
 			time.Sleep(2 * time.Second)
 
 			// Read sent messages JSON
-			var records []map[string]interface{}
+			var records []map[string]any
 			data, err := os.ReadFile(env.MockSentMsgPath)
 			if err == nil {
 				_ = json.Unmarshal(data, &records)
@@ -697,7 +697,7 @@ func TestE2E(t *testing.T) {
 		env.setMockSong("BTS", "Dynamite")
 		time.Sleep(3 * time.Second)
 
-		var sent []map[string]interface{}
+		var sent []map[string]any
 		if data, err := os.ReadFile(env.MockSentMsgPath); err == nil {
 			_ = json.Unmarshal(data, &sent)
 		}

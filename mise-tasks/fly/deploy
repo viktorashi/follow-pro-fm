@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Deploy the application to Fly.io"
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+flyctl deploy --ha=false

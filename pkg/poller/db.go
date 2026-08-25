@@ -219,19 +219,9 @@ func (m *DBManager) ListPersons(ctx context.Context) ([]Person, error) {
 
 	var persons []Person
 	for rows.Next() {
-		var p Person
-		var createdAtRaw interface{}
-		if err := rows.Scan(&p.ID, &p.Name, &p.Slug, &createdAtRaw); err != nil {
+		p, err := scanPerson(rows)
+		if err != nil {
 			return nil, err
-		}
-		switch v := createdAtRaw.(type) {
-		case time.Time:
-			p.CreatedAt = v
-		case string:
-			p.CreatedAt, _ = time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", v)
-			if p.CreatedAt.IsZero() {
-				p.CreatedAt, _ = time.Parse(time.RFC3339, v)
-			}
 		}
 		persons = append(persons, p)
 	}
@@ -239,35 +229,43 @@ func (m *DBManager) ListPersons(ctx context.Context) ([]Person, error) {
 }
 
 func (m *DBManager) GetPerson(ctx context.Context, id int64) (*Person, error) {
-	var p Person
-	var createdAtRaw interface{}
-	err := m.db.QueryRowContext(ctx, "SELECT id, name, slug, created_at FROM persons WHERE id = ?", id).Scan(&p.ID, &p.Name, &p.Slug, &createdAtRaw)
+	p, err := scanPerson(m.db.QueryRowContext(ctx, "SELECT id, name, slug, created_at FROM persons WHERE id = ?", id))
 	if err != nil {
 		return nil, err
-	}
-	switch v := createdAtRaw.(type) {
-	case time.Time:
-		p.CreatedAt = v
-	case string:
-		p.CreatedAt, _ = time.Parse(time.RFC3339, v)
 	}
 	return &p, nil
 }
 
 func (m *DBManager) GetPersonBySlug(ctx context.Context, slug string) (*Person, error) {
-	var p Person
-	var createdAtRaw interface{}
-	err := m.db.QueryRowContext(ctx, "SELECT id, name, slug, created_at FROM persons WHERE slug = ?", slug).Scan(&p.ID, &p.Name, &p.Slug, &createdAtRaw)
+	p, err := scanPerson(m.db.QueryRowContext(ctx, "SELECT id, name, slug, created_at FROM persons WHERE slug = ?", slug))
 	if err != nil {
 		return nil, err
 	}
-	switch v := createdAtRaw.(type) {
+	return &p, nil
+}
+
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanPerson(row rowScanner) (Person, error) {
+	var p Person
+	var createdAt any
+	if err := row.Scan(&p.ID, &p.Name, &p.Slug, &createdAt); err != nil {
+		return Person{}, err
+	}
+	switch v := createdAt.(type) {
 	case time.Time:
 		p.CreatedAt = v
 	case string:
-		p.CreatedAt, _ = time.Parse(time.RFC3339, v)
+		for _, layout := range []string{"2006-01-02 15:04:05.999999999 -0700 MST", time.RFC3339} {
+			if parsed, err := time.Parse(layout, v); err == nil {
+				p.CreatedAt = parsed
+				break
+			}
+		}
 	}
-	return &p, nil
+	return p, nil
 }
 
 func (m *DBManager) UpdatePerson(ctx context.Context, id int64, name string) error {
@@ -362,8 +360,8 @@ func (m *DBManager) IsTrustedEmail(ctx context.Context, email string) (bool, err
 		return false, fmt.Errorf("failed to read trusted emails file: %w", err)
 	}
 
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(string(data), "\n")
+	for line := range lines {
 		line = strings.ToLower(strings.TrimSpace(line))
 		if line == email {
 			return true, nil

@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+#MISE description="Build the pinned minimal ffmpeg and ffprobe binaries"
+set -euo pipefail
+
+project_root="${MISE_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+bin_dir="$project_root/bin"
+ffmpeg_submodule="$project_root/third_party/ffmpeg"
+force=false
+
+for arg in "$@"; do
+  if [[ "$arg" == "--force" || "$arg" == "-f" ]]; then
+    force=true
+  fi
+done
+
+if [[ "$force" == false && -f "$bin_dir/ffmpeg" && -f "$bin_dir/ffprobe" ]]; then
+  printf 'ffmpeg and ffprobe already exist in %s. Use --force to rebuild.\n' "$bin_dir"
+  exit 0
+fi
+
+if command -v nproc >/dev/null 2>&1; then
+  cores="$(nproc)"
+elif command -v sysctl >/dev/null 2>&1; then
+  cores="$(sysctl -n hw.ncpu)"
+else
+  cores=2
+fi
+
+printf 'Building minimal ffmpeg and ffprobe with %s CPU cores.\n' "$cores"
+cd "$ffmpeg_submodule"
+
+if command -v clang >/dev/null 2>&1; then
+  export CC="${CC:-clang}"
+fi
+
+if [[ "$force" == true || -f ffbuild/config.mak || -f config.mak || -f fftools/objpool.o ]]; then
+  make distclean || true
+fi
+
+./configure \
+  --disable-everything \
+  --disable-doc \
+  --disable-debug \
+  --disable-ffplay \
+  --disable-avdevice \
+  --disable-postproc \
+  --disable-swscale \
+  --enable-ffmpeg \
+  --enable-ffprobe \
+  --enable-protocol=file \
+  --enable-protocol=pipe \
+  --enable-demuxer=mp3 \
+  --enable-demuxer=ogg \
+  --enable-demuxer=s16le \
+  --enable-demuxer=pcm_s16le \
+  --enable-muxer=ogg \
+  --enable-muxer=mp3 \
+  --enable-muxer=pcm_s16le \
+  --enable-encoder=pcm_s16le \
+  --enable-encoder=opus \
+  --enable-decoder=mp3float \
+  --enable-decoder=pcm_s16le \
+  --enable-parser=opus \
+  --enable-decoder=opus \
+  --enable-filter=aresample \
+  --disable-network \
+  --disable-autodetect \
+  --disable-hwaccels \
+  --disable-x86asm \
+  --disable-shared \
+  --enable-static
+
+make -j "$cores"
+mkdir -p "$bin_dir"
+cp -f ffmpeg ffprobe "$bin_dir/"
+printf 'Binaries copied to %s.\n' "$bin_dir"

@@ -455,28 +455,14 @@ func (s *TelemetryServer) statusAfterKillSwitchDisabled(state AppState, now time
 		return StatusSleeping
 	}
 
-	anyConnected := false
-	anyPairingRequired := false
-	anyError := false
-
-	for _, conn := range state.Connections {
-		if conn.WhatsAppConnected {
-			anyConnected = true
-		}
-		switch conn.Status {
-		case StatusPairingRequired:
-			anyPairingRequired = true
-		case StatusError:
-			anyError = true
-		}
-	}
+	summary := summarizeConnections(state.Connections)
 
 	switch {
-	case anyPairingRequired:
+	case summary.anyPairingRequired:
 		return StatusPairingRequired
-	case anyConnected:
+	case summary.anyConnected:
 		return StatusPolling
-	case anyError:
+	case summary.anyError:
 		return StatusError
 	case len(state.Connections) > 0:
 		return StatusInitializing
@@ -730,7 +716,7 @@ func (s *TelemetryServer) handleListPersons(c *echo.Context) error {
 	return c.JSON(http.StatusOK, persons)
 }
 
-func (s *TelemetryServer) handleCreatePerson(c *echo.Context) error {
+func personNameFromRequest(c *echo.Context) string {
 	name := strings.TrimSpace(c.FormValue("name"))
 	if name == "" {
 		var req struct {
@@ -739,6 +725,20 @@ func (s *TelemetryServer) handleCreatePerson(c *echo.Context) error {
 		_ = c.Bind(&req)
 		name = strings.TrimSpace(req.Name)
 	}
+	return name
+}
+
+func (s *TelemetryServer) respondAfterPersonMutation(c *echo.Context, payload any) error {
+	s.refreshStatePersons(c.Request().Context())
+	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("HX-Refresh", "true")
+		return c.NoContent(http.StatusOK)
+	}
+	return c.JSON(http.StatusOK, payload)
+}
+
+func (s *TelemetryServer) handleCreatePerson(c *echo.Context) error {
+	name := personNameFromRequest(c)
 	if name == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Person name is required"})
 	}
@@ -753,13 +753,7 @@ func (s *TelemetryServer) handleCreatePerson(c *echo.Context) error {
 	}
 
 	_ = InitAudioPool(GetAudioDirForPerson(person.Slug, s.audiosDir))
-	s.refreshStatePersons(c.Request().Context())
-
-	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Refresh", "true")
-		return c.NoContent(http.StatusOK)
-	}
-	return c.JSON(http.StatusOK, person)
+	return s.respondAfterPersonMutation(c, person)
 }
 
 func (s *TelemetryServer) handleEditPerson(c *echo.Context) error {
@@ -768,14 +762,7 @@ func (s *TelemetryServer) handleEditPerson(c *echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid person ID"})
 	}
-	name := strings.TrimSpace(c.FormValue("name"))
-	if name == "" {
-		var req struct {
-			Name string `json:"name"`
-		}
-		_ = c.Bind(&req)
-		name = strings.TrimSpace(req.Name)
-	}
+	name := personNameFromRequest(c)
 	if name == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Person name is required"})
 	}
@@ -788,13 +775,7 @@ func (s *TelemetryServer) handleEditPerson(c *echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	s.refreshStatePersons(c.Request().Context())
-
-	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Refresh", "true")
-		return c.NoContent(http.StatusOK)
-	}
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	return s.respondAfterPersonMutation(c, map[string]string{"status": "ok"})
 }
 
 func (s *TelemetryServer) handleDeletePerson(c *echo.Context) error {
@@ -812,13 +793,7 @@ func (s *TelemetryServer) handleDeletePerson(c *echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	s.refreshStatePersons(c.Request().Context())
-
-	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Refresh", "true")
-		return c.NoContent(http.StatusOK)
-	}
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	return s.respondAfterPersonMutation(c, map[string]string{"status": "ok"})
 }
 
 func (s *TelemetryServer) handleAssignPhone(c *echo.Context) error {
@@ -855,13 +830,7 @@ func (s *TelemetryServer) handleAssignPhone(c *echo.Context) error {
 		}
 	}
 
-	s.refreshStatePersons(c.Request().Context())
-
-	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Refresh", "true")
-		return c.NoContent(http.StatusOK)
-	}
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	return s.respondAfterPersonMutation(c, map[string]string{"status": "ok"})
 }
 
 func (s *TelemetryServer) handleBatchMoveAudios(c *echo.Context) error {
@@ -897,7 +866,7 @@ func (s *TelemetryServer) handleBatchMoveAudios(c *echo.Context) error {
 	}
 
 	s.refreshStatePersons(c.Request().Context())
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"status": "ok",
 		"moved":  len(req.Files),
 	})
@@ -1245,13 +1214,20 @@ func (s *TelemetryServer) handleUnreviewedCrop(c *echo.Context) error {
 }
 
 func (s *TelemetryServer) handleUnreviewedDelete(c *echo.Context) error {
+	return s.handleSignatureDelete(c, BucketUnreviewed)
+}
+
+func (s *TelemetryServer) handleCanonicalDelete(c *echo.Context) error {
+	return s.handleSignatureDelete(c, BucketCanonical)
+}
+
+func (s *TelemetryServer) handleSignatureDelete(c *echo.Context, bucket string) error {
 	filename := c.FormValue("filename")
 	if !isSafeFilename(filename) {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid filename"})
 	}
 
-	unreviewedDir := filepath.Join(s.dataDir, DirSignatures, BucketUnreviewed)
-	targetPath := filepath.Join(unreviewedDir, filename)
+	targetPath := filepath.Join(s.dataDir, DirSignatures, bucket, filename)
 
 	if _, err := os.Stat(targetPath); err != nil {
 		if os.IsNotExist(err) {
@@ -1265,74 +1241,21 @@ func (s *TelemetryServer) handleUnreviewedDelete(c *echo.Context) error {
 	}
 
 	if s.dbMgr != nil {
-		_ = s.dbMgr.DeleteSignatureFile(c.Request().Context(), BucketUnreviewed, filename)
+		_ = s.dbMgr.DeleteSignatureFile(c.Request().Context(), bucket, filename)
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
 }
 
 func (s *TelemetryServer) handleBatchDeleteUnreviewed(c *echo.Context) error {
-	var req struct {
-		Files []string `json:"files"`
-	}
-	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
-	}
-	if len(req.Files) == 0 {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "At least one file must be selected"})
-	}
-
-	unreviewedDir := filepath.Join(s.dataDir, DirSignatures, BucketUnreviewed)
-	deletedCount := 0
-
-	for _, filename := range req.Files {
-		filename = strings.TrimSpace(filename)
-		if !isSafeFilename(filename) {
-			continue
-		}
-		targetPath := filepath.Join(unreviewedDir, filename)
-		if err := os.Remove(targetPath); err == nil {
-			deletedCount++
-			if s.dbMgr != nil {
-				_ = s.dbMgr.DeleteSignatureFile(c.Request().Context(), BucketUnreviewed, filename)
-			}
-		}
-	}
-
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"status":  "ok",
-		"deleted": deletedCount,
-	})
-}
-
-func (s *TelemetryServer) handleCanonicalDelete(c *echo.Context) error {
-	filename := c.FormValue("filename")
-	if !isSafeFilename(filename) {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid filename"})
-	}
-
-	canonicalDir := filepath.Join(s.dataDir, DirSignatures, BucketCanonical)
-	targetPath := filepath.Join(canonicalDir, filename)
-
-	if _, err := os.Stat(targetPath); err != nil {
-		if os.IsNotExist(err) {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": "file not found"})
-		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-	}
-
-	if err := os.Remove(targetPath); err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to delete file: " + err.Error()})
-	}
-
-	if s.dbMgr != nil {
-		_ = s.dbMgr.DeleteSignatureFile(c.Request().Context(), BucketCanonical, filename)
-	}
-
-	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
+	return s.handleBatchDeleteSignatures(c, BucketUnreviewed)
 }
 
 func (s *TelemetryServer) handleBatchDeleteCanonical(c *echo.Context) error {
+	return s.handleBatchDeleteSignatures(c, BucketCanonical)
+}
+
+func (s *TelemetryServer) handleBatchDeleteSignatures(c *echo.Context, bucket string) error {
 	var req struct {
 		Files []string `json:"files"`
 	}
@@ -1343,7 +1266,7 @@ func (s *TelemetryServer) handleBatchDeleteCanonical(c *echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "At least one file must be selected"})
 	}
 
-	canonicalDir := filepath.Join(s.dataDir, DirSignatures, BucketCanonical)
+	bucketDir := filepath.Join(s.dataDir, DirSignatures, bucket)
 	deletedCount := 0
 
 	for _, filename := range req.Files {
@@ -1351,21 +1274,20 @@ func (s *TelemetryServer) handleBatchDeleteCanonical(c *echo.Context) error {
 		if !isSafeFilename(filename) {
 			continue
 		}
-		targetPath := filepath.Join(canonicalDir, filename)
+		targetPath := filepath.Join(bucketDir, filename)
 		if err := os.Remove(targetPath); err == nil {
 			deletedCount++
 			if s.dbMgr != nil {
-				_ = s.dbMgr.DeleteSignatureFile(c.Request().Context(), BucketCanonical, filename)
+				_ = s.dbMgr.DeleteSignatureFile(c.Request().Context(), bucket, filename)
 			}
 		}
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"status":  "ok",
 		"deleted": deletedCount,
 	})
 }
-
 func (s *TelemetryServer) listChunks(bucket string) ([]ReviewChunk, error) {
 	dir := filepath.Join(s.dataDir, DirSignatures, bucket)
 	entries, err := os.ReadDir(dir)
@@ -1514,7 +1436,7 @@ func (s *TelemetryServer) handleRemuxAllUnreviewed(c *echo.Context) error {
 	entries, err := os.ReadDir(unreviewedDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return c.JSON(http.StatusOK, map[string]interface{}{"status": "success", "count": 0})
+			return c.JSON(http.StatusOK, map[string]any{"status": "success", "count": 0})
 		}
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -1536,7 +1458,7 @@ func (s *TelemetryServer) handleRemuxAllUnreviewed(c *echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{"status": "success", "count": count})
+	return c.JSON(http.StatusOK, map[string]any{"status": "success", "count": count})
 }
 
 func (s *TelemetryServer) handleTranscribeSignature(c *echo.Context) error {

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#MISE description="Snapshot the entire Fly volume locally"
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+snapshot_number=1
+while [[ -d "downloaded-from-fly/$snapshot_number" ]]; do
+  ((snapshot_number++))
+done
+destination="downloaded-from-fly/$snapshot_number"
+mkdir -p "$destination"
+flyctl ssh console -C 'tar -cf - -C /data .' | tar -xf - -C "$destination"
+printf 'Fly volume downloaded to %s.\n' "$destination"
