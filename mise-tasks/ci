@@ -3,6 +3,7 @@
 set -euo pipefail
 
 cd "$MISE_PROJECT_ROOT"
+mise run toolchain:check
 mise run docker:build-whisper
 mise run docker:build-app
 mise run ffmpeg:build

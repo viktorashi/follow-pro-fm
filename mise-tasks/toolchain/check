@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+#MISE description="Verify toolchain versions and shared build entrypoints stay aligned"
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+go_mod_version="$(awk '$1 == "go" { print $2; exit }' go.mod)"
+mise_go_version="$(sed -n 's/^go = "\([^"]*\)"$/\1/p' mise.toml)"
+docker_go_version="$(sed -n 's/^FROM golang:\([^-]*\)-alpine AS builder$/\1/p' Dockerfile)"
+
+if [[ -z "$go_mod_version" || "$go_mod_version" != "$mise_go_version" || "$go_mod_version" != "$docker_go_version" ]]; then
+  printf 'Go version drift: go.mod=%s mise.toml=%s Dockerfile=%s\n' \
+    "$go_mod_version" "$mise_go_version" "$docker_go_version" >&2
+  exit 1
+fi
+
+mise_min_version="$(sed -n 's/^min_version = "\([^"]*\)"$/\1/p' mise.toml)"
+workflow_mise_versions="$(sed -n 's/^[[:space:]]*version: \([0-9][0-9.]*\)$/\1/p' .github/workflows/ci.yml .github/workflows/deploy.yml | sort -u)"
+if [[ -z "$mise_min_version" || "$workflow_mise_versions" != "$mise_min_version" ]]; then
+  printf 'Mise version drift: mise.toml=%s workflows=%s\n' \
+    "$mise_min_version" "${workflow_mise_versions//$'\n'/,}" >&2
+  exit 1
+fi
+
+grep -Fq 'COPY mise-tasks/ffmpeg/build ./mise-tasks/ffmpeg/build' Dockerfile
+grep -Fq 'RUN ./mise-tasks/ffmpeg/build' Dockerfile
+grep -Fq "hashFiles('mise-tasks/ffmpeg/build'" .github/workflows/ci.yml
+grep -Fq 'tool github.com/a-h/templ/cmd/templ' go.mod
+grep -Fq 'tool golang.org/x/tools/gopls' go.mod
+
+printf 'Toolchain versions and shared build entrypoints are aligned.\n'
