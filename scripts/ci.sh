@@ -23,6 +23,7 @@ build_image "${PROFM_APP_IMAGE_READY:-}" profm-app-ci:local .
 ./scripts/build_ffmpeg.sh
 export PATH="$repo_root/bin:$PATH"
 ./scripts/golangci-lint-shim.sh run
+./scripts/gopls-check.sh
 
 if [ ! -x bin/gotestsum ]; then
   GOBIN="$repo_root/bin" go install gotest.tools/gotestsum@v1.13.0

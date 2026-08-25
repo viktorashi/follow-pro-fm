@@ -24,6 +24,9 @@ setup-dev:
 lint:
     ./scripts/golangci-lint-shim.sh run
 
+gopls:
+    ./scripts/gopls-check.sh
+
 build-ffmpeg:
     ./scripts/build_ffmpeg.sh
 
