@@ -15,7 +15,6 @@ require (
 	go.mau.fi/whatsmeow v0.0.0-20260722203353-e9a033b24933
 	golang.org/x/text v0.40.0
 	gonum.org/v1/gonum v0.16.0
-	google.golang.org/protobuf v1.36.11
 	modernc.org/sqlite v1.52.0
 )
 
@@ -58,6 +57,7 @@ require (
 	golang.org/x/tools v0.48.0 // indirect
 	golang.org/x/tools/gopls v0.23.0 // indirect
 	golang.org/x/vuln v1.4.0 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 	honnef.co/go/tools v0.8.0-rc.1 // indirect
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
