@@ -1657,43 +1657,43 @@ conda_deps = [
 ]
 
 [[tools.flyctl]]
-version = "0.4.59"
+version = "0.4.85"
 backend = "aqua:superfly/flyctl"
 
 [tools.flyctl."platforms.linux-arm64"]
-checksum = "sha256:33745457758150e500e80fc8d47e2fc68803302c668b1bca845c8b284e17c17e"
-url = "https://github.com/superfly/flyctl/releases/download/v0.4.59/flyctl_0.4.59_Linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/superfly/flyctl/releases/assets/443011682"
+checksum = "sha256:198cf92e65876290f2f77c1a6c9089c575a3f80abc80c904e92b43e6c91bfc21"
+url = "https://github.com/superfly/flyctl/releases/download/v0.4.85/flyctl_0.4.85_Linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/superfly/flyctl/releases/assets/519867258"
 
 [tools.flyctl."platforms.linux-arm64-musl"]
-checksum = "sha256:33745457758150e500e80fc8d47e2fc68803302c668b1bca845c8b284e17c17e"
-url = "https://github.com/superfly/flyctl/releases/download/v0.4.59/flyctl_0.4.59_Linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/superfly/flyctl/releases/assets/443011682"
+checksum = "sha256:198cf92e65876290f2f77c1a6c9089c575a3f80abc80c904e92b43e6c91bfc21"
+url = "https://github.com/superfly/flyctl/releases/download/v0.4.85/flyctl_0.4.85_Linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/superfly/flyctl/releases/assets/519867258"
 
 [tools.flyctl."platforms.linux-x64"]
-checksum = "sha256:1c560d9dbdbfdccf1fe4899ae6e55dd073cc7b5400fc15d9ae4d0176c4eff17d"
-url = "https://github.com/superfly/flyctl/releases/download/v0.4.59/flyctl_0.4.59_Linux_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/superfly/flyctl/releases/assets/443011683"
+checksum = "sha256:c3b5ed05319adf8a265d68171758ea7b37bd340c5c3dc4e09e17fb6344b8ff90"
+url = "https://github.com/superfly/flyctl/releases/download/v0.4.85/flyctl_0.4.85_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/superfly/flyctl/releases/assets/519867262"
 
 [tools.flyctl."platforms.linux-x64-musl"]
-checksum = "sha256:1c560d9dbdbfdccf1fe4899ae6e55dd073cc7b5400fc15d9ae4d0176c4eff17d"
-url = "https://github.com/superfly/flyctl/releases/download/v0.4.59/flyctl_0.4.59_Linux_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/superfly/flyctl/releases/assets/443011683"
+checksum = "sha256:c3b5ed05319adf8a265d68171758ea7b37bd340c5c3dc4e09e17fb6344b8ff90"
+url = "https://github.com/superfly/flyctl/releases/download/v0.4.85/flyctl_0.4.85_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/superfly/flyctl/releases/assets/519867262"
 
 [tools.flyctl."platforms.macos-arm64"]
-checksum = "sha256:42226f7feab2f268896a9407540e2ea8bb22425be9fb20a4a2cae0b7d4ba82eb"
-url = "https://github.com/superfly/flyctl/releases/download/v0.4.59/flyctl_0.4.59_macOS_arm64.tar.gz"
-url_api = "https://api.github.com/repos/superfly/flyctl/releases/assets/443011681"
+checksum = "sha256:0e42f238e02f88863d9e90384a26141b18f9ca3aa56b22b11310829a03008ba6"
+url = "https://github.com/superfly/flyctl/releases/download/v0.4.85/flyctl_0.4.85_macOS_arm64.tar.gz"
+url_api = "https://api.github.com/repos/superfly/flyctl/releases/assets/519867260"
 
 [tools.flyctl."platforms.macos-x64"]
-checksum = "sha256:97ce8554bf1ffbabdc35948594c588706a4de69154682a06391da75f81120d13"
-url = "https://github.com/superfly/flyctl/releases/download/v0.4.59/flyctl_0.4.59_macOS_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/superfly/flyctl/releases/assets/443011684"
+checksum = "sha256:d4cbff9dd9dd97344878042ab5977fd6ce5abc2bebb471e6eb87b4aa77434708"
+url = "https://github.com/superfly/flyctl/releases/download/v0.4.85/flyctl_0.4.85_macOS_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/superfly/flyctl/releases/assets/519867257"
 
 [tools.flyctl."platforms.windows-x64"]
-checksum = "sha256:c3d727d1efc883ad14ffb35ac5af0befe87f4ff573ef81a7ee66c979f128b1af"
-url = "https://github.com/superfly/flyctl/releases/download/v0.4.59/flyctl_0.4.59_Windows_x86_64.zip"
-url_api = "https://api.github.com/repos/superfly/flyctl/releases/assets/443011696"
+checksum = "sha256:2bfd222c4ebd3af3393d3799cd2bfd38f2caa1c283b689c0fea8a4d455f89e9c"
+url = "https://github.com/superfly/flyctl/releases/download/v0.4.85/flyctl_0.4.85_Windows_x86_64.zip"
+url_api = "https://api.github.com/repos/superfly/flyctl/releases/assets/519867332"
 
 [[tools.go]]
 version = "1.26.4"
