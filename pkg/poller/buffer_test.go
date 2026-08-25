@@ -34,7 +34,7 @@ func TestCircularAudioBuffer_Trigger(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		w.(http.Flusher).Flush()
 
-		for i := 0; i < 20; i++ {
+		for i := range 20 {
 			_, _ = w.Write(bytes.Repeat([]byte{byte(i)}, 100))
 			w.(http.Flusher).Flush()
 			time.Sleep(10 * time.Millisecond)

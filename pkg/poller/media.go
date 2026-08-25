@@ -77,10 +77,7 @@ func getOggDuration(path string) (time.Duration, error) {
 	}
 
 	// Read the last 64KB (or up to file size) to find the last Ogg page
-	chunkSize := int64(65536)
-	if size < chunkSize {
-		chunkSize = size
-	}
+	chunkSize := min(size, int64(65536))
 
 	buf := make([]byte, chunkSize)
 	_, err = f.ReadAt(buf, size-chunkSize)

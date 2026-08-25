@@ -395,7 +395,7 @@ func extractFingerprintFeatures(data []byte, format string) ([]float64, error) {
 			power[i] = real(coeff)*real(coeff) + imag(coeff)*imag(coeff)
 		}
 
-		for band := 0; band < fingerprintMelBandCount; band++ {
+		for band := range fingerprintMelBandCount {
 			energy := 0.0
 			for bin, weight := range filterBank[band] {
 				energy += power[bin] * weight
@@ -439,7 +439,7 @@ func melFilterBank(sampleRate, fftSize, bandCount int) [][]float64 {
 	}
 
 	filterBank := make([][]float64, bandCount)
-	for band := 0; band < bandCount; band++ {
+	for band := range bandCount {
 		leftHz := melToHz(melPoints[band])
 		centerHz := melToHz(melPoints[band+1])
 		rightHz := melToHz(melPoints[band+2])
@@ -475,22 +475,22 @@ func normalizeFeatureFrames(features []float64, width int) {
 		return
 	}
 
-	for coeff := 0; coeff < width; coeff++ {
+	for coeff := range width {
 		mean := 0.0
-		for frame := 0; frame < frameCount; frame++ {
+		for frame := range frameCount {
 			mean += features[frame*width+coeff]
 		}
 		mean /= float64(frameCount)
 
 		variance := 0.0
-		for frame := 0; frame < frameCount; frame++ {
+		for frame := range frameCount {
 			idx := frame*width + coeff
 			features[idx] -= mean
 			variance += features[idx] * features[idx]
 		}
 
 		scale := math.Sqrt(variance/float64(frameCount)) + 1e-6
-		for frame := 0; frame < frameCount; frame++ {
+		for frame := range frameCount {
 			features[frame*width+coeff] /= scale
 		}
 	}

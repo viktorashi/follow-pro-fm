@@ -590,7 +590,7 @@ func (p *Poller) runMetadataChecker(checker ContestChecker, checkImmediately boo
 
 		if isSleeping {
 			log.Println("[INFO] Campaign is now active! Waking up (resuming polling).")
-			
+
 			isSleeping = false
 			p.StateMgr.Update(func(s *AppState) {
 				s.Status = StatusPolling
@@ -1091,7 +1091,7 @@ func transcriptionPhraseMatches(transcript, phrase string) bool {
 		return false
 	}
 	transcriptWords := map[string]struct{}{}
-	for _, word := range strings.Fields(transcript) {
+	for word := range strings.FieldsSeq(transcript) {
 		transcriptWords[word] = struct{}{}
 	}
 	matches := 0

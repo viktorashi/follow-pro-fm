@@ -866,7 +866,7 @@ func (s *TelemetryServer) handleBatchMoveAudios(c *echo.Context) error {
 	}
 
 	s.refreshStatePersons(c.Request().Context())
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"status": "ok",
 		"moved":  len(req.Files),
 	})
@@ -1283,7 +1283,7 @@ func (s *TelemetryServer) handleBatchDeleteSignatures(c *echo.Context, bucket st
 		}
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"status":  "ok",
 		"deleted": deletedCount,
 	})
@@ -1436,7 +1436,7 @@ func (s *TelemetryServer) handleRemuxAllUnreviewed(c *echo.Context) error {
 	entries, err := os.ReadDir(unreviewedDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return c.JSON(http.StatusOK, map[string]interface{}{"status": "success", "count": 0})
+			return c.JSON(http.StatusOK, map[string]any{"status": "success", "count": 0})
 		}
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -1458,7 +1458,7 @@ func (s *TelemetryServer) handleRemuxAllUnreviewed(c *echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{"status": "success", "count": count})
+	return c.JSON(http.StatusOK, map[string]any{"status": "success", "count": count})
 }
 
 func (s *TelemetryServer) handleTranscribeSignature(c *echo.Context) error {
