@@ -48,6 +48,13 @@ type AlertEvent struct {
 	ActionURL   string
 }
 
+func (event AlertEvent) actionLabel() string {
+	if event.ActionLabel != "" {
+		return event.ActionLabel
+	}
+	return "Click Here"
+}
+
 // Alerter defines the interface for all notification modules.
 type Alerter interface {
 	AlertCritical(event AlertEvent) error
@@ -136,11 +143,7 @@ func (t *TelegramAlerter) send(prefix string, event AlertEvent) error {
 	// Format Telegram message
 	msg := fmt.Sprintf("<b>%s%s %s</b>\n\n%s", getEnvPrefix(), prefix, event.Title, event.Message)
 	if event.ActionURL != "" {
-		label := event.ActionLabel
-		if label == "" {
-			label = "Click Here"
-		}
-		msg += fmt.Sprintf("\n\n<a href=\"%s\">%s</a>", event.ActionURL, label)
+		msg += fmt.Sprintf("\n\n<a href=\"%s\">%s</a>", event.ActionURL, event.actionLabel())
 	}
 
 	baseURL := getBaseURL()
@@ -236,16 +239,12 @@ func (e *EmailAlerter) send(prefix string, event AlertEvent) error {
 	}
 
 	if event.ActionURL != "" {
-		plainTextContent += fmt.Sprintf("\n\n%s: %s", event.ActionLabel, event.ActionURL)
+		plainTextContent += fmt.Sprintf("\n\n%s: %s", event.actionLabel(), event.ActionURL)
 	}
 
 	htmlContent := fmt.Sprintf("<p>%s</p>", strings.ReplaceAll(event.Message, "\n", "<br>"))
 	if event.ActionURL != "" {
-		label := event.ActionLabel
-		if label == "" {
-			label = "Click Here"
-		}
-		htmlContent += fmt.Sprintf("<br><br><a href=\"%s\" style=\"padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;\">%s</a>", event.ActionURL, label)
+		htmlContent += fmt.Sprintf("<br><br><a href=\"%s\" style=\"padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;\">%s</a>", event.ActionURL, event.actionLabel())
 	}
 
 	baseURL := getBaseURL()

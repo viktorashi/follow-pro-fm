@@ -442,6 +442,16 @@ func (p *Poller) canRunContestChecker(now time.Time) bool {
 	return p.hasActiveCampaign(now) && (p.StateMgr == nil || !p.StateMgr.Get().KillSwitchActive)
 }
 
+func (p *Poller) alertContestSongPlaying(messageFormat string, args ...any) {
+	if p.Alerter == nil {
+		return
+	}
+	_ = p.Alerter.AlertSuccess(AlertEvent{
+		Title:   "Contest Song Playing",
+		Message: fmt.Sprintf(messageFormat, args...),
+	})
+}
+
 func (p *Poller) getNowPlaying() (SongInfo, error) {
 	req, err := http.NewRequest("GET", p.APIURL, nil)
 	if err != nil {
@@ -674,10 +684,7 @@ func (c *metadataContestChecker) Check(now time.Time) {
 
 		campaignArtist, matchesCampaign := p.matchingCampaignArtist(now, song)
 		if matchesCampaign {
-			if p.Alerter != nil {
-				msg := fmt.Sprintf("🎵 Contest Song Detected!\nArtist: %s\nTitle: %s\n\n(This is an instant notification; automatic send rules apply independently.)", song.Artist, song.Title)
-				_ = p.Alerter.AlertSuccess(AlertEvent{Title: "Contest Song Playing", Message: msg})
-			}
+			p.alertContestSongPlaying("🎵 Contest Song Detected!\nArtist: %s\nTitle: %s\n\n(This is an instant notification; automatic send rules apply independently.)", song.Artist, song.Title)
 		}
 
 		// Abort immediately if the bot has been permanently killed
@@ -1009,10 +1016,7 @@ func (c *fingerprintContestChecker) Check(now time.Time) {
 
 	log.Printf("   [FINGERPRINT MATCH] Matched signature: %s", name)
 
-	if p.Alerter != nil {
-		msg := fmt.Sprintf("🎵 Contest Audio Signature Detected!\nSignature Name: %s\nCampaign: %s\n\n(This is an instant notification; automatic send rules apply independently.)", name, campaignArtist)
-		_ = p.Alerter.AlertSuccess(AlertEvent{Title: "Contest Song Playing", Message: msg})
-	}
+	p.alertContestSongPlaying("🎵 Contest Audio Signature Detected!\nSignature Name: %s\nCampaign: %s\n\n(This is an instant notification; automatic send rules apply independently.)", name, campaignArtist)
 
 	p.triggerDashcamForWinner(now, triggerSourceFingerprint, campaignArtist, name)
 	p.evaluateAndTriggerCampaign(now, campaignArtist, triggerSourceFingerprint, 0, fmt.Sprintf("fingerprint match %q", name), nil)
@@ -1040,10 +1044,7 @@ func (p *Poller) handleTranscriptWithCoordinator(now time.Time, coordinator *Con
 		return
 	}
 
-	if p.Alerter != nil {
-		msg := fmt.Sprintf("🎵 Contest Phrase Detected (via Transcription)!\nMatched Phrase: %s\nCampaign: %s\nTranscript: \"%s\"\n\n(This is an instant notification; automatic send rules apply independently.)", phrase, campaignArtist, transcript)
-		_ = p.Alerter.AlertSuccess(AlertEvent{Title: "Contest Song Playing", Message: msg})
-	}
+	p.alertContestSongPlaying("🎵 Contest Phrase Detected (via Transcription)!\nMatched Phrase: %s\nCampaign: %s\nTranscript: \"%s\"\n\n(This is an instant notification; automatic send rules apply independently.)", phrase, campaignArtist, transcript)
 	if capture == nil || !p.canRunContestChecker(now) || p.hasReachedDailyLimit(now) {
 		return
 	}

@@ -88,16 +88,50 @@ func handleConnectionError(err error, label string, phone string, stateMgr *Stat
 	return waitRetry(ctx)
 }
 
+func alertWhatsAppDisconnected(alerter Alerter, baseURL string) bool {
+	if alerter == nil || baseURL == "" {
+		return false
+	}
+
+	_ = alerter.AlertCritical(AlertEvent{
+		Title:       "WhatsApp Disconnected",
+		Message:     "WhatsApp disconnected! Action required immediately. Scan the QR code on the dashboard.",
+		ActionLabel: "Open Live Dashboard",
+		ActionURL:   baseURL,
+	})
+	return true
+}
+
+func encodeQRCodeData(code string) string {
+	png, _ := qrcode.Encode(code, qrcode.Medium, 256)
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+}
+
+func markWhatsAppPaired(stateMgr *StateManager, phone string) {
+	if stateMgr == nil {
+		return
+	}
+	stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
+		s.Status = StatusConnected
+		s.QRCodeData = ""
+		s.WhatsAppConnected = true
+	})
+}
+
 type whatsappClientWrapper struct {
 	mu       sync.RWMutex
 	client   *whatsmeow.Client
 	handlers []whatsmeow.EventHandler
 }
 
-func withClient[T any](w *whatsappClientWrapper, action func(*whatsmeow.Client) (T, error)) (T, error) {
+func (w *whatsappClientWrapper) currentClient() *whatsmeow.Client {
 	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
+	defer w.mu.RUnlock()
+	return w.client
+}
+
+func withClient[T any](w *whatsappClientWrapper, action func(*whatsmeow.Client) (T, error)) (T, error) {
+	c := w.currentClient()
 	if c != nil {
 		return action(c)
 	}
@@ -106,9 +140,7 @@ func withClient[T any](w *whatsappClientWrapper, action func(*whatsmeow.Client) 
 }
 
 func withClientErr(w *whatsappClientWrapper, action func(*whatsmeow.Client) error) error {
-	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
+	c := w.currentClient()
 	if c != nil {
 		return action(c)
 	}
@@ -116,9 +148,7 @@ func withClientErr(w *whatsappClientWrapper, action func(*whatsmeow.Client) erro
 }
 
 func withClientVal[T any](w *whatsappClientWrapper, action func(*whatsmeow.Client) T) T {
-	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
+	c := w.currentClient()
 	if c != nil {
 		return action(c)
 	}
@@ -127,9 +157,7 @@ func withClientVal[T any](w *whatsappClientWrapper, action func(*whatsmeow.Clien
 }
 
 func withClientVoid(w *whatsappClientWrapper, action func(*whatsmeow.Client)) {
-	w.mu.RLock()
-	c := w.client
-	w.mu.RUnlock()
+	c := w.currentClient()
 	if c != nil {
 		action(c)
 	}
@@ -331,22 +359,14 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 				for evt := range qrChan {
 					if evt.Event == "code" {
 						if stateMgr != nil {
-							png, _ := qrcode.Encode(evt.Code, qrcode.Medium, 256)
-							b64 := base64.StdEncoding.EncodeToString(png)
 							stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
 								s.Status = StatusPairingRequired
-								s.QRCodeData = "data:image/png;base64," + b64
+								s.QRCodeData = encodeQRCodeData(evt.Code)
 							})
 						}
 
-						if !alertSent && alerter != nil && baseURL != "" {
-							_ = alerter.AlertCritical(AlertEvent{
-								Title:       "WhatsApp Disconnected",
-								Message:     "WhatsApp disconnected! Action required immediately. Scan the QR code on the dashboard.",
-								ActionLabel: "Open Live Dashboard",
-								ActionURL:   baseURL,
-							})
-							alertSent = true
+						if !alertSent {
+							alertSent = alertWhatsAppDisconnected(alerter, baseURL)
 						}
 
 						fmt.Print("\033[u\033[J") // Restore cursor and clear to end of screen
@@ -358,13 +378,7 @@ func InitWhatsApp(phone string, dbPath string, stateMgr *StateManager, alerter A
 						case "success":
 							fmt.Println("✅ Successfully paired!")
 							paired = true
-							if stateMgr != nil {
-								stateMgr.UpdateConnection(phone, func(s *WAConnectionState) {
-									s.Status = StatusConnected
-									s.QRCodeData = ""
-									s.WhatsAppConnected = true
-								})
-							}
+							markWhatsAppPaired(stateMgr, phone)
 							if len(onPaired) > 0 && client.Store.ID != nil && client.Store.ID.User != "" {
 								onPaired[0]("+" + client.Store.ID.User)
 							}
@@ -640,34 +654,19 @@ func (m *MockWhatsAppClient) Connect() error {
 		m.mu.Unlock()
 
 		if loggedIn {
-			if m.stateMgr != nil {
-				m.stateMgr.UpdateConnection(m.phone, func(s *WAConnectionState) {
-					s.Status = StatusConnected
-					s.WhatsAppConnected = true
-					s.QRCodeData = ""
-				})
-			}
+			markWhatsAppPaired(m.stateMgr, m.phone)
 			for _, h := range handlers {
 				h(&events.Connected{})
 			}
 		} else {
 			if m.stateMgr != nil {
-				png, _ := qrcode.Encode("mock-qr-code", qrcode.Medium, 256)
-				b64 := base64.StdEncoding.EncodeToString(png)
 				m.stateMgr.UpdateConnection(m.phone, func(s *WAConnectionState) {
 					s.Status = StatusPairingRequired
-					s.QRCodeData = "data:image/png;base64," + b64
+					s.QRCodeData = encodeQRCodeData("mock-qr-code")
 					s.WhatsAppConnected = false
 				})
 			}
-			if m.alerter != nil && m.baseURL != "" {
-				_ = m.alerter.AlertCritical(AlertEvent{
-					Title:       "WhatsApp Disconnected",
-					Message:     "WhatsApp disconnected! Action required immediately. Scan the QR code on the dashboard.",
-					ActionLabel: "Open Live Dashboard",
-					ActionURL:   m.baseURL,
-				})
-			}
+			alertWhatsAppDisconnected(m.alerter, m.baseURL)
 		}
 	}()
 
@@ -782,14 +781,7 @@ func (m *MockWhatsAppClient) SimulatePairing() {
 	m.connected = true
 
 	_ = os.WriteFile(m.dbPath, []byte("paired"), 0o644)
-
-	if m.stateMgr != nil {
-		m.stateMgr.UpdateConnection(m.phone, func(s *WAConnectionState) {
-			s.Status = StatusConnected
-			s.WhatsAppConnected = true
-			s.QRCodeData = ""
-		})
-	}
+	markWhatsAppPaired(m.stateMgr, m.phone)
 
 	for _, h := range m.eventHandlers {
 		h(&events.Connected{})

@@ -23,6 +23,14 @@ type AuthManager struct {
 
 const sessionDuration = 7 * 24 * time.Hour
 
+func newAuthToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
 func NewAuthManager(db *DBManager, client EmailSender, fromEmail, adminPass, baseURL string) *AuthManager {
 	return &AuthManager{
 		db:             db,
@@ -63,11 +71,10 @@ func (a *AuthManager) GenerateAndSendMagicLink(ctx context.Context, email string
 		return fmt.Errorf("sendgrid not configured")
 	}
 
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
+	token, err := newAuthToken()
+	if err != nil {
 		return err
 	}
-	token := hex.EncodeToString(b)
 	expiresAt := time.Now().Add(15 * time.Minute)
 
 	_, err = a.db.db.ExecContext(ctx, "INSERT INTO auth_tokens (token, email, expires_at) VALUES (?, ?, ?)", token, email, expiresAt)
@@ -121,12 +128,11 @@ func (a *AuthManager) VerifyMagicLink(ctx context.Context, token string) (string
 }
 
 func (a *AuthManager) CreateSession(ctx context.Context, email string) (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
+	token, err := newAuthToken()
+	if err != nil {
 		return "", err
 	}
-	token := hex.EncodeToString(b)
-	_, err := a.db.db.ExecContext(ctx,
+	_, err = a.db.db.ExecContext(ctx,
 		"INSERT INTO auth_sessions (token, email, expires_at) VALUES (?, ?, ?)",
 		token, email, time.Now().Add(sessionDuration),
 	)
