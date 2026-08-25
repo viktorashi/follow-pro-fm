@@ -22,6 +22,15 @@ files = "\\.go$"
 pass_filenames = false
 
 [[repos.hooks]]
+id = "gopls"
+name = "gopls diagnostics"
+entry = "./scripts/gopls-check.sh"
+language = "system"
+files = "\\.go$"
+pass_filenames = true
+priority = 20
+
+[[repos.hooks]]
 id = "go-test"
 name = "go test"
 entry = "just test"
