@@ -15,6 +15,14 @@ flyctl = "0.4.59"
 clang = "22.1.8"
 make = "4.4.1"
 perl = "5.44.0.0"
+"conda:bash" = "5.2.37"
+"conda:coreutils" = "9.11"
+"conda:curl" = "8.21.0"
+"conda:findutils" = "4.10.0"
+"conda:gawk" = "5.4.1"
+"conda:git" = "2.55.0"
+"conda:grep" = "3.12"
+"conda:sed" = "4.10"
 
 [env]
 _.path = ["{{ config_root }}/bin"]
