@@ -8,7 +8,7 @@ tmp_dir = "tmp"
 [build]
 args_bin = []
 bin = "./tmp/main"
-cmd = "templ generate && go build -o ./tmp/main ."
+cmd = "go tool templ generate && CGO_ENABLED=1 go build -o ./tmp/main ./cmd/pro-fm-poller/main.go"
 delay = 1000
 entrypoint = ["./tmp/main"]
 exclude_dir = [
@@ -17,7 +17,7 @@ exclude_dir = [
   "vendor",
   "testdata",
   "storim-da-brain",
-  "scripts",
+  "mise-tasks",
   "data",
   ".github",
 ]
