@@ -20,7 +20,7 @@ Ordered from oldest relevant verified slice to newest:
 ### R1. WhatsApp voice note sending and minimal ffmpeg
 
 - `third_party/ffmpeg` is a git submodule pinned to a specific commit.
-- `scripts/build_ffmpeg.sh` is the single ffmpeg build entrypoint used for local binaries and Docker.
+- `mise-tasks/ffmpeg/build` is the single ffmpeg build entrypoint used for local binaries and Docker.
 - Docker image build was verified with `docker build -t pro-fm-poller:test .`.
 - Runtime image now contains Linux `ffmpeg`, not a leaked Mach-O host binary.
 - Image-local `ffmpeg` exposes `mp3float`, `opus`, and the required `mp3` / `ogg` demuxers.
@@ -66,8 +66,8 @@ These commands were run successfully against the current tree during the Codex r
 ```sh
 go test -count=1 ./pkg/poller
 go build ./cmd/pro-fm-poller
-just test
-just smoke-live-mock
+mise run test
+mise run smoke:live-mock
 docker build -t pro-fm-poller:test .
 ```
 
