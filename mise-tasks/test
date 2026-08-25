@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Run Go package tests"
+#MISE depends=["ffmpeg:build", "generate"]
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+go test ./pkg/...

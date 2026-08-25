@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Run the application with live reload"
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+air

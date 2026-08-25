@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Restart the Whisper application"
+set -euo pipefail
+flyctl apps restart pro-fm-whisper

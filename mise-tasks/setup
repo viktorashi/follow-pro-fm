@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#MISE description="Install the complete local development toolchain and Git hooks"
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+mise install
+mise run doctor
+git submodule update --init --recursive third_party/ffmpeg
+go mod download
+prek install -f --prepare-hooks

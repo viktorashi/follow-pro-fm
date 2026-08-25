@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#MISE description="Publish all local audio pools to the Fly volume"
+#MISE alias=["push-audios", "push-files"]
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+if [[ ! -d data/audios ]]; then
+  printf "Local directory 'data/audios' does not exist.\n" >&2
+  exit 1
+fi
+
+staging_dir="$(mktemp -d)"
+trap 'rm -rf "$staging_dir"' EXIT
+cp -R data/audios/. "$staging_dir/"
+
+while IFS= read -r used_dir; do
+  parent_dir="$(dirname "$used_dir")"
+  while IFS= read -r audio_file; do
+    mv -f "$audio_file" "$parent_dir/$(basename "$audio_file")"
+  done < <(find "$used_dir" -maxdepth 1 -type f \( -name '*.ogg' -o -name '*.mp3' -o -name '*.wav' \))
+  rm -rf "$used_dir"
+done < <(find "$staging_dir" -type d -name used)
+
+find "$staging_dir" -type f ! \( -name '*.ogg' -o -name '*.mp3' -o -name '*.wav' \) -delete
+find "$staging_dir" -depth -type d -empty -delete
+flyctl ssh console -C 'mkdir -p /data/audios'
+env COPYFILE_DISABLE=1 tar -cf - \
+  --exclude='*.sqlite*' --exclude='*.db' --exclude='._*' \
+  -C "$staging_dir" . \
+  | flyctl ssh console -C 'tar -xf - -C /data/audios'
+printf "Every person's audio pool was uploaded.\n"

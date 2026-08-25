@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Open a console on the production application"
+set -euo pipefail
+flyctl ssh console

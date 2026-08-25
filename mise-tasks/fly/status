@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#MISE description="Show application, Machine, and volume status"
+set -euo pipefail
+
+flyctl status
+printf '\n=== Running Machines ===\n'
+flyctl machine list
+printf '\n=== Persistent Volumes ===\n'
+flyctl volumes list

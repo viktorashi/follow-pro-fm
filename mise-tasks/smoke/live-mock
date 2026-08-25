@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+#MISE description="Exercise the live dashboard against mocked WhatsApp"
+#MISE depends=["build"]
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+port="${PORT:-8100}"
+base_url="${BASE_URL:-http://127.0.0.1:${port}}"
+target_phone="${TARGET_PHONE:-+40770661491}"
+admin_password="${ADMIN_PASSWORD:-smoke}"
+trusted_email="${TRUSTED_EMAIL:-smoke@example.com}"
+profm_api_url="${PROFM_API_URL:-https://api.profm.ro/api/v1/radios/article/2918?appVersion=1.0.0&platform=android}"
+profm_stream_url="${PROFM_STREAM_URL:-http://edge76.rcs-rds.ro:84/profm/profm.mp3}"
+temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/profm-live-smoke.XXXXXX")"
+cookie_jar="$temp_dir/cookies.txt"
+log_path="$temp_dir/app.log"
+app_pid=""
+
+cleanup() {
+  if [[ -n "$app_pid" ]] && kill -0 "$app_pid" 2>/dev/null; then
+    kill "$app_pid" 2>/dev/null || true
+    wait "$app_pid" 2>/dev/null || true
+  fi
+  rm -rf "$temp_dir"
+}
+trap cleanup EXIT
+
+mkdir -p "$temp_dir/audios"
+printf '%s\n' "$trusted_email" > "$temp_dir/trusted-emails.txt"
+
+PORT="$port" \
+BASE_URL="$base_url" \
+MOCK_WHATSAPP=true \
+TARGET_PHONE="$target_phone" \
+APP_DB_PATH="$temp_dir/app.sqlite" \
+AUDIOS_DIR="$temp_dir/audios" \
+ADMIN_PASSWORD="$admin_password" \
+PROFM_API_URL="$profm_api_url" \
+PROFM_STREAM_URL="$profm_stream_url" \
+./pro-fm-poller > "$log_path" 2>&1 &
+app_pid=$!
+
+printf 'Smoke app pid: %s\nSmoke state dir: %s\n' "$app_pid" "$temp_dir"
+for _ in $(seq 1 30); do
+  if curl -fsS "$base_url/login" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+curl -fsS "$base_url/login" >/dev/null
+curl -fsS -c "$cookie_jar" \
+  -d "email=${trusted_email}&password=${admin_password}" \
+  -X POST "$base_url/login" >/dev/null
+
+dashboard_html="$(curl -fsS -b "$cookie_jar" "$base_url/")"
+printf '%s\n' "$dashboard_html" | rg -q 'Currently Playing'
+schedule_json="$(curl -fsS -b "$cookie_jar" "$base_url/api/schedule")"
+printf '%s\n' "$schedule_json" | rg -q '"target_matches"'
+
+curl -fsS -b "$cookie_jar" -F 'name=Smoke Sender' "$base_url/api/persons" >/dev/null
+curl -fsS -b "$cookie_jar" \
+  -F 'person_slug=smoke-sender' \
+  -F "audio=@$MISE_PROJECT_ROOT/pkg/poller/testdata/waveform_sample.ogg;type=audio/ogg" \
+  "$base_url/api/audio/upload" >/dev/null
+
+for _ in $(seq 1 15); do
+  if rg -q '\[[0-9]{2}:[0-9]{2}:[0-9]{2}\] .+ - .+' "$log_path"; then
+    break
+  fi
+  sleep 1
+done
+
+rg -q '\[[0-9]{2}:[0-9]{2}:[0-9]{2}\] .+ - .+' "$log_path"
+dashboard_html="$(curl -fsS -b "$cookie_jar" "$base_url/")"
+printf '%s\n' "$dashboard_html" | rg -qv 'Waiting for broadcast'
+test -f "$temp_dir/audios/smoke-sender/waveform_sample.ogg"
+printf 'Smoke test passed.\n'

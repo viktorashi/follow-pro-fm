@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Show PRO FM's most recently reported song"
+set -euo pipefail
+
+curl -fsS 'https://api.profm.ro/api/v1/radios/article/2918?appVersion=1.0.0&platform=android' \
+  | jq '.data.epg | {title: .playerExtendedSongTitle, subtitle: .playerExtendedSongSubtitle}'

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+#MISE description="Check system prerequisites that Mise cannot provision"
+set -euo pipefail
+
+missing=()
+for command_name in git docker cc make perl curl tar; do
+  command -v "$command_name" >/dev/null 2>&1 || missing+=("$command_name")
+done
+
+if ((${#missing[@]})); then
+  printf 'Missing system prerequisites: %s\n' "${missing[*]}" >&2
+  printf 'Install them with your OS package manager, then rerun `mise run setup`.\n' >&2
+  exit 1
+fi
+
+docker compose version >/dev/null
+printf 'Development toolchain and system prerequisites are available.\n'

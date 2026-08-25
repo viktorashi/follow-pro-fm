@@ -1,0 +1,54 @@
+#!/usr/bin/env zsh
+#MISE description="Normalize WhatsApp OGG filenames and metadata on macOS"
+set -euo pipefail
+setopt null_glob
+
+if [[ "$(uname -s)" != Darwin ]]; then
+  print -u2 'This task requires macOS metadata tools.'
+  exit 1
+fi
+
+for command_name in ffmpeg SetFile touch xattr mktemp; do
+  command -v "$command_name" >/dev/null 2>&1 || {
+    print -u2 "Missing required command: $command_name"
+    exit 1
+  }
+done
+
+files=( *.ogg *.OGG *.Ogg )
+files=( "${(@on)files}" )
+if (( ${#files[@]} == 0 )); then
+  print -u2 'No .ogg files found in the current directory.'
+  exit 1
+fi
+
+rm -f -- .DS_Store
+staged=()
+i=1
+for file in "${files[@]}"; do
+  stage=".rename-stage-${$}-${i}.ogg"
+  mv -- "$file" "$stage"
+  staged+=( "$stage" )
+  ((i++))
+done
+
+i=1
+for file in "${staged[@]}"; do
+  mv -- "$file" "WhatsApp Ptt ${i}.ogg"
+  ((i++))
+done
+
+for file in "WhatsApp Ptt "*.ogg; do
+  [[ -f "$file" ]] || continue
+  xattr -c -- "$file" 2>/dev/null || true
+  temp_file="$(mktemp /private/tmp/wappmeta.XXXXXX.ogg)"
+  ffmpeg -y -nostdin -loglevel error -i "$file" \
+    -map_metadata -1 -map_chapters -1 -c copy -bitexact "$temp_file"
+  mv -f -- "$temp_file" "$file"
+  xattr -c -- "$file" 2>/dev/null || true
+  touch -t 197001010000 -- "$file"
+  SetFile -d '01/02/1970 12:00:00 AM' "$file"
+done
+
+rm -f -- .DS_Store
+print "Processed ${#files[@]} .ogg files in $(pwd)"

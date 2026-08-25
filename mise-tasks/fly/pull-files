@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Download the Fly volume into the local data directory"
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+mkdir -p data
+flyctl ssh console -C 'tar -cf - -C /data .' | tar -xf - -C data

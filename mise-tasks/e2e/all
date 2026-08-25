@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#MISE description="Run all e2e tests, including WhatsApp"
+#MISE depends=["ffmpeg:build", "generate"]
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT"
+go test -v -coverprofile=coverage.out -tags='e2e,wapp' ./pkg/...
+go tool cover -func=coverage.out
+go tool cover -html=coverage.out
