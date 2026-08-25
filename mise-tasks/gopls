@@ -24,7 +24,7 @@ fi
 ((${#files[@]})) || exit 0
 
 export GOFLAGS="${GOFLAGS:-} -tags=e2e"
-if ! diagnostics="$(go tool gopls check -severity=hint "${files[@]}" 2>&1)"; then
+if ! diagnostics="$(gopls check -severity=hint "${files[@]}" 2>&1)"; then
   printf '%s\n' "$diagnostics" >&2
   exit 1
 fi

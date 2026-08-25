@@ -27,10 +27,11 @@ mise run run               # Docker Compose development stack
 mise run fly:status        # production status
 ```
 
-Mise provisions all portable CLIs. `mise run doctor` checks the system-level
-prerequisites it cannot own: Git, Docker with Compose, a C compiler, Make, and
-Perl. Go-native tools such as templ and gopls are pinned in `go.mod` and invoked
-through `go tool`, so they never depend on an untracked global installation.
+Mise provisions every portable CLI, including templ, gopls, Docker CLI and
+Compose, Clang, Make, Perl, and GNU tar. Go-native tools remain pinned in
+`go.mod` as well, and CI verifies those versions agree with Mise. `mise run
+doctor` checks only host facilities Mise cannot provide: Git and curl for
+bootstrapping, plus a reachable Docker daemon.
 
 ## Constitutional Rules
 1. **Instant Notification Regardless of Send Outcome:** Even if automatic voicenotes fail, daily limits are hit, or the kill-switch is active, the user MUST get an instant notification that a contest song is playing. This allows for manual intervention with no noise.

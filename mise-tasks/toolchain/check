@@ -13,6 +13,16 @@ if [[ -z "$go_mod_version" || "$go_mod_version" != "$mise_go_version" || "$go_mo
   exit 1
 fi
 
+templ_go_version="$(awk '$1 == "github.com/a-h/templ" { print $2; exit }' go.mod)"
+templ_mise_version="$(sed -n 's/^"go:github.com\/a-h\/templ\/cmd\/templ" = "\([^"]*\)"$/\1/p' mise.toml)"
+gopls_go_version="$(awk '$1 == "golang.org/x/tools/gopls" { print $2; exit }' go.mod)"
+gopls_mise_version="$(sed -n 's/^"go:golang.org\/x\/tools\/gopls" = "\([^"]*\)"$/\1/p' mise.toml)"
+if [[ "$templ_go_version" != "$templ_mise_version" || "$gopls_go_version" != "$gopls_mise_version" ]]; then
+  printf 'Go tool version drift: templ(go.mod=%s mise=%s) gopls(go.mod=%s mise=%s)\n' \
+    "$templ_go_version" "$templ_mise_version" "$gopls_go_version" "$gopls_mise_version" >&2
+  exit 1
+fi
+
 mise_min_version="$(sed -n 's/^min_version = "\([^"]*\)"$/\1/p' mise.toml)"
 workflow_mise_versions="$(sed -n 's/^[[:space:]]*version: \([0-9][0-9.]*\)$/\1/p' .github/workflows/ci.yml .github/workflows/deploy.yml | sort -u)"
 if [[ -z "$mise_min_version" || "$workflow_mise_versions" != "$mise_min_version" ]]; then

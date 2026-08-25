@@ -29,6 +29,10 @@ fi
 printf 'Building minimal ffmpeg and ffprobe with %s CPU cores.\n' "$cores"
 cd "$ffmpeg_submodule"
 
+if command -v clang >/dev/null 2>&1; then
+  export CC="${CC:-clang}"
+fi
+
 if [[ "$force" == true || -f ffbuild/config.mak || -f config.mak || -f fftools/objpool.o ]]; then
   make distclean || true
 fi
