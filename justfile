@@ -18,7 +18,7 @@ alias f := format
 
 setup-dev:
     git submodule update --init --recursive third_party/ffmpeg
-    prek install -f
+    prek install -f --prepare-hooks
     go mod tidy
 
 lint:
