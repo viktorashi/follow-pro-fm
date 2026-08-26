@@ -3,6 +3,9 @@ min_version = "2026.8.3"
 [settings]
 lockfile = true
 
+[deps.go]
+auto = true
+
 [tools]
 go = "1.26.4"
 "go:github.com/a-h/templ/cmd/templ" = "v0.3.1020"
@@ -21,7 +24,7 @@ perl = "5.44.0.0"
 "conda:findutils" = "4.10.0"
 "conda:gawk" = "5.4.1"
 "conda:git" = "2.55.0"
-"conda:grep" = "3.12"
+ripgrep = "latest"
 "conda:sed" = "4.10"
 
 [env]
