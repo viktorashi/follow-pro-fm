@@ -1,5 +1,25 @@
 tre sa facem cuvma sa citim ce ne da profmu
 
+## Scop
+
+Gen a facut o companie pro-fm cum ca trebuie sa asculti "piesa de concurs" la radio, si sa trimiti un mesaj vocal, ca sa castigi o excursie + bilete de concert.
+
+Asa ca asta asculta radioul, si trimite automat voicenote-uri (dintr-o lista de d-alea salvate) folosind [whatsmeaw](https://github.com/tulir/whatsmeow).
+
+Are mai multe structuri care implementeaza "ContestChecker" si merge fiecare pe goroutina lui, fiecare in parte:
+
+- verifica metadatele trimise de ei pe streamu audio.
+- compara sound signateru cu cv mate de n-o inteleg folosind ffmpeg
+- citeste transcriptii lol
+
+  si e survival of the fittest intre modurile astea de checkuit
+
+  -----
+
+  n-o sa inteleg nimic cand citesc asta peste 75 de ani
+  
+
+
 ## Development
 
 [Mise](https://mise.jdx.dev/) is the single entrypoint for the development
