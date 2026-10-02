@@ -27,25 +27,35 @@ jobs:
       - uses: jdx/mise-action@v4
         with:
           version: 2026.8.3
-          install_args: flyctl
+          install: true
           cache: true
 
-      - name: Scale Whisper to one Machine
-        run: flyctl scale count 1 --yes --app pro-fm-whisper
+      - name: Authenticate Docker with Fly registry
+        run: flyctl auth docker
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_WHISPER_API_TOKEN }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
-      - name: Deploy Whisper to Fly.io
-        run: cd whisper-server && flyctl deploy --remote-only
+      - name: Build and push production app image
+        run: |
+          docker build -t registry.fly.io/pro-fm-poller:${{ github.sha }} -t registry.fly.io/pro-fm-poller:latest .
+          docker push registry.fly.io/pro-fm-poller:${{ github.sha }}
+          docker push registry.fly.io/pro-fm-poller:latest
+
+      - name: Build and push Whisper image
+        run: |
+          docker build -t registry.fly.io/pro-fm-whisper:${{ github.sha }} -t registry.fly.io/pro-fm-whisper:latest whisper-server
+          docker push registry.fly.io/pro-fm-whisper:${{ github.sha }}
+          docker push registry.fly.io/pro-fm-whisper:latest
+
+      - name: OpenTofu Init
+        run: mise run tofu:init
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_WHISPER_API_TOKEN }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
-      - name: Confirm one Whisper Machine
-        run: flyctl scale count 1 --yes --app pro-fm-whisper
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_WHISPER_API_TOKEN }}
-
-      - name: Deploy to Fly.io
-        run: flyctl deploy --remote-only
+      - name: OpenTofu Apply
+        run: |
+          mise run tofu:apply -- -auto-approve \
+            -var="poller_image=registry.fly.io/pro-fm-poller:${{ github.sha }}" \
+            -var="whisper_image=registry.fly.io/pro-fm-whisper:${{ github.sha }}"
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

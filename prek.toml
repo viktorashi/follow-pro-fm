@@ -40,12 +40,21 @@ pass_filenames = false
 
 
 [[repos.hooks]]
-id = "validate-fly-config"
-name = "Validate Fly config"
-entry = "mise run fly:validate"
+id = "tofu-fmt"
+name = "tofu fmt check"
+entry = "mise run tofu:fmt-check"
 language = "system"
 stages = ["pre-commit"]
-files = "fly.toml"
+files = "\\.(tf|tofu)$"
+pass_filenames = false
+
+[[repos.hooks]]
+id = "tofu-validate"
+name = "tofu validate"
+entry = "mise run tofu:validate"
+language = "system"
+stages = ["pre-commit"]
+files = "\\.(tf|tofu)$"
 pass_filenames = false
 
 [[repos.hooks]]

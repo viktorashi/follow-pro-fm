@@ -1647,6 +1647,16 @@ conda_deps = [
     "libgomp-16.2.0-he0feb66_4",
 ]
 
+[tools."conda:coreutils"."platforms.macos-arm64"]
+checksum = "sha256:c121e881b96fdbb1f91fbd1e288c9eab062b345f381521db27a514669c1fc5ef"
+url = "https://conda.anaconda.org/conda-forge/osx-arm64/coreutils-9.11-h1a92334_0.conda"
+conda_deps = []
+
+[tools."conda:coreutils"."platforms.macos-x64"]
+checksum = "sha256:4d13c876757e1b744be1a18ee9f6787dd2b968aea30a8849823f723da7c5c048"
+url = "https://conda.anaconda.org/conda-forge/osx-64/coreutils-9.11-ha3d0635_0.conda"
+conda_deps = []
+
 [[tools."conda:curl"]]
 version = "8.21.0"
 backend = "conda:curl"
@@ -2561,6 +2571,45 @@ conda_deps = [
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-h8ee18e1_4",
 ]
+
+[[tools.opentofu]]
+version = "1.13.1"
+backend = "aqua:opentofu/opentofu"
+
+[tools.opentofu."platforms.linux-arm64"]
+checksum = "sha256:9c1ef375aa1852db0b2888aa921b640c71f8140d4682aa4fec99378a64fa7dc3"
+url = "https://github.com/opentofu/opentofu/releases/download/v1.13.1/tofu_1.13.1_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/opentofu/opentofu/releases/assets/603708055"
+
+[tools.opentofu."platforms.linux-arm64-musl"]
+checksum = "sha256:9c1ef375aa1852db0b2888aa921b640c71f8140d4682aa4fec99378a64fa7dc3"
+url = "https://github.com/opentofu/opentofu/releases/download/v1.13.1/tofu_1.13.1_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/opentofu/opentofu/releases/assets/603708055"
+
+[tools.opentofu."platforms.linux-x64"]
+checksum = "sha256:378ada19d4bc70c43732004e8159be771b23b9a5afdf059e5f8a2b3fa2c70a69"
+url = "https://github.com/opentofu/opentofu/releases/download/v1.13.1/tofu_1.13.1_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/opentofu/opentofu/releases/assets/603708017"
+
+[tools.opentofu."platforms.linux-x64-musl"]
+checksum = "sha256:378ada19d4bc70c43732004e8159be771b23b9a5afdf059e5f8a2b3fa2c70a69"
+url = "https://github.com/opentofu/opentofu/releases/download/v1.13.1/tofu_1.13.1_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/opentofu/opentofu/releases/assets/603708017"
+
+[tools.opentofu."platforms.macos-arm64"]
+checksum = "sha256:be78f659f04ef06a9dbd9b3934d46af95d787a3aa38396d459dea395261816a9"
+url = "https://github.com/opentofu/opentofu/releases/download/v1.13.1/tofu_1.13.1_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/opentofu/opentofu/releases/assets/603708059"
+
+[tools.opentofu."platforms.macos-x64"]
+checksum = "sha256:a73720443ba38712d7d96dc1e857add02c15a790919c653ad07492e9952f8c27"
+url = "https://github.com/opentofu/opentofu/releases/download/v1.13.1/tofu_1.13.1_darwin_amd64.tar.gz"
+url_api = "https://api.github.com/repos/opentofu/opentofu/releases/assets/603708142"
+
+[tools.opentofu."platforms.windows-x64"]
+checksum = "sha256:6825ae311e9a15747ce2ede7b7e97c8bb744a4d271fa8113259eeeee3d09438c"
+url = "https://github.com/opentofu/opentofu/releases/download/v1.13.1/tofu_1.13.1_windows_amd64.tar.gz"
+url_api = "https://api.github.com/repos/opentofu/opentofu/releases/assets/603708102"
 
 [[tools.perl]]
 version = "5.44.0.0"

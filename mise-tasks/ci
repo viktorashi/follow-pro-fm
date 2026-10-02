@@ -10,6 +10,8 @@ mise run ffmpeg:build
 mise run generate
 mise run lint
 mise run docker:lint
+mise run tofu:fmt-check
+mise run tofu:validate
 mise run gopls
 gotestsum --junitfile junit.xml -- -coverprofile=coverage.out ./pkg/...
 go tool cover -func=coverage.out

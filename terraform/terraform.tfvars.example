@@ -1,0 +1,11 @@
+org_slug         = "personal"
+region           = "fra"
+poller_app_name  = "pro-fm-poller"
+whisper_app_name = "pro-fm-whisper"
+volume_name      = "pro_fm_data"
+volume_size_gb   = 3
+
+# Optional: manage Fly secrets via OpenTofu
+# sendgrid_api_key   = "SG.xxxxxxxx"
+# telegram_bot_token = "123456:ABC-DEF"
+# admin_password     = "your-admin-password"

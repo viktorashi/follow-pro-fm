@@ -2,5 +2,4 @@
 #MISE description="Validate the Fly.io application configuration"
 set -euo pipefail
 
-cd "$MISE_PROJECT_ROOT"
-flyctl config validate
+mise run tofu:validate

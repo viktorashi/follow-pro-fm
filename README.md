@@ -44,6 +44,8 @@ mise run dev               # live reload
 mise run test              # package tests
 mise run ci                # the same verification pipeline as GitHub Actions
 mise run run               # Docker Compose development stack
+mise run tofu:plan         # preview OpenTofu infrastructure plan
+mise run tofu:apply        # apply declarative OpenTofu infrastructure
 mise run fly:status        # production status
 ```
 
