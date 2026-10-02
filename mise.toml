@@ -26,6 +26,7 @@ perl = "5.44.0.0"
 "conda:git" = "2.55.0"
 ripgrep = "latest"
 "conda:sed" = "4.10"
+opentofu = "1.13.1"
 
 [env]
 _.path = ["{{ config_root }}/bin"]

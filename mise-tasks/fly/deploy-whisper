@@ -2,5 +2,4 @@
 #MISE description="Deploy the stateless Whisper service"
 set -euo pipefail
 
-cd "$MISE_PROJECT_ROOT/whisper-server"
-flyctl deploy
+mise run tofu:apply -target=fly_machine.whisper "$@"
