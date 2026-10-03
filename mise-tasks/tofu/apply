@@ -11,5 +11,9 @@ if [ -z "${FLY_API_TOKEN:-}" ]; then
   export FLY_API_TOKEN
 fi
 
+"$MISE_PROJECT_ROOT/mise-tasks/tofu/state-pull" || true
+
 cd "$MISE_PROJECT_ROOT/terraform"
 tofu apply "$@"
+
+"$MISE_PROJECT_ROOT/mise-tasks/tofu/state-push" || true

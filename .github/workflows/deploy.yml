@@ -13,6 +13,8 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     # Only deploy if CI passed and it was a push (not a PR)
     if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
     steps:
@@ -20,6 +22,7 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           submodules: recursive
+          fetch-depth: 0
 
       - name: Verify tested commit is still main
         run: test "$(git ls-remote origin refs/heads/main | cut -f1)" = "${{ github.event.workflow_run.head_sha }}"
@@ -37,14 +40,14 @@ jobs:
 
       - name: Build and push production app image
         run: |
-          docker build -t registry.fly.io/pro-fm-poller:${{ github.sha }} -t registry.fly.io/pro-fm-poller:latest .
-          docker push registry.fly.io/pro-fm-poller:${{ github.sha }}
+          docker build -t registry.fly.io/pro-fm-poller:${{ github.event.workflow_run.head_sha }} -t registry.fly.io/pro-fm-poller:latest .
+          docker push registry.fly.io/pro-fm-poller:${{ github.event.workflow_run.head_sha }}
           docker push registry.fly.io/pro-fm-poller:latest
 
       - name: Build and push Whisper image
         run: |
-          docker build -t registry.fly.io/pro-fm-whisper:${{ github.sha }} -t registry.fly.io/pro-fm-whisper:latest whisper-server
-          docker push registry.fly.io/pro-fm-whisper:${{ github.sha }}
+          docker build -t registry.fly.io/pro-fm-whisper:${{ github.event.workflow_run.head_sha }} -t registry.fly.io/pro-fm-whisper:latest whisper-server
+          docker push registry.fly.io/pro-fm-whisper:${{ github.event.workflow_run.head_sha }}
           docker push registry.fly.io/pro-fm-whisper:latest
 
       - name: OpenTofu Init
@@ -55,7 +58,7 @@ jobs:
       - name: OpenTofu Apply
         run: |
           mise run tofu:apply -- -auto-approve \
-            -var="poller_image=registry.fly.io/pro-fm-poller:${{ github.sha }}" \
-            -var="whisper_image=registry.fly.io/pro-fm-whisper:${{ github.sha }}"
+            -var="poller_image=registry.fly.io/pro-fm-poller:${{ github.event.workflow_run.head_sha }}" \
+            -var="whisper_image=registry.fly.io/pro-fm-whisper:${{ github.event.workflow_run.head_sha }}"
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
