@@ -19,7 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
           submodules: recursive
 
@@ -107,22 +106,23 @@ jobs:
 
             const botMarker = '<!-- opentofu-plan-bot -->';
             const commitSha = context.payload.pull_request ? context.payload.pull_request.head.sha : context.sha;
-            const body = `${botMarker}
-### 🪐 OpenTofu Plan ${statusIcon}
-
-**Status:** ${process.env.PLAN_STATUS || 'Unknown'}
-**Summary:** \`${summary}\`
-**Commit:** \`${commitSha}\`
-
-            <details open>
-            <summary>📋 Plan Output</summary>
-
-            \`\`\`terraform
-            ${planOutput}
-            \`\`\`
-
-            </details>
-            `;
+            const body = [
+              botMarker,
+              `### 🪐 OpenTofu Plan ${statusIcon}`,
+              '',
+              `**Status:** ${process.env.PLAN_STATUS || 'Unknown'}`,
+              `**Summary:** \`${summary}\``,
+              `**Commit:** \`${commitSha}\``,
+              '',
+              '<details open>',
+              '<summary>📋 Plan Output</summary>',
+              '',
+              '```terraform',
+              planOutput,
+              '```',
+              '',
+              '</details>'
+            ].join('\n');
 
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
