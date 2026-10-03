@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#MISE description="Apply OpenTofu declarative infrastructure changes"
+set -euo pipefail
+
+if [ -z "${FLY_API_TOKEN:-}" ]; then
+  FLY_API_TOKEN="$(flyctl auth token 2>/dev/null | tail -n 1 || true)"
+  if [ -z "$FLY_API_TOKEN" ]; then
+    flyctl auth login
+    FLY_API_TOKEN="$(flyctl auth token 2>/dev/null | tail -n 1)"
+  fi
+  export FLY_API_TOKEN
+fi
+
+cd "$MISE_PROJECT_ROOT/terraform"
+tofu apply "$@"

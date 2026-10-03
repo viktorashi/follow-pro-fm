@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Validate OpenTofu declarative infrastructure configuration"
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT/terraform"
+tofu validate "$@"

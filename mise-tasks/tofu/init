@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Initialize OpenTofu working directory and providers"
+set -euo pipefail
+
+cd "$MISE_PROJECT_ROOT/terraform"
+tofu init "$@"
