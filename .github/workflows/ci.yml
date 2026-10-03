@@ -47,6 +47,15 @@ jobs:
           restore-keys: |
             go-${{ runner.os }}-
 
+      - name: Restore OpenTofu cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            terraform/.terraform
+          key: tofu-${{ runner.os }}-${{ hashFiles('terraform/.terraform.lock.hcl') }}
+          restore-keys: |
+            tofu-${{ runner.os }}-
+
       - name: Build production app image
         uses: docker/build-push-action@v6
         with:

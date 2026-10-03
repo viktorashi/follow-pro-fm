@@ -3,4 +3,9 @@
 set -euo pipefail
 
 cd "$MISE_PROJECT_ROOT/terraform"
+
+if [ ! -d ".terraform/providers" ]; then
+  tofu init -backend=false -input=false
+fi
+
 tofu validate "$@"
