@@ -97,12 +97,13 @@ jobs:
             }
 
             const botMarker = '<!-- opentofu-plan-bot -->';
+            const commitSha = context.payload.pull_request ? context.payload.pull_request.head.sha : context.sha;
             const body = `${botMarker}
-            ### 🪐 OpenTofu Plan ${statusIcon}
+### 🪐 OpenTofu Plan ${statusIcon}
 
-            **Status:** ${process.env.PLAN_STATUS || 'Unknown'}
-            **Summary:** \`${summary}\`
-            **Commit:** \`${context.sha}\`
+**Status:** ${process.env.PLAN_STATUS || 'Unknown'}
+**Summary:** \`${summary}\`
+**Commit:** \`${commitSha}\`
 
             <details open>
             <summary>📋 Plan Output</summary>
