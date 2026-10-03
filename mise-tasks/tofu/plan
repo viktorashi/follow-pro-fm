@@ -11,5 +11,9 @@ if [ -z "${FLY_API_TOKEN:-}" ]; then
   export FLY_API_TOKEN
 fi
 
+if [ ! -f "$MISE_PROJECT_ROOT/terraform/terraform.tfstate" ]; then
+  "$MISE_PROJECT_ROOT/mise-tasks/tofu/state-pull" || true
+fi
+
 cd "$MISE_PROJECT_ROOT/terraform"
 tofu plan "$@"

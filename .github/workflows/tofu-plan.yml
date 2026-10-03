@@ -1,0 +1,148 @@
+name: OpenTofu Plan
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: tofu-plan-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+  contents: read
+  issues: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - uses: jdx/mise-action@v4
+        with:
+          version: 2026.8.3
+          install: true
+          cache: true
+
+      - name: Fetch OpenTofu State
+        run: mise run tofu:state-pull
+
+      - name: OpenTofu Init
+        run: mise run tofu:init
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: OpenTofu Format & Validation
+        run: |
+          mise run tofu:fmt-check
+          mise run tofu:validate
+
+      - name: OpenTofu Plan
+        id: plan
+        run: |
+          if [ -z "${FLY_API_TOKEN:-}" ]; then
+            echo "FLY_API_TOKEN is not configured or not accessible for this workflow." > plan.txt
+            echo "PLAN_EXIT_CODE=0" >> "$GITHUB_ENV"
+            echo "PLAN_STATUS=Skipped (missing token)" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          set +e
+          mise run tofu:plan -- -no-color > plan.txt 2>&1
+          PLAN_EXIT_CODE=$?
+          set -e
+
+          cat plan.txt
+
+          echo "PLAN_EXIT_CODE=$PLAN_EXIT_CODE" >> "$GITHUB_ENV"
+          if [ $PLAN_EXIT_CODE -eq 0 ]; then
+            echo "PLAN_STATUS=Success" >> "$GITHUB_ENV"
+          else
+            echo "PLAN_STATUS=Failed" >> "$GITHUB_ENV"
+          fi
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Comment Plan on PR
+        uses: actions/github-script@v7
+        if: always() && steps.plan.outcome != 'skipped'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+
+            let planOutput = 'No output produced.';
+            try {
+              planOutput = fs.readFileSync('plan.txt', 'utf8');
+            } catch (err) {
+              planOutput = 'Error reading plan output file: ' + err.message;
+            }
+
+            // Extract summary if present
+            const summaryMatch = planOutput.match(/Plan: [0-9]+ to add, [0-9]+ to change, [0-9]+ to destroy\./) ||
+                                 planOutput.match(/No changes\. Your infrastructure matches the configuration\./);
+            const summary = summaryMatch ? summaryMatch[0] : (process.env.PLAN_STATUS || 'Completed');
+
+            const statusIcon = process.env.PLAN_STATUS === 'Success' ? '✅' : (process.env.PLAN_STATUS === 'Failed' ? '❌' : '⚠️');
+
+            // GitHub comment character limit is 65,536
+            const maxLen = 60000;
+            if (planOutput.length > maxLen) {
+              planOutput = planOutput.substring(0, maxLen) + '\n\n... [plan output truncated: exceeded 60,000 characters]';
+            }
+
+            const botMarker = '<!-- opentofu-plan-bot -->';
+            const body = `${botMarker}
+            ### 🪐 OpenTofu Plan ${statusIcon}
+
+            **Status:** ${process.env.PLAN_STATUS || 'Unknown'}
+            **Summary:** \`${summary}\`
+            **Commit:** \`${context.sha}\`
+
+            <details open>
+            <summary>📋 Plan Output</summary>
+
+            \`\`\`terraform
+            ${planOutput}
+            \`\`\`
+
+            </details>
+            `;
+
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existingComment = comments.data.find(c =>
+              c.user.type === 'Bot' && c.body && c.body.includes(botMarker)
+            );
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+      - name: Check Plan Status
+        run: |
+          if [ "${PLAN_EXIT_CODE:-0}" -ne 0 ]; then
+            echo "OpenTofu plan failed."
+            exit "${PLAN_EXIT_CODE}"
+          fi

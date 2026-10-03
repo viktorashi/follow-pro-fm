@@ -2,5 +2,9 @@
 #MISE description="Initialize OpenTofu working directory and providers"
 set -euo pipefail
 
+if [ ! -f "$MISE_PROJECT_ROOT/terraform/terraform.tfstate" ]; then
+  "$MISE_PROJECT_ROOT/mise-tasks/tofu/state-pull" || true
+fi
+
 cd "$MISE_PROJECT_ROOT/terraform"
 tofu init "$@"

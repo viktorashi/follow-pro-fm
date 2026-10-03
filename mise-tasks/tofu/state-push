@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#MISE description="Push OpenTofu state to the tofu-state branch"
+set -euo pipefail
+
+SOURCE_FILE="$MISE_PROJECT_ROOT/terraform/terraform.tfstate"
+if [ ! -f "$SOURCE_FILE" ]; then
+  echo "No terraform.tfstate found to push" >&2
+  exit 1
+fi
+
+if [ -z "$(git config user.name || true)" ]; then
+  export GIT_AUTHOR_NAME="github-actions[bot]"
+  export GIT_AUTHOR_EMAIL="github-actions[bot]@users.noreply.github.com"
+  export GIT_COMMITTER_NAME="github-actions[bot]"
+  export GIT_COMMITTER_EMAIL="github-actions[bot]@users.noreply.github.com"
+fi
+
+blob_sha=$(git hash-object -w "$SOURCE_FILE")
+tree_sha=$(printf "100644 blob %s\tterraform.tfstate\n" "$blob_sha" | git mktree)
+
+parent_arg=""
+if git rev-parse --verify origin/tofu-state >/dev/null 2>&1; then
+  parent_sha=$(git rev-parse origin/tofu-state)
+  parent_arg="-p $parent_sha"
+elif git rev-parse --verify tofu-state >/dev/null 2>&1; then
+  parent_sha=$(git rev-parse tofu-state)
+  parent_arg="-p $parent_sha"
+fi
+
+commit_sha=$(git commit-tree "$tree_sha" ${parent_arg} -m "chore(infra): update opentofu state [skip ci]")
+git update-ref refs/heads/tofu-state "$commit_sha"
+
+if git remote get-url origin >/dev/null 2>&1; then
+  git push origin tofu-state
+  echo "Pushed updated OpenTofu state to origin/tofu-state"
+else
+  echo "Updated local tofu-state branch (no remote origin configured)"
+fi

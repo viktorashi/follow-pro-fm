@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#MISE description="Fetch OpenTofu state from the tofu-state branch"
+set -euo pipefail
+
+TARGET_FILE="$MISE_PROJECT_ROOT/terraform/terraform.tfstate"
+
+if git remote get-url origin >/dev/null 2>&1; then
+  git fetch origin tofu-state:refs/remotes/origin/tofu-state 2>/dev/null || true
+fi
+
+if git rev-parse --verify origin/tofu-state >/dev/null 2>&1; then
+  git show origin/tofu-state:terraform.tfstate > "$TARGET_FILE" 2>/dev/null || true
+  echo "Synced OpenTofu state from origin/tofu-state"
+elif git rev-parse --verify tofu-state >/dev/null 2>&1; then
+  git show tofu-state:terraform.tfstate > "$TARGET_FILE" 2>/dev/null || true
+  echo "Synced OpenTofu state from local tofu-state branch"
+else
+  echo "No tofu-state branch found, skipping state pull"
+fi
