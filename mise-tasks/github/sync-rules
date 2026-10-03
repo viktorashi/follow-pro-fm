@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#MISE description="Sync declarative GitHub branch rulesets to the remote repository"
+set -euo pipefail
+
+RULESET_FILE="$MISE_PROJECT_ROOT/.github/rulesets/main.json"
+if [ ! -f "$RULESET_FILE" ]; then
+  echo "Ruleset configuration file not found at: $RULESET_FILE" >&2
+  exit 1
+fi
+
+REPO="viktorashi/follow-pro-fm"
+RULESET_NAME=$(jq -r '.name' "$RULESET_FILE")
+
+# Find existing ruleset ID by name if present
+RULESET_ID=$(gh api "repos/$REPO/rulesets" --jq ".[] | select(.name == \"$RULESET_NAME\") | .id" 2>/dev/null || true)
+
+if [ -n "$RULESET_ID" ]; then
+  echo "Updating existing ruleset '$RULESET_NAME' (ID: $RULESET_ID)..."
+  gh api --method PUT "repos/$REPO/rulesets/$RULESET_ID" --input "$RULESET_FILE" > /dev/null
+  echo "Successfully updated GitHub ruleset: $RULESET_NAME"
+else
+  echo "Creating new ruleset '$RULESET_NAME' on $REPO..."
+  gh api --method POST "repos/$REPO/rulesets" --input "$RULESET_FILE" > /dev/null
+  echo "Successfully created GitHub ruleset: $RULESET_NAME"
+fi

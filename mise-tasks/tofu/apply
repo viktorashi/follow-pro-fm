@@ -2,14 +2,25 @@
 #MISE description="Apply OpenTofu declarative infrastructure changes"
 set -euo pipefail
 
-if [ -z "${FLY_API_TOKEN:-}" ]; then
-  FLY_API_TOKEN="$(flyctl auth token 2>/dev/null | tail -n 1 || true)"
-  if [ -z "$FLY_API_TOKEN" ]; then
-    flyctl auth login
-    FLY_API_TOKEN="$(flyctl auth token 2>/dev/null | tail -n 1)"
-  fi
-  export FLY_API_TOKEN
+if [ -n "${FLY_API_TOKEN:-}" ] && [[ "${FLY_API_TOKEN}" == *"fo1_"* ]]; then
+  mkdir -p "$HOME/.fly"
+  cat << EOF > "$HOME/.fly/config.yml"
+access_token: ${FLY_API_TOKEN}
+EOF
 fi
+
+if [ -f "$HOME/.fly/config.yml" ]; then
+  FRESH_TOKEN="$(flyctl auth token 2>/dev/null | tail -n 1 || true)"
+  if [ -n "$FRESH_TOKEN" ]; then
+    FLY_API_TOKEN="$FRESH_TOKEN"
+  fi
+fi
+
+if [ -z "${FLY_API_TOKEN:-}" ]; then
+  flyctl auth login
+  FLY_API_TOKEN="$(flyctl auth token 2>/dev/null | tail -n 1)"
+fi
+export FLY_API_TOKEN
 
 "$MISE_PROJECT_ROOT/mise-tasks/tofu/state-pull" || true
 
