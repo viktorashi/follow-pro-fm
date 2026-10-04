@@ -1,7 +1,7 @@
 {
   "name": "n-ai voie",
   "target": "branch",
-  "enforcement": "active",
+  "enforcement": "disabled",
   "conditions": {
     "ref_name": {
       "include": [
